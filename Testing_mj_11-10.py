@@ -167,7 +167,7 @@ def move_linear_stage(axis, direction, displacement_µm):
 
     # For rotary stage ('r'), ensure conversion to pulses if applicable
     if axis == 'r':
-        displacement_steps = convert_degrees_to_pulses(displacement_steps)  # Optional if rotary uses angles
+        displacement_steps = convert_degrees_to_pulses(displacement_µm)  # Optional if rotary uses angles
 
     command = f"{axis}{direction}{int(displacement_steps)}\r"
     send_command(motor_ser, command, "Motor Controller")
@@ -403,6 +403,3 @@ if __name__ == "__main__":
 
     camera_0_thread.join()
     camera_1_thread.join()
-    
-    move_linear_stage("t", "+", 85)
-    move_linear_stage("t", "+", 85)
