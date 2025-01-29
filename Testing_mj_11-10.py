@@ -1,11 +1,5 @@
-import serial
-import threading
-import tkinter as tk
+import serial, threading, tkinter as tk, cv2, time, serial.tools.list_ports, keyboard
 from tkinter import messagebox
-import cv2
-import time
-import serial.tools.list_ports
-import keyboard  # Required for keyboard input detection
 
 # Global serial variables for motor and relay
 motor_ser = None
@@ -69,7 +63,7 @@ def auto_detect_ports():
         relay_port_entry.insert(0, relay_port)
     else:
         messagebox.showerror("Error", "Relay device not found.")
-
+        
 def connect_to_device(port, device_name):
     """Connects to the specified device on a COM port and initializes the motor controller if needed."""
     try:
@@ -117,7 +111,7 @@ def send_command(ser, command, device_name):
                 response = ser.read(ser.in_waiting).decode().strip()
                 print(f"{device_name} response: {response}")
                 handle_motor_response(response)
-                return response  # Return the response for further handling
+                return response  # Return the response for further handling 
             else:
                 print(f"No response from {device_name}.")
                 return None
@@ -198,14 +192,14 @@ def continuous_motor_control():
 def laser_relay_on():
     """Turn the laser relay on."""
     if relay_ser:
-        send_command(relay_ser, "Laser_Relay_On", "Relay Controller")  # Removed the third argument
+        send_command(relay_ser, "Laser_Relay_On", "Relay Controller") 
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
 def laser_relay_off():
     """Turn the laser relay off."""
     if relay_ser:
-        send_command(relay_ser, "Laser_Relay_Off", "Relay Controller")  # Removed the third argument
+        send_command(relay_ser, "Laser_Relay_Off", "Relay Controller") 
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
