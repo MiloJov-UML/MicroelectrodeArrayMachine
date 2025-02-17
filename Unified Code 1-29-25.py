@@ -111,7 +111,6 @@ def send_command(ser, command, device_name):
             if ser.in_waiting > 0:
                 response = ser.read(ser.in_waiting).decode().strip()
                 print(f"{device_name} response: {response}")
-                #handle_motor_response(response)
                 return response  # Return the response for further handling 
             else:
                 print(f"No response from {device_name}.")
@@ -119,12 +118,6 @@ def send_command(ser, command, device_name):
     except serial.SerialException as e:
         print(f"Failed to send command {command.strip()} to {device_name}: {e}")
         return None
-
-def handle_motor_response(response):
-    if "ERR" in response:
-        print("Error received from Motor Controller. Check motor configuration or command syntax.")
-    else:
-        print(f"Motor Controller response: {response}")
 
 def convert_degrees_to_pulses(degrees):
     stepper_angle_deg = 1.8
@@ -350,17 +343,17 @@ def run_full_manual_loop():
     try:
         print("Starting Full Manual Loop...")
         move_linear_stage("Z", "+", 950)  
-        time.sleep(1)
+        time.sleep(5)
         laser_relay_on()
-        time.sleep(1)
+        time.sleep(5)
         move_linear_stage("T", "+", 20000)
-        time.sleep(6.5)
+        time.sleep(5)
         laser_relay_off()
-        time.sleep(1)
+        time.sleep(5)
         move_linear_stage("T", "-", 20000)
-        time.sleep(6.5)
+        time.sleep(5)
         move_linear_stage("Z", "-", 950)
-        time.sleep(3)
+        time.sleep(5)
         print("Full Manual Loop completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during the manual loop: {e}")
