@@ -1,4 +1,5 @@
 # image_recognition.py
+
 import cv2
 
 def open_camera(camera_index):

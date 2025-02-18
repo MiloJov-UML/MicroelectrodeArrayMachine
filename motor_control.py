@@ -1,4 +1,5 @@
 # motor_control.py
+
 import serial
 import time
 import re
@@ -17,10 +18,10 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = {
-    'X': 15340,
-    'Y': 12822.5,
-    'Z': 4441.25,
-    'r': 3254.91,
+    'X': 18840,
+    'Y': 10622.5,
+    'Z': 4791.25,
+    'r': 3264.91,
     't': 712850,
     'T': 14125
 }
@@ -71,38 +72,72 @@ def auto_connect_motor():
     else:
         messagebox.showerror("Error", "Motor control device not found.")
 
-def send_command(ser, command, device_name, retries=3, delay=0.125):
+def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retries=100, delay=0.125):
     """
-    Send a command, read the response, with cooldown.
+    Sends a command over serial and attempts to read a response.
+    Includes:
+      - A cooldown to avoid spamming commands.
+      - Up to 'retries' attempts to read data.
+      - If 'axis' is given, checks position each retry. If the axis 
+        hasn't moved more than 'pos_tolerance' between retries, 
+        we assume no response is coming and break early.
+
+    Returns the response if received, or None if no response after 
+    'retries' attempts or if the axis is no longer changing.
     """
+
     global last_command_time
     current_time = time.time()
 
+    # Cooldown check
     if current_time - last_command_time < command_cooldown:
-        print(f"{device_name} command cooldown active. Skipping '{command.strip()}'.")
+        print(f"{device_name} command cooldown active. Skipping command '{command.strip()}'.")
         return None
 
+    # Send the command
     with serial_lock:
-        try:
-            ser.write(command.encode())
-            print(f"Sent command to {device_name}: {command.strip()}")
-            last_command_time = current_time
+        ser.write(command.encode())
+        print(f"Sent command to {device_name}: {command.strip()}")
+        last_command_time = current_time
 
-            time.sleep(0.2)  # small pause before reading
+    # Small initial pause before reading
+    time.sleep(0.2)
 
-            for attempt in range(retries):
-                if ser.in_waiting > 0:
-                    response = ser.read(ser.in_waiting).decode().strip()
-                    print(f"{device_name} response: {response}")
-                    return response
-                print(f"Retrying read ({attempt + 1}/{retries})...")
-                time.sleep(2)
+    # If we want to track position changes, capture the old position
+    old_pos = None
+    if axis:
+        old_pos = get_current_position(axis)  # or your function for reading axis pos
+        if old_pos is None:
+            print(f"Warning: Cannot read initial position for axis {axis}. Position check skipped.")
 
-            print(f"Warning: No response from {device_name} after {retries} attempts.")
-            return None
-        except serial.SerialException as e:
-            print(f"Serial exception while sending '{command.strip()}' to {device_name}: {e}")
-            return None
+    # Retry logic
+    for attempt in range(retries):
+        # Check if there's incoming data
+        if ser.in_waiting > 0:
+            response = ser.read(ser.in_waiting).decode().strip()
+            print(f"{device_name} response: {response}")
+            return response
+        
+        # No incoming data, so let's see if the axis is done moving
+        if axis and old_pos is not None:
+            new_pos = get_current_position(axis)  # read position again
+            if new_pos is not None:
+                # If it hasn't changed much, break out (no real response is coming)
+                if abs(new_pos - old_pos) < pos_tolerance:
+                    print(f"{device_name}: position stable on axis {axis}, no serial response.")
+                    return None
+                # Otherwise, update old_pos for next check
+                old_pos = new_pos
+            else:
+                print(f"Warning: lost position feedback for axis {axis}.")
+
+        # If we got here, no data yet, axis not stable => wait then retry
+        print(f"Retrying read ({attempt + 1}/{retries})... No response yet.")
+        time.sleep(1)
+
+    # If we finish all retries, return None
+    print(f"Warning: No response from {device_name} after {retries} attempts.")
+    return None
 
 def retrieve_motor_speed():
     """Query the current speed from the motor controller and store it in current_speed."""
@@ -195,7 +230,7 @@ def get_current_position(axis):
     else:
         return steps_to_µm(steps, axis)
 
-def wait_for_axis_stop(axis, max_wait=10.0):
+def wait_for_axis_stop(axis, max_wait=None):
     start_time = time.time()
     old_pos = get_current_position(axis)
     if old_pos is None:

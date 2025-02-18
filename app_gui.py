@@ -15,16 +15,19 @@ from motor_control import (
     query_all_axes_positions,
     go_to_all_origins,
     stop_motor_control,
-    move_linear_stage,
-    base_displacement,
-    r_displacement
+    move_linear_stage
 )
 from relay_control import (
     auto_connect_relay,
     laser_relay_on,
     laser_relay_off
 )
-from image_recognition import open_camera  # Renamed file
+from image_recognition import open_camera
+
+# Globals to store user inputs
+PAD_COUNT = 0            # how many pads
+PAD_SPACING = 0.0        # distance between pad centers
+FIRST_PAD_OFFSET = 0.0   # edge-of-pcb offset plus 700 µm fixture offset
 
 speed_display_label = None
 keyboard_control_enabled = False
@@ -52,10 +55,8 @@ def continuous_motor_control():
             try:
                 for key, (axis, direction) in axis_controls.items():
                     if keyboard.is_pressed(key):
-                        step_size = r_displacement if axis == 'r' else base_displacement
-                        if keyboard.is_pressed("space"):
-                            step_size /= 2
-                        # Quick moves
+                        # Example step size
+                        step_size = 50
                         move_linear_stage(axis, direction, step_size, wait_for_stop=False)
             except Exception as e:
                 print(f"Exception in keyboard control: {e}")
@@ -67,60 +68,151 @@ def toggle_keyboard_control():
     status = "enabled" if keyboard_control_enabled else "disabled"
     print(f"Keyboard motor control {status}.")
 
-def run_full_manual_loop():
+def laser_cut():
     """
-    Demonstration: Turn laser on/off, move some axes, etc.
+    Internal function to handle a laser cutting sequence.
+    Not shown as a button; called from run_full_manual_loop().
     """
     try:
-        print("Starting Full Manual Loop...")
-
-        # Move Z up
+        print("--- Starting Laser Cutting Sequence ---")
         move_linear_stage("Z", "+", 950, wait_for_stop=True, max_wait=30.0)
-        time.sleep(1)
-
-        # Turn laser ON
         laser_relay_on()
-        time.sleep(0.25)
-
-        # Move T forward
         move_linear_stage("T", "+", 20000, wait_for_stop=True, max_wait=30.0)
-        time.sleep(3)
-
-        # Turn laser OFF
         laser_relay_off()
-        time.sleep(1)
-
-        # Move T back
         move_linear_stage("T", "-", 20000, wait_for_stop=True, max_wait=30.0)
-        time.sleep(3.5)
-
-        # Move Z down
         move_linear_stage("Z", "-", 950, wait_for_stop=True, max_wait=30.0)
-        time.sleep(1)
-
-        print("Full Manual Loop completed.")
+        print("Laser cutting sequence completed.")
     except Exception as e:
-        messagebox.showerror("Error", f"An error occurred during the manual loop: {e}")
+        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
+        print(f"Exception in laser_cut: {e}")
+
+def run_full_manual_loop():
+    """
+    1) Go to all origins
+    2) Move X negatively by FIRST_PAD_OFFSET => laser_cut => pad #1
+    3) For pads #2..PAD_COUNT => X- PAD_SPACING => laser_cut
+    4) Go to all origins
+    """
+    try:
+        print("--- Starting Full Manual Loop ---")
+        go_to_all_origins()
+
+        if PAD_COUNT <= 0:
+            print("No pads specified. Exiting loop.")
+            return
+
+        # Pad #1: Move X negative by FIRST_PAD_OFFSET
+        print(f"Moving to Pad #1 offset: {FIRST_PAD_OFFSET} µm (neg direction)")
+        move_linear_stage("X", "-", FIRST_PAD_OFFSET, wait_for_stop=True, max_wait=30.0)
+        print("Laser cutting on Pad #1")
+        laser_cut()
+
+        # Pad #2..PAD_COUNT
+        for pad_index in range(2, PAD_COUNT + 1):
+            print(f"Moving to Pad #{pad_index} offset: {PAD_SPACING} µm (neg direction)")
+            move_linear_stage("X", "-", PAD_SPACING, wait_for_stop=True, max_wait=30.0)
+            print(f"Laser cutting on Pad #{pad_index}")
+            laser_cut()
+
+        print("--- Full Manual Loop completed ---")
+        go_to_all_origins()
+    except Exception as e:
+        messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
 
+def ask_pcb_info_popup(root):
+    """
+    Single Toplevel to get:
+      - PAD_COUNT
+      - PAD_SPACING
+      - OFFSET from right bottom corner (without fixture)
+    We'll add 700 µm after user input.
+    """
+    popup = tk.Toplevel(root)
+    popup.title("PCB Setup")
+
+    pad_count_var = tk.StringVar(value="8")     # default to 8 if you like
+    pad_spacing_var = tk.StringVar(value="1000")   # default
+    offset_var = tk.StringVar(value="5000")    # default
+
+    tk.Label(popup, text="How many pads?").pack(pady=5)
+    e1 = tk.Entry(popup, textvariable=pad_count_var)
+    e1.pack()
+
+    tk.Label(popup, text="Distance between pad centers (µm):").pack(pady=5)
+    e2 = tk.Entry(popup, textvariable=pad_spacing_var)
+    e2.pack()
+
+    tk.Label(popup, text="Distance from bottom-right corner to 1st pad (µm):").pack(pady=5)
+    e3 = tk.Entry(popup, textvariable=offset_var)
+    e3.pack()
+
+    result = {"pc": 0, "ps": 0.0, "off": 0.0, "submitted": False}
+
+    def on_ok():
+        try:
+            pc = int(pad_count_var.get())
+            ps = float(pad_spacing_var.get())
+            off = float(offset_var.get())
+            result["pc"] = pc
+            result["ps"] = ps
+            result["off"] = off
+            result["submitted"] = True
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid numeric values.")
+            return
+        popup.destroy()
+
+    def on_cancel():
+        popup.destroy()
+
+    tk.Button(popup, text="OK", command=on_ok).pack(side='left', padx=20, pady=10)
+    tk.Button(popup, text="Cancel", command=on_cancel).pack(side='right', padx=20, pady=10)
+
+    popup.grab_set()
+    root.wait_window(popup)
+
+    if result["submitted"]:
+        return (result["pc"], result["ps"], result["off"])
+    else:
+        return (0, 0.0, 0.0)
+
 def launch_gui():
-    global speed_display_label
+    global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
 
     root = tk.Tk()
     root.title("Motor Control and Camera Feed")
 
-    # 1) Auto-connect motor
+    # Hide main window initially
+    root.withdraw()
+
+    # Ask user for pad info
+    pc, ps, off = ask_pcb_info_popup(root)
+
+    # Add 700µm fixture offset
+    off += 700.0
+
+    PAD_COUNT = pc
+    PAD_SPACING = ps
+    FIRST_PAD_OFFSET = off
+
+    root.deiconify()  # now show main window
+
+    # Connect motor/relay
     auto_connect_motor()
-    # 2) Auto-connect relay
     auto_connect_relay()
-    # 3) Retrieve motor speed
     retrieve_motor_speed()
 
-    # Display the current motor speed
+    info_label = tk.Label(
+        root, 
+        text=f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING}µm, Offset: {FIRST_PAD_OFFSET}µm (+700 fixture)"
+    )
+    info_label.pack(pady=5)
+
+    global speed_display_label
     speed_display_label = tk.Label(root, text=f"Current Speed: {get_current_speed()}")
     speed_display_label.pack(pady=5)
 
-    # Frame for speed UI
     speed_frame = tk.Frame(root)
     speed_frame.pack(pady=10)
 
@@ -130,12 +222,10 @@ def launch_gui():
     speed_entry.pack(side='left', padx=5)
 
     def update_speed_gui():
-        """Update the speed based on user input, then refresh label."""
         try:
             new_speed = int(speed_entry.get().strip())
             if 0 <= new_speed <= 150:
                 update_speed(new_speed)
-                # Refresh the label
                 speed_display_label.config(text=f"Current Speed: {get_current_speed()}")
             else:
                 messagebox.showerror("Error", "Speed must be between 0 and 150.")
@@ -144,38 +234,36 @@ def launch_gui():
 
     tk.Button(root, text="Update Speed", command=update_speed_gui).pack(pady=5)
 
-    # Axis and direction input
+    # Axis + Displacement
     tk.Label(root, text="Axis (X, Y, Z, r, t, T):").pack()
     axis_entry = tk.Entry(root)
     axis_entry.pack()
 
-    direction_var = tk.StringVar(value='+')
-    tk.Radiobutton(root, text='Positive (+)', variable=direction_var, value='+').pack()
-    tk.Radiobutton(root, text='Negative (-)', variable=direction_var, value='-').pack()
-
-    tk.Label(root, text="Displacement (µm for linear, degrees for 'r')").pack()
+    tk.Label(root, text="Signed Displacement (e.g., 1000 or -1000):").pack()
     displacement_entry = tk.Entry(root)
     displacement_entry.pack()
 
     def move_stage_gui():
-        """Single-axis move from the GUI, blocking until done."""
         try:
             axis = axis_entry.get().strip()
-            direction = direction_var.get()
-            displacement = float(displacement_entry.get().strip())
-            move_linear_stage(axis, direction, displacement, wait_for_stop=True, max_wait=30.0)
+            displacement_value = float(displacement_entry.get().strip())
+            direction = '+' if displacement_value >= 0 else '-'
+            magnitude = abs(displacement_value)
+            move_linear_stage(axis, direction, magnitude, wait_for_stop=True, max_wait=30.0)
         except ValueError as e:
-            messagebox.showerror("Error", f"Invalid input: {e}")
+            messagebox.showerror("Error", f"Invalid displacement: {e}")
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
     tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
 
     # Keyboard control toggle
     kb_var = tk.IntVar(value=0)
-    tk.Checkbutton(root, text="Keyboard Movement Mode",
-                   variable=kb_var, command=toggle_keyboard_control).pack(pady=5)
+    tk.Checkbutton(
+        root, text="Keyboard Movement Mode",
+        variable=kb_var, command=toggle_keyboard_control
+    ).pack(pady=5)
 
-    # --- Laser section with side-by-side radio buttons ---
+    # Laser radio
     laser_state = tk.StringVar(value='Off')
 
     def set_laser():
@@ -188,17 +276,19 @@ def launch_gui():
     laser_frame.pack(pady=5)
 
     tk.Label(laser_frame, text="Laser: ").pack(side='left')
-    tk.Radiobutton(laser_frame, text="On",  variable=laser_state, value='On',  command=set_laser).pack(side='left')
+    tk.Radiobutton(laser_frame, text="On", variable=laser_state, value='On', command=set_laser).pack(side='left')
     tk.Radiobutton(laser_frame, text="Off", variable=laser_state, value='Off', command=set_laser).pack(side='left')
 
     # Query & origin
     tk.Button(root, text="Query All Axes", command=query_all_axes_positions).pack(pady=5)
     tk.Button(root, text="Return to Origin", command=go_to_all_origins).pack(pady=5)
 
-    # Place the "Run Full Manual Loop" button at the very bottom
+    # We do NOT show a Laser Cut button, but keep the function in code.
+
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
     root.mainloop()
+
 
 def start_camera_threads():
     cam0_thread = threading.Thread(target=open_camera, args=(0,))

@@ -1,4 +1,5 @@
 # relay_control.py
+
 import serial
 from tkinter import messagebox
 from motor_control import serial_lock, send_command, find_port
