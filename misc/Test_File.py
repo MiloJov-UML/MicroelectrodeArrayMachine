@@ -1,6 +1,7 @@
 import serial, threading, tkinter as tk, cv2, time, serial.tools.list_ports, keyboard
 from tkinter import messagebox
 import re
+
 # Global serial variables for motor and relay
 motor_ser = None
 relay_ser = None
@@ -137,7 +138,7 @@ def send_command(ser, command, device_name, retries=3, delay=0.125):
             last_command_time = current_time  # Update last command time
 
             # Introduce delay to wait for device response (similar to Delay in C#)
-            time.sleep(1.25)
+            time.sleep(.11)
 
             # Retry logic for commands with no response
             for attempt in range(retries):
@@ -242,7 +243,7 @@ def continuous_motor_control():
                 break  # Exit the loop if an exception occurs
             except Exception as e:
                 print(f"Unexpected error during keyboard control: {e}")
-        time.sleep(0.1)
+        time.sleep(0.01)
 
 # Relay control functions
 def laser_relay_on():

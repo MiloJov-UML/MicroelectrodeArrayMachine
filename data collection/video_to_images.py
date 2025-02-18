@@ -25,7 +25,7 @@ def video_to_images(video_path, output_folder="D:\\extracted_frames"):
             break
 
         # Save this frame only if frame_num is divisible by 75
-        if frame_num % 100 == 0:
+        if frame_num % 10 == 0:
             # e.g. D:\extracted_frames\frame_0000.png
             filename = os.path.join(output_folder, f"frame_{frame_num:04d}.png")
             cv2.imwrite(filename, frame)
@@ -40,5 +40,5 @@ def video_to_images(video_path, output_folder="D:\\extracted_frames"):
 # Example usage:
 if __name__ == "__main__":
     # Note: Use properly escaped backslashes or a raw string for Windows paths.
-    video_to_images("C:\\Users\\MINI Lab\\Videos\\AI training 2025-02-04 185351.mp4", 
-                    output_folder="D:\\AI_detection_frames")
+    video_to_images("C:\\Users\MINI Lab\\Desktop\GitHub Repo\\MicroelectrodeArrayMachine\\camera0.avi", 
+                    output_folder="D:\\camera0_pcb2_2-5-2025")

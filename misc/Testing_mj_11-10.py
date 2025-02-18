@@ -6,8 +6,7 @@ motor_ser = None
 relay_ser = None
 serial_lock = threading.Lock()
 camera_running = False
-current_speed = 50  # Default speed (range: 0-150)
-
+current_speed = 75  # Default speed (range: 0-150)
 
 # Global variable to track the first connection to the relay
 first_relay_connection = True
@@ -23,8 +22,8 @@ r_displacement = 0.25    # Default step size in degrees for 'r' axis
 
 # Axis controls
 axis_controls = {
-    's': ('X', '-'),          # X axis positive
-    'w': ('X', '+'),          # X axis negative
+    'w': ('X', '-'),          # X axis positive
+    's': ('X', '+'),          # X axis negative
     'a': ('Y', '+'),          # Y axis positive
     'd': ('Y', '-'),          # Y axis negative
     'shift': ('Z', '+'),      # Z axis positive
@@ -65,6 +64,7 @@ def auto_detect_ports():
         relay_port_entry.insert(0, relay_port)
     else:
         messagebox.showerror("Error", "Relay device not found.")
+
 def connect_to_device(port, device_name):
     """Connects to the specified device on a COM port and initializes the motor controller if needed."""
     try:
@@ -92,77 +92,39 @@ def initialize_motor_controller(ser):
     except Exception as e:
         print(f"Error during motor controller initialization: {e}")
 
-def handle_motor_response(response):
-    if "ERR" in response:
-        print("Error received from Motor Controller. Check motor configuration or command syntax.")
-    else:
-        print(f"Motor Controller response: {response}")
-
 def send_command(ser, command, device_name):
-    """Send a command to the device and handle the response."""
     global last_command_time
     current_time = time.time()
 
     if current_time - last_command_time < command_cooldown:
         print(f"{device_name} command cooldown active. Skipping command.")
-        return None
+        return  # Skip sending command if in cooldown period
 
     try:
         with serial_lock:
-            full_command = command + "\r"
-            ser.write(full_command.encode())
+            ser.write((command).encode())
             print(f"Sent command to {device_name}: {command.strip()}")
-            last_command_time = current_time
-            time.sleep(0.01)  # Allow time for the device to respond
+            last_command_time = current_time  # Update last command time
+            time.sleep(0.01)  # Give the device time to respond
 
+            # Read the device's response
             if ser.in_waiting > 0:
                 response = ser.read(ser.in_waiting).decode().strip()
                 print(f"{device_name} response: {response}")
-                return response
+                #handle_motor_response(response)
+                return response  # Return the response for further handling 
             else:
                 print(f"No response from {device_name}.")
                 return None
     except serial.SerialException as e:
-        print(f"Failed to send command '{command}' to {device_name}: {e}")
+        print(f"Failed to send command {command.strip()} to {device_name}: {e}")
         return None
 
-def update_speed(new_speed):
-    """Update the motor speed."""
-    global current_speed
-    if motor_ser:
-        command = f"V{new_speed}"
-        response = send_command(motor_ser, command, "Motor Controller")
-        if response:
-            current_speed = new_speed
-            print(f"Speed updated to {new_speed}.")
+def handle_motor_response(response):
+    if "ERR" in response:
+        print("Error received from Motor Controller. Check motor configuration or command syntax.")
     else:
-        messagebox.showerror("Error", "Not connected to motor control device.")
-
-def return_to_origin(axis=None):
-    """Return the specified axis (or all axes) to origin."""
-    if motor_ser:
-        if axis:
-            command = f"H{axis}"  # Command for returning a specific axis to origin
-            response = send_command(motor_ser, command, "Motor Controller")
-            if response and "ERR" in response:
-                print(f"Error: Failed to return axis {axis} to origin. Response: {response}")
-            elif response:
-                print(f"Axis {axis} returned to origin successfully.")
-            else:
-                print(f"No response from Motor Controller for axis {axis} return to origin.")
-        else:
-            command = "HX HY HZ Hr Ht HT"  # Command for returning all axes to origin
-            response = send_command(motor_ser, command, "Motor Controller")
-            if response and "ERR" in response:
-                print(f"Error: Failed to return all axes to origin. Response: {response}")
-            elif response:
-                print("All axes returned to origin successfully.")
-            else:
-                print("No response from Motor Controller for all axes return to origin.")
-    else:
-        messagebox.showerror("Error", "Not connected to motor control device.")
-
-
+        print(f"Motor Controller response: {response}")
 
 def convert_degrees_to_pulses(degrees):
     stepper_angle_deg = 1.8
@@ -204,6 +166,18 @@ def move_linear_stage(axis, direction, displacement_µm):
 
     command = f"{axis}{direction}{int(displacement_steps)}\r"
     send_command(motor_ser, command, "Motor Controller")
+
+def update_speed(new_speed):
+    """Update the motor speed."""
+    global current_speed
+    if motor_ser:
+        command = f"V{new_speed}\r"
+        response = send_command(motor_ser, command, "Motor Controller")
+        if response:
+            current_speed = new_speed
+            print(f"Speed updated to {new_speed}.")
+    else:
+        messagebox.showerror("Error", "Not connected to motor control device.")
 
 def stop_motor_control():
     """Stop the motor control."""
@@ -276,12 +250,27 @@ def launch_gui():
     def connect():
         """Connect to the motor and relay devices."""
         global motor_ser, relay_ser
+
         motor_port = motor_port_entry.get().strip()
         relay_port = relay_port_entry.get().strip()
-        motor_ser = serial.Serial(motor_port, 9600, timeout=2)
-        relay_ser = serial.Serial(relay_port, 9600, timeout=2)
+
+        motor_ser = connect_to_device(motor_port, "Motor Controller")
+        relay_ser = connect_to_device(relay_port, "Arduino Controller")
+
+        # Confirm connections
         if motor_ser and relay_ser:
-            print("Connected to Motor Controller and Relay Controller.")
+            global camera_running
+            camera_running = True  # Start the cameras when devices are connected
+
+    def move_stage():
+        """Move the motor stage with user inputs."""
+        try:
+            axis = axis_entry.get().strip()
+            direction = direction_var.get()
+            displacement = int(displacement_entry.get().strip())
+            move_linear_stage(axis, direction, displacement)
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid input: {e}")
 
     def update_speed_gui():
         """Update the speed based on user input."""
@@ -293,25 +282,6 @@ def launch_gui():
                 messagebox.showerror("Error", "Speed must be between 0 and 150.")
         except ValueError:
             messagebox.showerror("Error", "Invalid speed value.")
-
-    def return_to_origin_gui():
-        """Return axes to origin based on user selection."""
-        axis = axis_var.get()
-        if axis == "All":
-            return_to_origin()
-        else:
-            return_to_origin(axis)
-    def move_stage():
-        """Move the motor stage with user inputs."""
-        try:
-            axis = axis_entry.get().strip()
-            direction = direction_var.get()
-            displacement = int(displacement_entry.get().strip())
-            move_linear_stage(axis, direction, displacement)
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid input: {e}")
-
-
 
     # Create main GUI window
     root = tk.Tk()
@@ -332,25 +302,14 @@ def launch_gui():
 
     # Connect button
     tk.Button(root, text="Connect", command=connect).pack(pady=5)
-
-      # Speed control
+    
+    # Speed control
     tk.Label(root, text="Current Speed (0-150):").pack()
     speed_entry = tk.Entry(root)
     speed_entry.insert(0, str(current_speed))
     speed_entry.pack()
     tk.Button(root, text="Update Speed", command=update_speed_gui).pack(pady=5)
 
-    # Return to origin controls
-    tk.Label(root, text="Return to Origin:").pack()
-    axis_var = tk.StringVar(value="All")
-    tk.Radiobutton(root, text="All Axes", variable=axis_var, value="All").pack()
-    tk.Radiobutton(root, text="X Axis", variable=axis_var, value="X").pack()
-    tk.Radiobutton(root, text="Y Axis", variable=axis_var, value="Y").pack()
-    tk.Radiobutton(root, text="Z Axis", variable=axis_var, value="Z").pack()
-    tk.Radiobutton(root, text="r Axis", variable=axis_var, value="r").pack()
-    tk.Radiobutton(root, text="t Axis", variable=axis_var, value="t").pack()
-    tk.Radiobutton(root, text="T Axis", variable=axis_var, value="T").pack()
-    tk.Button(root, text="Return to Origin", command=return_to_origin_gui).pack(pady=5)
     # Axis Input
     tk.Label(root, text="Axis (X, Y, Z, r, t, T):").pack()
     axis_entry = tk.Entry(root)
@@ -368,7 +327,7 @@ def launch_gui():
 
     # Buttons for Motor Control
     tk.Button(root, text="Move Stage", command=move_stage).pack(pady=10)
-    
+    tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
 
     # Keyboard Control Toggle
     keyboard_control_var = tk.IntVar(value=0)
@@ -381,9 +340,7 @@ def launch_gui():
 
      # Add "Run Full Manual Loop" button
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(pady=10)
-#stop Motor
-    tk.Button(root, text="STOP MOTOR", command=stop_motor_control).pack(pady=10)
-    # Launch the GUI
+
     root.mainloop()
 
 def run_full_manual_loop():
