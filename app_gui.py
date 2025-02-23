@@ -5,6 +5,8 @@ import tkinter as tk
 import keyboard
 import time
 from tkinter import messagebox
+import json
+import os
 
 # Imports from our modules
 from motor_control import (
@@ -24,10 +26,13 @@ from relay_control import (
 )
 from image_recognition import open_camera
 
+# Path to JSON settings file
+SETTINGS_FILE = "pcb_settings.json"
+
 # Globals to store user inputs
-PAD_COUNT = 0            # how many pads
-PAD_SPACING = 0.0        # distance between pad centers
-FIRST_PAD_OFFSET = 0.0   # edge-of-pcb offset plus 700 µm fixture offset
+PAD_COUNT = 0
+PAD_SPACING = 0.0
+FIRST_PAD_OFFSET = 0.0   # sum of user input + fixture_offset from JSON
 
 speed_display_label = None
 keyboard_control_enabled = False
@@ -48,6 +53,52 @@ axis_controls = {
     'f': ('T', '+')
 }
 
+def load_last_settings():
+    """
+    Load pcb settings from SETTINGS_FILE if exists, else return defaults.
+    Return dict with:
+      pad_count (int),
+      pad_spacing (float),
+      offset (float),
+      fixture_offset (float)  # Now we store fixture offset in JSON too
+    """
+    defaults = {
+        "pad_count": 8,
+        "pad_spacing": 500.0,
+        "offset": 550.0,
+        "fixture_offset": 700.0  # default fixture offset
+    }
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                data = json.load(f)
+            # Merge with defaults, so if fixture_offset is missing, we use default 700
+            for key in defaults:
+                data.setdefault(key, defaults[key])
+            return data
+        except Exception as e:
+            print(f"Warning: Could not read {SETTINGS_FILE}: {e}")
+    return defaults
+
+def save_settings(pad_count, pad_spacing, offset, fixture_offset):
+    """
+    Save the user's pad settings to SETTINGS_FILE in JSON format.
+    'offset' is the user-specified offset (NOT including the fixture offset).
+    'fixture_offset' is stored so advanced users can tweak it too.
+    """
+    data = {
+        "pad_count": pad_count,
+        "pad_spacing": pad_spacing,
+        "offset": offset,            # raw user offset
+        "fixture_offset": fixture_offset
+    }
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        print(f"Saved PCB settings to {SETTINGS_FILE}")
+    except Exception as e:
+        print(f"Warning: Could not write to {SETTINGS_FILE}: {e}")
+
 def continuous_motor_control():
     global keyboard_control_enabled
     while True:
@@ -55,7 +106,6 @@ def continuous_motor_control():
             try:
                 for key, (axis, direction) in axis_controls.items():
                     if keyboard.is_pressed(key):
-                        # Example step size
                         step_size = 50
                         move_linear_stage(axis, direction, step_size, wait_for_stop=False)
             except Exception as e:
@@ -71,7 +121,6 @@ def toggle_keyboard_control():
 def laser_cut():
     """
     Internal function to handle a laser cutting sequence.
-    Not shown as a button; called from run_full_manual_loop().
     """
     try:
         print("--- Starting Laser Cutting Sequence ---")
@@ -93,6 +142,7 @@ def run_full_manual_loop():
     3) For pads #2..PAD_COUNT => X- PAD_SPACING => laser_cut
     4) Go to all origins
     """
+    global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
     try:
         print("--- Starting Full Manual Loop ---")
         go_to_all_origins()
@@ -120,20 +170,22 @@ def run_full_manual_loop():
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
 
-def ask_pcb_info_popup(root):
+def ask_pcb_info_popup(root, defaults):
     """
     Single Toplevel to get:
-      - PAD_COUNT
-      - PAD_SPACING
-      - OFFSET from right bottom corner (without fixture)
-    We'll add 700 µm after user input.
+      - pad_count
+      - pad_spacing
+      - user_offset (the distance from right bottom corner, WITHOUT fixture offset).
+    We'll later add fixture_offset from the JSON to get the final FIRST_PAD_OFFSET.
+    'defaults' is a dict with keys: 'pad_count', 'pad_spacing', 'offset', 'fixture_offset'
+    but we only show user the first three.
     """
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")
 
-    pad_count_var = tk.StringVar(value="8")     # default to 8 if you like
-    pad_spacing_var = tk.StringVar(value="1000")   # default
-    offset_var = tk.StringVar(value="5000")    # default
+    pad_count_var = tk.StringVar(value=str(defaults.get("pad_count", 8)))
+    pad_spacing_var = tk.StringVar(value=str(defaults.get("pad_spacing", 500.0)))
+    user_offset_var = tk.StringVar(value=str(defaults.get("offset", 550.0)))
 
     tk.Label(popup, text="How many pads?").pack(pady=5)
     e1 = tk.Entry(popup, textvariable=pad_count_var)
@@ -144,19 +196,21 @@ def ask_pcb_info_popup(root):
     e2.pack()
 
     tk.Label(popup, text="Distance from bottom-right corner to 1st pad (µm):").pack(pady=5)
-    e3 = tk.Entry(popup, textvariable=offset_var)
+    e3 = tk.Entry(popup, textvariable=user_offset_var)
     e3.pack()
 
-    result = {"pc": 0, "ps": 0.0, "off": 0.0, "submitted": False}
+    # We won't show fixture_offset in GUI, but we'll read it from defaults if we need it.
+
+    result = {"pc": 0, "ps": 0.0, "user_off": 0.0, "submitted": False}
 
     def on_ok():
         try:
             pc = int(pad_count_var.get())
             ps = float(pad_spacing_var.get())
-            off = float(offset_var.get())
+            off = float(user_offset_var.get())
             result["pc"] = pc
             result["ps"] = ps
-            result["off"] = off
+            result["user_off"] = off
             result["submitted"] = True
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numeric values.")
@@ -173,7 +227,7 @@ def ask_pcb_info_popup(root):
     root.wait_window(popup)
 
     if result["submitted"]:
-        return (result["pc"], result["ps"], result["off"])
+        return (result["pc"], result["ps"], result["user_off"])
     else:
         return (0, 0.0, 0.0)
 
@@ -186,17 +240,28 @@ def launch_gui():
     # Hide main window initially
     root.withdraw()
 
-    # Ask user for pad info
-    pc, ps, off = ask_pcb_info_popup(root)
+    # 1) Load last-known settings (including fixture_offset)
+    last_vals = load_last_settings()
+    # last_vals keys: 'pad_count', 'pad_spacing', 'offset', 'fixture_offset'
 
-    # Add 700µm fixture offset
-    off += 700.0
+    # 2) Ask user for the three main values
+    pc, ps, user_off = ask_pcb_info_popup(root, last_vals)
+
+    # Merge user offset with fixture offset from JSON
+    fixture_off = last_vals["fixture_offset"]
+    final_offset = user_off + fixture_off
 
     PAD_COUNT = pc
     PAD_SPACING = ps
-    FIRST_PAD_OFFSET = off
+    FIRST_PAD_OFFSET = final_offset
 
-    root.deiconify()  # now show main window
+    # 3) Save the user input so next time it’s remembered
+    # We store user’s raw offset (NOT final_offset), and also keep fixture_offset as is
+    if pc > 0:
+        save_settings(pc, ps, user_off, fixture_off)
+
+    # Show main window now
+    root.deiconify()
 
     # Connect motor/relay
     auto_connect_motor()
@@ -204,8 +269,11 @@ def launch_gui():
     retrieve_motor_speed()
 
     info_label = tk.Label(
-        root, 
-        text=f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING}µm, Offset: {FIRST_PAD_OFFSET}µm (+700 fixture)"
+        root,
+        text=(
+            f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING}µm, "
+            f"Offset: {FIRST_PAD_OFFSET}µm (user + fixture:{fixture_off}µm)"
+        )
     )
     info_label.pack(pady=5)
 
