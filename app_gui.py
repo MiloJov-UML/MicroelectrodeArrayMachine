@@ -106,7 +106,7 @@ def continuous_motor_control():
             try:
                 for key, (axis, direction) in axis_controls.items():
                     if keyboard.is_pressed(key):
-                        step_size = 50
+                        step_size = 1
                         move_linear_stage(axis, direction, step_size, wait_for_stop=False)
             except Exception as e:
                 print(f"Exception in keyboard control: {e}")
@@ -124,12 +124,12 @@ def laser_cut():
     """
     try:
         print("--- Starting Laser Cutting Sequence ---")
-        move_linear_stage("Z", "+", 950, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 1900, wait_for_stop=True, max_wait=30.0)
         laser_relay_on()
-        move_linear_stage("T", "+", 20000, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("T", "+", 40000, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
-        move_linear_stage("T", "-", 20000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 950, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 1900, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
@@ -271,8 +271,8 @@ def launch_gui():
     info_label = tk.Label(
         root,
         text=(
-            f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING}µm, "
-            f"Offset: {FIRST_PAD_OFFSET}µm (user + fixture:{fixture_off}µm)"
+            f"Pads: {PAD_COUNT}, Pad Spacing: {PAD_SPACING}µm, "
+            f"1st Pad Offset: {FIRST_PAD_OFFSET}µm"
         )
     )
     info_label.pack(pady=5)

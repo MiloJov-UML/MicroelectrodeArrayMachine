@@ -18,12 +18,12 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = {
-    'X': 18840,
-    'Y': 10622.5,
-    'Z': 4791.25,
-    'r': 3264.91,
-    't': 712850,
-    'T': 14125
+    'X': 38680.000,
+    'Y': 21645.000,
+    'Z': 7982.500,
+    'r': 3244.910,
+    't': 1823980.000,
+    'T': 11317.500
 }
 
 # For manual control
@@ -182,12 +182,12 @@ def get_current_speed():
 # ---------------------------
 def µm_to_steps(µm, axis, screw_pitch=2.0, steps_per_rev=200):
     microstepping = 1 if axis == 't' else 8
-    steps_per_µm = (steps_per_rev * microstepping) / (screw_pitch * 1000)
+    steps_per_µm = (steps_per_rev * microstepping) / (screw_pitch * 2000)
     return round(µm * steps_per_µm)
 
 def steps_to_µm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
     microstepping = 1 if axis == 't' else 8
-    µm_per_step = (screw_pitch * 1000) / (steps_per_rev * microstepping)
+    µm_per_step = (screw_pitch * 2000) / (steps_per_rev * microstepping)
     return steps * µm_per_step
 
 def convert_degrees_to_pulses(deg):

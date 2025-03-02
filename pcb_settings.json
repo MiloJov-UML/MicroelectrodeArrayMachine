@@ -1,6 +1,6 @@
 {
-  "pad_count": 2,
-  "pad_spacing": 500.0,
-  "offset": 550.0,
-  "fixture_offset": 700.0
+  "pad_count": 1,
+  "pad_spacing": 1000.0,
+  "offset": 1100.0,
+  "fixture_offset": 1400.0
 }
