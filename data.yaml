@@ -1,0 +1,6 @@
+# data.yaml
+train: D:\YOLODataset\images\train
+val: D:\YOLODataset\images\val
+
+nc: 2  # number of classes
+names: ["Pad", "Microwiresize3"]

@@ -4,7 +4,7 @@ import threading
 from app_gui import launch_gui, continuous_motor_control, start_camera_threads
 
 def main():
-    print("Welcome to the Motor Control App!")
+    print("Welcome to the Microelectrode Fabrication App!")
     
     # Start the GUI in its own thread
     threading.Thread(target=launch_gui).start()
