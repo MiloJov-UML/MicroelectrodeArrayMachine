@@ -19,11 +19,13 @@ from motor_control import (
     stop_motor_control,
     move_linear_stage
 )
+
 from relay_control import (
     auto_connect_relay,
     laser_relay_on,
     laser_relay_off
 )
+
 from image_recognition import open_camera
 
 # Path to JSON settings file
@@ -64,9 +66,9 @@ def load_last_settings():
     """
     defaults = {
         "pad_count": 8,
-        "pad_spacing": 500.0,
-        "offset": 550.0,
-        "fixture_offset": 700.0  # default fixture offset
+        "pad_spacing": 1000.0,
+        "offset": 1100.0,
+        "fixture_offset": 1400.0  # default fixture offset
     }
     if os.path.isfile(SETTINGS_FILE):
         try:
