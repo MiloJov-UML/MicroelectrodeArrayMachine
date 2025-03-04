@@ -7,42 +7,6 @@ from ultralytics import YOLO
 # Import the motor control function for µm->steps
 from motor_control import µm_to_steps
 
-def center_of_bbox(bbox):
-    """
-    Given a YOLO bounding box (x1, y1, x2, y2), return its (cx, cy) center.
-    """
-    x1, y1, x2, y2 = bbox
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
-    return cx, cy
-
-def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
-    """
-    1) Measures the pixel distance between two bounding boxes (bboxA, bboxB).
-    2) Uses the fact that physically they are 'known_um' micrometers apart.
-    3) Converts that known_um to steps (using µm_to_steps from motor_control).
-    4) Returns steps_per_pixel, i.e. how many motor steps correspond to 1 pixel.
-    
-    bboxA, bboxB: (x1, y1, x2, y2) from YOLO detection
-    axis: 'X' or 'Y' or whichever axis your stage moves
-    known_um: e.g. 1000µm if these two pads are known to be 1000µm apart
-    """
-    # 1) Pixel distance
-    cxA, cyA = center_of_bbox(bboxA)
-    cxB, cyB = center_of_bbox(bboxB)
-    
-    # For vertical alignment, you might do abs(cyB - cyA).
-    # For horizontal, abs(cxB - cxA).
-    # Or a general Euclidean distance:
-    pixel_dist = math.hypot(cxB - cxA, cyB - cyA)
-
-    # 2) Convert the known distance (1000µm) to steps
-    steps_for_known_um = µm_to_steps(known_um, axis=axis)
-
-    # 3) steps_per_pixel
-    steps_per_pixel = steps_for_known_um / pixel_dist  # steps / px
-    return steps_per_pixel
-
 def custom_annotate(results, img):
     """
     1) Gather bounding boxes
@@ -110,6 +74,42 @@ def custom_annotate(results, img):
         # print(f"Steps/pixel (based on the bottom 2 pads) = {steps_pp:.3f}")
 
     return annotated_img
+
+def center_of_bbox(bbox):
+    """
+    Given a YOLO bounding box (x1, y1, x2, y2), return its (cx, cy) center.
+    """
+    x1, y1, x2, y2 = bbox
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+    return cx, cy
+
+def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
+    """
+    1) Measures the pixel distance between two bounding boxes (bboxA, bboxB).
+    2) Uses the fact that physically they are 'known_um' micrometers apart.
+    3) Converts that known_um to steps (using µm_to_steps from motor_control).
+    4) Returns steps_per_pixel, i.e. how many motor steps correspond to 1 pixel.
+    
+    bboxA, bboxB: (x1, y1, x2, y2) from YOLO detection
+    axis: 'X' or 'Y' or whichever axis your stage moves
+    known_um: e.g. 1000µm if these two pads are known to be 1000µm apart
+    """
+    # 1) Pixel distance
+    cxA, cyA = center_of_bbox(bboxA)
+    cxB, cyB = center_of_bbox(bboxB)
+    
+    # For vertical alignment, you might do abs(cyB - cyA).
+    # For horizontal, abs(cxB - cxA).
+    # Or a general Euclidean distance:
+    pixel_dist = math.hypot(cxB - cxA, cyB - cyA)
+
+    # 2) Convert the known distance (1000µm) to steps
+    steps_for_known_um = µm_to_steps(known_um, axis=axis)
+
+    # 3) steps_per_pixel
+    steps_per_pixel = steps_for_known_um / pixel_dist  # steps / px
+    return steps_per_pixel
 
 def open_camera(camera_index=0, model_path="best.pt"):
     """
