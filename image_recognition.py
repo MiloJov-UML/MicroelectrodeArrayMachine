@@ -10,11 +10,10 @@ from motor_control import µm_to_steps
 def custom_annotate(results, img):
     """
     1) Gather bounding boxes
-       - if class == "Pad", store for special bottom->top labeling
-       - else (e.g. "Microwiresize3"), draw immediately in a standard style
-    2) After collecting all 'Pad' boxes, sort them and draw them as pad1..padN
-    3) If at least two pads found, compute steps-per-pixel calibration 
-       and print it in the console.
+       - if class == "Pad", store for special top->bottom labeling
+       - else, draw immediately in a standard style
+    2) Sort the pad boxes from top->bottom, labeling them pad8..padN
+    3) Optionally compute steps-per-pixel if 2+ pads exist.
     """
     boxes = results.boxes
     names = results.names
@@ -22,46 +21,40 @@ def custom_annotate(results, img):
 
     pad_boxes = []  # store (x1, y1, x2, y2, center_y, conf)
     
-    # Pass 1: handle non-Pad classes immediately, gather Pad
+    # 1) Handle non-Pad classes immediately
     for box in boxes:
         cls_id = int(box.cls[0])
         class_name = names[cls_id]
         conf = float(box.conf[0])
 
         x1, y1, x2, y2 = box.xyxy[0].tolist()
-        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])  # ensure int
+        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])  
         center_y = (y1 + y2) / 2
 
         if class_name == "Pad":
-            # We'll draw these after sorting
             pad_boxes.append((x1, y1, x2, y2, center_y, conf))
         else:
-            # e.g. "Microwiresize3" or something else, just draw now
             label = f"{class_name} {conf:.2f}"
-            cv2.rectangle(annotated_img, (x1,y1), (x2,y2), (255,0,0), 2)
-            cv2.putText(annotated_img, label, (x1, y1-5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1, cv2.LINE_AA)
+            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.putText(annotated_img, label, (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-    # Pass 2: sort the pad boxes bottom->top, label them pad1..padN
-    # biggest center_y is bottom (since Y grows downward in OpenCV)
-    pad_boxes.sort(key=lambda x: x[4], reverse=True)  # x[4] = center_y
-    pad_index = 1
+    # 2) Sort the pads by center_y ascending -> top to bottom
+    pad_boxes.sort(key=lambda b: b[4])  # b[4] is center_y
+
+    pad_index = 8
     for (x1, y1, x2, y2, center_y, conf) in pad_boxes:
         label = f"pad{pad_index} {conf:.2f}"
-        pad_index += 1
+        pad_index -= 1
 
-        # green box for pads
-        cv2.rectangle(annotated_img, (x1,y1), (x2,y2), (0,255,0), 2)
-        cv2.putText(annotated_img, label, (x1, y1-5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1, cv2.LINE_AA)
+        cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(annotated_img, label, (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-    # 3) If at least two pads are found, compute steps-per-pixel
+    # 3) If 2+ pads found, you can do calibration or further logic
     if len(pad_boxes) >= 2:
-        # Let's pick the first two in the list as consecutive pads
-        # If you know specifically which two are physically 1000um apart, 
-        # you might pick pad_boxes[0] and pad_boxes[1].
-        (x1A,y1A,x2A,y2A,cyA,confA) = pad_boxes[0]
-        (x1B,y1B,x2B,y2B,cyB,confB) = pad_boxes[1]
+        (x1A, y1A, x2A, y2A, cyA, confA) = pad_boxes[0]
+        (x1B, y1B, x2B, y2B, cyB, confB) = pad_boxes[1]
 
         bboxA = (x1A,y1A,x2A,y2A)
         bboxB = (x1B,y1B,x2B,y2B)
@@ -82,6 +75,7 @@ def center_of_bbox(bbox):
     x1, y1, x2, y2 = bbox
     cx = (x1 + x2) / 2
     cy = (y1 + y2) / 2
+
     return cx, cy
 
 def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
@@ -109,6 +103,7 @@ def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
 
     # 3) steps_per_pixel
     steps_per_pixel = steps_for_known_um / pixel_dist  # steps / px
+
     return steps_per_pixel
 
 def open_camera(camera_index=0, model_path="best.pt"):
