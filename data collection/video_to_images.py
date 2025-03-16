@@ -1,7 +1,7 @@
 import cv2
 import os
 
-def video_to_images(video_path, output_folder="D:\\pcb2_with_metal_microwire_02-25-25"):
+def video_to_images(video_path, output_folder="D:\\PCB2_carbon_fiber_microwire_2025-03-12"):
     """
     Converts a video into individual image frames, but only saves every 75th frame,
     then writes those frames to `output_folder`.
@@ -25,7 +25,7 @@ def video_to_images(video_path, output_folder="D:\\pcb2_with_metal_microwire_02-
             break
 
         # Save this frame only if frame_num is divisible by 75
-        if frame_num % 10 == 0:
+        if frame_num % 30 == 0:
             # e.g. D:\extracted_frames\frame_0000.png
             filename = os.path.join(output_folder, f"frame_{frame_num:04d}.png")
             cv2.imwrite(filename, frame)
@@ -40,5 +40,5 @@ def video_to_images(video_path, output_folder="D:\\pcb2_with_metal_microwire_02-
 # Example usage:
 if __name__ == "__main__":
     # Note: Use properly escaped backslashes or a raw string for Windows paths.
-    video_to_images("C:\\Users\MINI Lab\\Desktop\GitHub Repo\\MicroelectrodeArrayMachine\\camera0.avi", 
-                    output_folder="D:\\camera0_pcb2_microwire_02-25-2025")
+    video_to_images("D:\\PCB2_carbon_fiber_microwire_2025-03-12\\Recording 2025-03-13 210441.mp4", 
+                    output_folder="D:\\camera0_pcb2_CFmicrowire_2025-03-12")

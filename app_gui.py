@@ -26,15 +26,21 @@ from relay_control import (
     laser_relay_off
 )
 
-from image_recognition import open_camera
+# Import the camera logic + global toggles
+from image_recognition import (
+    open_camera,
+    draw_bounding_boxes,  # global bool
+    record_camera0,
+    record_camera1
+)
 
-# Path to JSON settings file
+# If you use a JSON settings file for the GUI:
 SETTINGS_FILE = "pcb_settings.json"
 
-# Globals to store user inputs
+# Some global variables for the GUI
 PAD_COUNT = 0
 PAD_SPACING = 0.0
-FIRST_PAD_OFFSET = 0.0   # sum of user input + fixture_offset from JSON
+FIRST_PAD_OFFSET = 0.0   # user offset + fixture offset
 
 speed_display_label = None
 keyboard_control_enabled = False
@@ -55,26 +61,22 @@ axis_controls = {
     'f': ('T', '+')
 }
 
+
 def load_last_settings():
     """
-    Load pcb settings from SETTINGS_FILE if exists, else return defaults.
-    Return dict with:
-      pad_count (int),
-      pad_spacing (float),
-      offset (float),
-      fixture_offset (float)  # Now we store fixture offset in JSON too
+    Example: loads from a JSON file if you store pad_count, pad_spacing, offset, fixture_offset
+    Adjust or remove if you don't need persistent settings.
     """
     defaults = {
         "pad_count": 8,
         "pad_spacing": 1000.0,
         "offset": 1100.0,
-        "fixture_offset": 1400.0  # default fixture offset
+        "fixture_offset": 1400.0
     }
     if os.path.isfile(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, 'r') as f:
                 data = json.load(f)
-            # Merge with defaults, so if fixture_offset is missing, we use default 700
             for key in defaults:
                 data.setdefault(key, defaults[key])
             return data
@@ -82,16 +84,12 @@ def load_last_settings():
             print(f"Warning: Could not read {SETTINGS_FILE}: {e}")
     return defaults
 
+
 def save_settings(pad_count, pad_spacing, offset, fixture_offset):
-    """
-    Save the user's pad settings to SETTINGS_FILE in JSON format.
-    'offset' is the user-specified offset (NOT including the fixture offset).
-    'fixture_offset' is stored so advanced users can tweak it too.
-    """
     data = {
         "pad_count": pad_count,
         "pad_spacing": pad_spacing,
-        "offset": offset,            # raw user offset
+        "offset": offset,
         "fixture_offset": fixture_offset
     }
     try:
@@ -101,7 +99,9 @@ def save_settings(pad_count, pad_spacing, offset, fixture_offset):
     except Exception as e:
         print(f"Warning: Could not write to {SETTINGS_FILE}: {e}")
 
+
 def continuous_motor_control():
+    """Runs in a separate thread for keyboard-based stage movement (optional)."""
     global keyboard_control_enabled
     while True:
         if keyboard_control_enabled:
@@ -114,35 +114,38 @@ def continuous_motor_control():
                 print(f"Exception in keyboard control: {e}")
         time.sleep(0.01)
 
+
 def toggle_keyboard_control():
+    """Toggle for the keyboard control. A checkbutton in the GUI calls this."""
     global keyboard_control_enabled
     keyboard_control_enabled = not keyboard_control_enabled
     status = "enabled" if keyboard_control_enabled else "disabled"
     print(f"Keyboard motor control {status}.")
 
+
 def laser_cut():
     """
-    Internal function to handle a laser cutting sequence.
+    Example function for a laser cutting sequence.
+    Adjust to your hardware logic.
     """
     try:
         print("--- Starting Laser Cutting Sequence ---")
-        move_linear_stage("Z", "+", 1900, wait_for_stop=True, max_wait=30.0)
-        laser_relay_on()
+        move_linear_stage("Z", "+", 300, wait_for_stop=True, max_wait=30.0)
+        #laser_relay_on()
         move_linear_stage("T", "+", 40000, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 1900, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 300, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
         print(f"Exception in laser_cut: {e}")
 
+
 def run_full_manual_loop():
     """
-    1) Go to all origins
-    2) Move X negatively by FIRST_PAD_OFFSET => laser_cut => pad #1
-    3) For pads #2..PAD_COUNT => X- PAD_SPACING => laser_cut
-    4) Go to all origins
+    Example function to move through multiple pads + do a laser cut each time.
+    Uses PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET from this file's global scope.
     """
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
     try:
@@ -153,7 +156,7 @@ def run_full_manual_loop():
             print("No pads specified. Exiting loop.")
             return
 
-        # Pad #1: Move X negative by FIRST_PAD_OFFSET
+        # Pad #1
         print(f"Moving to Pad #1 offset: {FIRST_PAD_OFFSET} µm (neg direction)")
         move_linear_stage("X", "-", FIRST_PAD_OFFSET, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting on Pad #1")
@@ -172,15 +175,11 @@ def run_full_manual_loop():
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
 
+
 def ask_pcb_info_popup(root, defaults):
     """
-    Single Toplevel to get:
-      - pad_count
-      - pad_spacing
-      - user_offset (the distance from right bottom corner, WITHOUT fixture offset).
-    We'll later add fixture_offset from the JSON to get the final FIRST_PAD_OFFSET.
-    'defaults' is a dict with keys: 'pad_count', 'pad_spacing', 'offset', 'fixture_offset'
-    but we only show user the first three.
+    If you want to ask the user for number of pads, spacing, etc. at GUI startup.
+    If you don't need this logic, you can remove or skip it.
     """
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")
@@ -200,8 +199,6 @@ def ask_pcb_info_popup(root, defaults):
     tk.Label(popup, text="Distance from bottom-right corner to 1st pad (µm):").pack(pady=5)
     e3 = tk.Entry(popup, textvariable=user_offset_var)
     e3.pack()
-
-    # We won't show fixture_offset in GUI, but we'll read it from defaults if we need it.
 
     result = {"pc": 0, "ps": 0.0, "user_off": 0.0, "submitted": False}
 
@@ -233,23 +230,48 @@ def ask_pcb_info_popup(root, defaults):
     else:
         return (0, 0.0, 0.0)
 
+
+###############################
+# BOUNDING BOXES RADIO
+###############################
+def toggle_bounding_boxes():
+    import image_recognition
+    val = box_var.get()  # 'On' or 'Off'
+    if val == 'On':
+        image_recognition.draw_bounding_boxes = True
+        print("[GUI] Bounding Boxes => ON")
+    else:
+        image_recognition.draw_bounding_boxes = False
+        print("[GUI] Bounding Boxes => OFF")
+
+
+###############################
+# RECORDING RADIO
+###############################
+def toggle_recording():
+    import image_recognition
+    val = record_var.get()  # 'On' or 'Off'
+    if val == 'On':
+        image_recognition.record_camera0 = True
+        image_recognition.record_camera1 = True
+        print("[GUI] Recording => ON for both cameras")
+    else:
+        image_recognition.record_camera0 = False
+        image_recognition.record_camera1 = False
+        print("[GUI] Recording => OFF for both cameras")
+
+
 def launch_gui():
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
 
     root = tk.Tk()
-    root.title("Motor Control and Camera Feed")
+    root.title("Motor & Camera Feed Control")
 
-    # Hide main window initially
+    # If you want to ask user about pads/spacings
     root.withdraw()
-
-    # 1) Load last-known settings (including fixture_offset)
     last_vals = load_last_settings()
-    # last_vals keys: 'pad_count', 'pad_spacing', 'offset', 'fixture_offset'
-
-    # 2) Ask user for the three main values
     pc, ps, user_off = ask_pcb_info_popup(root, last_vals)
 
-    # Merge user offset with fixture offset from JSON
     fixture_off = last_vals["fixture_offset"]
     final_offset = user_off + fixture_off
 
@@ -257,12 +279,9 @@ def launch_gui():
     PAD_SPACING = ps
     FIRST_PAD_OFFSET = final_offset
 
-    # 3) Save the user input so next time it’s remembered
-    # We store user’s raw offset (NOT final_offset), and also keep fixture_offset as is
     if pc > 0:
         save_settings(pc, ps, user_off, fixture_off)
 
-    # Show main window now
     root.deiconify()
 
     # Connect motor/relay
@@ -270,23 +289,22 @@ def launch_gui():
     auto_connect_relay()
     retrieve_motor_speed()
 
-    info_label = tk.Label(
-        root,
-        text=(
-            f"Pads: {PAD_COUNT}, Pad Spacing: {PAD_SPACING}µm, "
-            f"1st Pad Offset: {FIRST_PAD_OFFSET}µm"
-        )
-    )
+    info_label = tk.Label(root, text=(
+        f"Pads: {PAD_COUNT}, "
+        f"Spacing: {PAD_SPACING} µm, "
+        f"Offset: {FIRST_PAD_OFFSET} µm"
+    ))
     info_label.pack(pady=5)
 
     global speed_display_label
     speed_display_label = tk.Label(root, text=f"Current Speed: {get_current_speed()}")
     speed_display_label.pack(pady=5)
 
+    # Speed Setting
     speed_frame = tk.Frame(root)
     speed_frame.pack(pady=10)
 
-    tk.Label(speed_frame, text="Set Speed (0-150): ").pack(side='left')
+    tk.Label(speed_frame, text="Set Speed (0-150):").pack(side='left')
     speed_entry = tk.Entry(speed_frame, width=5)
     speed_entry.insert(0, str(get_current_speed()))
     speed_entry.pack(side='left', padx=5)
@@ -333,9 +351,8 @@ def launch_gui():
         variable=kb_var, command=toggle_keyboard_control
     ).pack(pady=5)
 
-    # Laser radio
+    # Laser
     laser_state = tk.StringVar(value='Off')
-
     def set_laser():
         if laser_state.get() == 'On':
             laser_relay_on()
@@ -344,16 +361,31 @@ def launch_gui():
 
     laser_frame = tk.Frame(root)
     laser_frame.pack(pady=5)
-
     tk.Label(laser_frame, text="Laser: ").pack(side='left')
     tk.Radiobutton(laser_frame, text="On", variable=laser_state, value='On', command=set_laser).pack(side='left')
     tk.Radiobutton(laser_frame, text="Off", variable=laser_state, value='Off', command=set_laser).pack(side='left')
 
-    # Query & origin
+    # Query + Origin
     tk.Button(root, text="Query All Axes", command=query_all_axes_positions).pack(pady=5)
     tk.Button(root, text="Return to Origin", command=go_to_all_origins).pack(pady=5)
 
-    # We do NOT show a Laser Cut button, but keep the function in code.
+    # BOUNDING BOX radio => On/Off
+    global box_var
+    box_var = tk.StringVar(value='Off')  # default => bounding boxes on
+    box_frame = tk.Frame(root)
+    box_frame.pack(pady=5)
+    tk.Label(box_frame, text="Bounding Boxes: ").pack(side='left')
+    tk.Radiobutton(box_frame, text="On", variable=box_var, value='On', command=toggle_bounding_boxes).pack(side='left')
+    tk.Radiobutton(box_frame, text="Off", variable=box_var, value='Off', command=toggle_bounding_boxes).pack(side='left')
+
+    # RECORDING radio => On/Off
+    global record_var
+    record_var = tk.StringVar(value='Off')  # default => recording off
+    record_frame = tk.Frame(root)
+    record_frame.pack(pady=5)
+    tk.Label(record_frame, text="Recording: ").pack(side='left')
+    tk.Radiobutton(record_frame, text="On", variable=record_var, value='On', command=toggle_recording).pack(side='left')
+    tk.Radiobutton(record_frame, text="Off", variable=record_var, value='Off', command=toggle_recording).pack(side='left')
 
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
@@ -361,6 +393,10 @@ def launch_gui():
 
 
 def start_camera_threads():
+    """
+    Start camera0/camera1 each in a separate thread calling open_camera.
+    After that, the user can toggle bounding boxes + recording from the GUI.
+    """
     cam0_thread = threading.Thread(target=open_camera, args=(0,))
     cam1_thread = threading.Thread(target=open_camera, args=(1,))
     cam0_thread.start()

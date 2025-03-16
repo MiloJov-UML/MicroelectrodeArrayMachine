@@ -1,10 +1,10 @@
 import os
 
 # Set the directory containing the files
-directory = "D:\\camera0_pcb2_microwire_02-25-2025"
+directory = "D:\\camera0_pcb2_CFmicrowire_2025-03-12"
 
 # Set the string to append
-append_str = "_camera0_pcb2_microwire_02-25-2025"
+append_str = "_camera0_pcb2_CFmicrowire_2025-03-13"
 
 # Iterate over all files in the directory
 for filename in os.listdir(directory):
