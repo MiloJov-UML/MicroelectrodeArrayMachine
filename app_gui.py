@@ -4,11 +4,11 @@ import threading
 import tkinter as tk
 import keyboard
 import time
-from tkinter import messagebox
+from tkinter import messagebox, Toplevel
 import json
 import os
 
-# Imports from our modules
+# Motor control imports
 from motor_control import (
     auto_connect_motor,
     retrieve_motor_speed,
@@ -20,32 +20,25 @@ from motor_control import (
     move_linear_stage
 )
 
+# Relay control imports
 from relay_control import (
     auto_connect_relay,
     laser_relay_on,
     laser_relay_off
 )
 
-# Import the camera logic + global toggles
-from image_recognition import (
-    open_camera,
-    draw_bounding_boxes,  # global bool
-    record_camera0,
-    record_camera1
-)
+# Import the camera logic & toggles from image_recognition
+import image_recognition
+from image_recognition import open_camera
 
-# If you use a JSON settings file for the GUI:
 SETTINGS_FILE = "pcb_settings.json"
 
-# Some global variables for the GUI
 PAD_COUNT = 0
 PAD_SPACING = 0.0
-FIRST_PAD_OFFSET = 0.0   # user offset + fixture offset
-
+FIRST_PAD_OFFSET = 0.0
 speed_display_label = None
 keyboard_control_enabled = False
 
-# Axis controls for keyboard movement
 axis_controls = {
     'w': ('X', '-'),
     's': ('X', '+'),
@@ -61,17 +54,12 @@ axis_controls = {
     'f': ('T', '+')
 }
 
-
 def load_last_settings():
-    """
-    Example: loads from a JSON file if you store pad_count, pad_spacing, offset, fixture_offset
-    Adjust or remove if you don't need persistent settings.
-    """
     defaults = {
         "pad_count": 8,
         "pad_spacing": 1000.0,
         "offset": 1100.0,
-        "fixture_offset": 1400.0
+        "fixture_offset": 2000.0
     }
     if os.path.isfile(SETTINGS_FILE):
         try:
@@ -83,7 +71,6 @@ def load_last_settings():
         except Exception as e:
             print(f"Warning: Could not read {SETTINGS_FILE}: {e}")
     return defaults
-
 
 def save_settings(pad_count, pad_spacing, offset, fixture_offset):
     data = {
@@ -99,9 +86,7 @@ def save_settings(pad_count, pad_spacing, offset, fixture_offset):
     except Exception as e:
         print(f"Warning: Could not write to {SETTINGS_FILE}: {e}")
 
-
 def continuous_motor_control():
-    """Runs in a separate thread for keyboard-based stage movement (optional)."""
     global keyboard_control_enabled
     while True:
         if keyboard_control_enabled:
@@ -114,39 +99,27 @@ def continuous_motor_control():
                 print(f"Exception in keyboard control: {e}")
         time.sleep(0.01)
 
-
 def toggle_keyboard_control():
-    """Toggle for the keyboard control. A checkbutton in the GUI calls this."""
     global keyboard_control_enabled
     keyboard_control_enabled = not keyboard_control_enabled
     status = "enabled" if keyboard_control_enabled else "disabled"
     print(f"Keyboard motor control {status}.")
 
-
 def laser_cut():
-    """
-    Example function for a laser cutting sequence.
-    Adjust to your hardware logic.
-    """
     try:
         print("--- Starting Laser Cutting Sequence ---")
-        move_linear_stage("Z", "+", 300, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 350, wait_for_stop=True, max_wait=30.0)
         #laser_relay_on()
         move_linear_stage("T", "+", 40000, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 300, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 350, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
         print(f"Exception in laser_cut: {e}")
 
-
 def run_full_manual_loop():
-    """
-    Example function to move through multiple pads + do a laser cut each time.
-    Uses PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET from this file's global scope.
-    """
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
     try:
         print("--- Starting Full Manual Loop ---")
@@ -156,13 +129,11 @@ def run_full_manual_loop():
             print("No pads specified. Exiting loop.")
             return
 
-        # Pad #1
         print(f"Moving to Pad #1 offset: {FIRST_PAD_OFFSET} µm (neg direction)")
         move_linear_stage("X", "-", FIRST_PAD_OFFSET, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting on Pad #1")
         laser_cut()
 
-        # Pad #2..PAD_COUNT
         for pad_index in range(2, PAD_COUNT + 1):
             print(f"Moving to Pad #{pad_index} offset: {PAD_SPACING} µm (neg direction)")
             move_linear_stage("X", "-", PAD_SPACING, wait_for_stop=True, max_wait=30.0)
@@ -175,12 +146,7 @@ def run_full_manual_loop():
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
 
-
 def ask_pcb_info_popup(root, defaults):
-    """
-    If you want to ask the user for number of pads, spacing, etc. at GUI startup.
-    If you don't need this logic, you can remove or skip it.
-    """
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")
 
@@ -232,10 +198,10 @@ def ask_pcb_info_popup(root, defaults):
 
 
 ###############################
-# BOUNDING BOXES RADIO
+# BOUNDING BOX & RECORDING
 ###############################
+
 def toggle_bounding_boxes():
-    import image_recognition
     val = box_var.get()  # 'On' or 'Off'
     if val == 'On':
         image_recognition.draw_bounding_boxes = True
@@ -244,12 +210,7 @@ def toggle_bounding_boxes():
         image_recognition.draw_bounding_boxes = False
         print("[GUI] Bounding Boxes => OFF")
 
-
-###############################
-# RECORDING RADIO
-###############################
 def toggle_recording():
-    import image_recognition
     val = record_var.get()  # 'On' or 'Off'
     if val == 'On':
         image_recognition.record_camera0 = True
@@ -261,13 +222,92 @@ def toggle_recording():
         print("[GUI] Recording => OFF for both cameras")
 
 
+###############################
+# IMAGE ADJUSTMENT SLIDER POPUP
+###############################
+
+def open_image_adjustment_window():
+    adj_win = Toplevel()
+    adj_win.title("Image Adjustments")
+
+    # 1) Contrast (ALPHA)
+    tk.Label(adj_win, text="Contrast (ALPHA)").pack()
+    alpha_scale = tk.Scale(
+        adj_win, from_=0.1, to=3.0, resolution=0.1,
+        orient='horizontal',
+        command=lambda val: set_alpha(val)
+    )
+    alpha_scale.set(image_recognition.ALPHA)
+    alpha_scale.pack()
+
+    # 2) Brightness (BETA)
+    tk.Label(adj_win, text="Brightness (BETA)").pack()
+    beta_scale = tk.Scale(
+        adj_win, from_=-100, to=100, resolution=1,
+        orient='horizontal',
+        command=lambda val: set_beta(val)
+    )
+    beta_scale.set(image_recognition.BETA)
+    beta_scale.pack()
+
+    # 3) Saturation Factor (SAT_FACTOR)
+    tk.Label(adj_win, text="Saturation Factor").pack()
+    sat_scale = tk.Scale(
+        adj_win, from_=0.0, to=2.0, resolution=0.1,
+        orient='horizontal',
+        command=lambda val: set_saturation(val)
+    )
+    sat_scale.set(image_recognition.SAT_FACTOR)
+    sat_scale.pack()
+
+    # 4) Gamma (GAMMA)
+    tk.Label(adj_win, text="Gamma").pack()
+    gamma_scale = tk.Scale(
+        adj_win, from_=0.1, to=2.5, resolution=0.1,
+        orient='horizontal',
+        command=lambda val: set_gamma(val)
+    )
+    gamma_scale.set(image_recognition.GAMMA)
+    gamma_scale.pack()
+
+    # 5) Sharpness (SHARP_STRENGTH)
+    tk.Label(adj_win, text="Sharpness").pack()
+    sharp_scale = tk.Scale(
+        adj_win, from_=0.0, to=2.0, resolution=0.1,
+        orient='horizontal',
+        command=lambda val: set_sharpness(val)
+    )
+    sharp_scale.set(image_recognition.SHARP_STRENGTH)
+    sharp_scale.pack()
+
+    tk.Button(adj_win, text="Close", command=adj_win.destroy).pack(pady=5)
+
+def set_alpha(val):
+    image_recognition.ALPHA = float(val)
+
+def set_beta(val):
+    image_recognition.BETA = float(val)
+
+def set_saturation(val):
+    image_recognition.SAT_FACTOR = float(val)
+
+def set_gamma(val):
+    image_recognition.GAMMA = float(val)
+
+def set_sharpness(val):
+    image_recognition.SHARP_STRENGTH = float(val)
+
+###############################
+# MAIN GUI LAUNCH
+###############################
+
 def launch_gui():
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
 
     root = tk.Tk()
     root.title("Motor & Camera Feed Control")
 
-    # If you want to ask user about pads/spacings
+    # 1) Hide main window, ask user for pad info
     root.withdraw()
     last_vals = load_last_settings()
     pc, ps, user_off = ask_pcb_info_popup(root, last_vals)
@@ -282,29 +322,28 @@ def launch_gui():
     if pc > 0:
         save_settings(pc, ps, user_off, fixture_off)
 
+    # 2) Show main window
     root.deiconify()
 
-    # Connect motor/relay
+    # 3) Connect motor / relay
     auto_connect_motor()
     auto_connect_relay()
     retrieve_motor_speed()
 
-    info_label = tk.Label(root, text=(
-        f"Pads: {PAD_COUNT}, "
-        f"Spacing: {PAD_SPACING} µm, "
-        f"Offset: {FIRST_PAD_OFFSET} µm"
-    ))
+    info_label = tk.Label(
+        root,
+        text=(f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING} µm, Offset: {FIRST_PAD_OFFSET} µm")
+    )
     info_label.pack(pady=5)
 
     global speed_display_label
     speed_display_label = tk.Label(root, text=f"Current Speed: {get_current_speed()}")
     speed_display_label.pack(pady=5)
 
-    # Speed Setting
     speed_frame = tk.Frame(root)
     speed_frame.pack(pady=10)
 
-    tk.Label(speed_frame, text="Set Speed (0-150):").pack(side='left')
+    tk.Label(speed_frame, text="Set Speed (0-150): ").pack(side='left')
     speed_entry = tk.Entry(speed_frame, width=5)
     speed_entry.insert(0, str(get_current_speed()))
     speed_entry.pack(side='left', padx=5)
@@ -344,14 +383,14 @@ def launch_gui():
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
     tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
 
-    # Keyboard control toggle
+    # Keyboard control
     kb_var = tk.IntVar(value=0)
     tk.Checkbutton(
         root, text="Keyboard Movement Mode",
         variable=kb_var, command=toggle_keyboard_control
     ).pack(pady=5)
 
-    # Laser
+    # Laser radio
     laser_state = tk.StringVar(value='Off')
     def set_laser():
         if laser_state.get() == 'On':
@@ -365,37 +404,39 @@ def launch_gui():
     tk.Radiobutton(laser_frame, text="On", variable=laser_state, value='On', command=set_laser).pack(side='left')
     tk.Radiobutton(laser_frame, text="Off", variable=laser_state, value='Off', command=set_laser).pack(side='left')
 
-    # Query + Origin
+    # Query & origin
     tk.Button(root, text="Query All Axes", command=query_all_axes_positions).pack(pady=5)
     tk.Button(root, text="Return to Origin", command=go_to_all_origins).pack(pady=5)
 
-    # BOUNDING BOX radio => On/Off
+    # BOUNDING BOX radio
     global box_var
-    box_var = tk.StringVar(value='Off')  # default => bounding boxes on
+    box_var = tk.StringVar(value='Off')  # default => bounding boxes off
     box_frame = tk.Frame(root)
     box_frame.pack(pady=5)
     tk.Label(box_frame, text="Bounding Boxes: ").pack(side='left')
     tk.Radiobutton(box_frame, text="On", variable=box_var, value='On', command=toggle_bounding_boxes).pack(side='left')
     tk.Radiobutton(box_frame, text="Off", variable=box_var, value='Off', command=toggle_bounding_boxes).pack(side='left')
 
-    # RECORDING radio => On/Off
+    # RECORDING radio
     global record_var
-    record_var = tk.StringVar(value='Off')  # default => recording off
+    record_var = tk.StringVar(value='Off')  # default => not recording
     record_frame = tk.Frame(root)
     record_frame.pack(pady=5)
     tk.Label(record_frame, text="Recording: ").pack(side='left')
     tk.Radiobutton(record_frame, text="On", variable=record_var, value='On', command=toggle_recording).pack(side='left')
     tk.Radiobutton(record_frame, text="Off", variable=record_var, value='Off', command=toggle_recording).pack(side='left')
 
+    # Add a button to manually launch the Image Adjustments
+    tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
+
+    # Full manual loop
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
     root.mainloop()
 
-
 def start_camera_threads():
     """
-    Start camera0/camera1 each in a separate thread calling open_camera.
-    After that, the user can toggle bounding boxes + recording from the GUI.
+    Launch camera0 and camera1 in separate threads. They run open_camera from image_recognition.
     """
     cam0_thread = threading.Thread(target=open_camera, args=(0,))
     cam1_thread = threading.Thread(target=open_camera, args=(1,))
