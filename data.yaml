@@ -2,5 +2,5 @@
 train: D:\YOLODataset\images\train
 val: D:\YOLODataset\images\val
 
-nc: 2  # number of classes
-names: ["Pad", "CF_Tip"]
+nc: 3  # number of classes
+names: ["Pad", "CF_Tip", "GC_Tip"]

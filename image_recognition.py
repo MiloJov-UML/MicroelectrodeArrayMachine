@@ -20,8 +20,8 @@ record_camera0 = False
 record_camera1 = False
 
 # 3) Output directories for recorded video & still images
-record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-03-17_2"
-record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-03-17_2"
+record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-03-18"
+record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-03-18"
 
 # 4) Per-camera video writers & timestamps
 video_writers = {0: None, 1: None}
@@ -119,7 +119,7 @@ def custom_annotate(results, img):
         label = f"pad{pad_index} {conf:.2f}"
         pad_index -= 1
         cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (255, 255, 0), 2)
-        cv2.putText(annotated_img, label, (x1, y1 - 5),
+        cv2.putText(annotated_img, label, (x1, y2 + 15),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
 
     return annotated_img
@@ -161,7 +161,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
         frame = post_process_frame(frame)
 
         # (2) YOLO detection
-        results = model.predict(frame, conf=0.3, verbose=False)
+        results = model.predict(frame, conf=0.5, verbose=False)
 
         # (3) Annotate bounding boxes if toggled
         annotated_frame = custom_annotate(results[0], frame)
