@@ -8,7 +8,6 @@ from tkinter import messagebox, Toplevel
 import json
 import os
 
-# Motor control imports
 from motor_control import (
     auto_connect_motor,
     retrieve_motor_speed,
@@ -20,16 +19,14 @@ from motor_control import (
     move_linear_stage
 )
 
-# Relay control imports
 from relay_control import (
     auto_connect_relay,
     laser_relay_on,
     laser_relay_off
 )
 
-# Import the camera logic & toggles from image_recognition
 import image_recognition
-from image_recognition import open_camera
+from image_recognition import open_camera, analyze_cf_gc_angle
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -109,7 +106,7 @@ def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
         move_linear_stage("Z", "+", 350, wait_for_stop=True, max_wait=30.0)
-        #laser_relay_on()
+        # laser_relay_on()
         move_linear_stage("T", "+", 40000, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
@@ -196,11 +193,9 @@ def ask_pcb_info_popup(root, defaults):
     else:
         return (0, 0.0, 0.0)
 
-
 ###############################
 # BOUNDING BOX & RECORDING
 ###############################
-
 def toggle_bounding_boxes():
     val = box_var.get()  # 'On' or 'Off'
     if val == 'On':
@@ -221,61 +216,49 @@ def toggle_recording():
         image_recognition.record_camera1 = False
         print("[GUI] Recording => OFF for both cameras")
 
-
 ###############################
 # IMAGE ADJUSTMENT SLIDER POPUP
 ###############################
-
 def open_image_adjustment_window():
     adj_win = Toplevel()
     adj_win.title("Image Adjustments")
 
-    # 1) Contrast (ALPHA)
     tk.Label(adj_win, text="Contrast (ALPHA)").pack()
     alpha_scale = tk.Scale(
         adj_win, from_=0.1, to=3.0, resolution=0.1,
-        orient='horizontal',
-        command=lambda val: set_alpha(val)
+        orient='horizontal', command=lambda val: set_alpha(val)
     )
     alpha_scale.set(image_recognition.ALPHA)
     alpha_scale.pack()
 
-    # 2) Brightness (BETA)
     tk.Label(adj_win, text="Brightness (BETA)").pack()
     beta_scale = tk.Scale(
         adj_win, from_=-100, to=100, resolution=1,
-        orient='horizontal',
-        command=lambda val: set_beta(val)
+        orient='horizontal', command=lambda val: set_beta(val)
     )
     beta_scale.set(image_recognition.BETA)
     beta_scale.pack()
 
-    # 3) Saturation Factor (SAT_FACTOR)
     tk.Label(adj_win, text="Saturation Factor").pack()
     sat_scale = tk.Scale(
         adj_win, from_=0.0, to=2.0, resolution=0.1,
-        orient='horizontal',
-        command=lambda val: set_saturation(val)
+        orient='horizontal', command=lambda val: set_saturation(val)
     )
     sat_scale.set(image_recognition.SAT_FACTOR)
     sat_scale.pack()
 
-    # 4) Gamma (GAMMA)
     tk.Label(adj_win, text="Gamma").pack()
     gamma_scale = tk.Scale(
         adj_win, from_=0.1, to=2.5, resolution=0.1,
-        orient='horizontal',
-        command=lambda val: set_gamma(val)
+        orient='horizontal', command=lambda val: set_gamma(val)
     )
     gamma_scale.set(image_recognition.GAMMA)
     gamma_scale.pack()
 
-    # 5) Sharpness (SHARP_STRENGTH)
     tk.Label(adj_win, text="Sharpness").pack()
     sharp_scale = tk.Scale(
         adj_win, from_=0.0, to=2.0, resolution=0.1,
-        orient='horizontal',
-        command=lambda val: set_sharpness(val)
+        orient='horizontal', command=lambda val: set_sharpness(val)
     )
     sharp_scale.set(image_recognition.SHARP_STRENGTH)
     sharp_scale.pack()
@@ -300,14 +283,13 @@ def set_sharpness(val):
 ###############################
 # MAIN GUI LAUNCH
 ###############################
-
 def launch_gui():
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
 
     root = tk.Tk()
     root.title("Motor & Camera Feed Control")
 
-    # 1) Hide main window, ask user for pad info
+    # Hide main window, ask user for pad info
     root.withdraw()
     last_vals = load_last_settings()
     pc, ps, user_off = ask_pcb_info_popup(root, last_vals)
@@ -322,10 +304,10 @@ def launch_gui():
     if pc > 0:
         save_settings(pc, ps, user_off, fixture_off)
 
-    # 2) Show main window
+    # Show main window
     root.deiconify()
 
-    # 3) Connect motor / relay
+    # Connect motor & relay
     auto_connect_motor()
     auto_connect_relay()
     retrieve_motor_speed()
@@ -429,6 +411,11 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
+    # Add a button to analyze CF->GC angle
+    tk.Button(root, text="Compute CF->GC Angle", 
+              command=analyze_cf_gc_angle
+    ).pack(pady=5)
+
     # Full manual loop
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
@@ -436,7 +423,8 @@ def launch_gui():
 
 def start_camera_threads():
     """
-    Launch camera0 and camera1 in separate threads. They run open_camera from image_recognition.
+    Launch camera0 and camera1 in separate threads. 
+    They run open_camera(...) from image_recognition.
     """
     cam0_thread = threading.Thread(target=open_camera, args=(0,))
     cam1_thread = threading.Thread(target=open_camera, args=(1,))

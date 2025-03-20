@@ -8,46 +8,33 @@ import numpy as np
 from ultralytics import YOLO
 from motor_control import µm_to_steps
 
-# ------------------------------------------------------------------
+########################################################
 # GLOBAL TOGGLES / SETTINGS
-# ------------------------------------------------------------------
+########################################################
 
-# 1) Bounding box toggle
 draw_bounding_boxes = False
-
-# 2) Recording toggles for each camera
 record_camera0 = False
 record_camera1 = False
 
-# 3) Output directories for recorded video & still images
 record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-03-18"
 record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-03-18"
 
-# 4) Per-camera video writers & timestamps
 video_writers = {0: None, 1: None}
 run_timestamps = {0: None, 1: None}
 
-# 5) Still image logic
 frames_per_still = 30
 frame_counts = {0: 0, 1: 0}
 
-# ------------------------------------------------------------------
+########################################################
 # SOFTWARE-BASED IMAGE ADJUSTMENTS
-# ------------------------------------------------------------------
-ALPHA         = 1.1   # Contrast factor (1.0 => no change, >1 => more contrast)
-BETA          = -100   # Brightness offset
-SAT_FACTOR    = 1.2   # Saturation factor (1.0 => no change, >1 => more saturated)
-GAMMA         = 1.4   # Gamma value (1.0 => no change, <1 => lighten midtones, >1 => darken)
-SHARP_STRENGTH= 2   # Unsharp mask strength (0 => none, >0 => sharper)
+########################################################
+ALPHA          = 1.1
+BETA           = -100
+SAT_FACTOR     = 1.2
+GAMMA          = 1.4
+SHARP_STRENGTH = 2
 
 def post_process_frame(frame):
-    """
-    1) Adjust contrast/brightness with ALPHA/BETA.
-    2) Adjust saturation in HSV space with SAT_FACTOR.
-    3) Apply gamma correction if GAMMA != 1.0.
-    4) Sharpen via unsharp mask using SHARP_STRENGTH.
-    Returns the final adjusted frame.
-    """
     # 1) Contrast & Brightness
     adjusted = cv2.convertScaleAbs(frame, alpha=ALPHA, beta=BETA)
 
@@ -55,21 +42,19 @@ def post_process_frame(frame):
     if SAT_FACTOR != 1.0:
         hsv = cv2.cvtColor(adjusted, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
-        # multiply s-channel by SAT_FACTOR, then clip
-        s = s.astype(np.float32) * SAT_FACTOR
-        s = np.clip(s, 0, 255).astype(np.uint8)
+        s = (s.astype(np.float32) * SAT_FACTOR).clip(0, 255).astype(np.uint8)
         hsv = cv2.merge([h, s, v])
         adjusted = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
-    # 3) Gamma Correction
+    # 3) Gamma
     if GAMMA != 1.0:
         inv_gamma = 1.0 / GAMMA
-        lut = np.array([(i / 255.0) ** inv_gamma * 255 for i in range(256)]).astype("uint8")
+        lut = np.array([(i/255.0)**inv_gamma * 255 for i in range(256)]).astype("uint8")
         adjusted = cv2.LUT(adjusted, lut)
 
-    # 4) Sharpen (Unsharp Mask)
-    if SHARP_STRENGTH > 0.0:
-        blurred = cv2.GaussianBlur(adjusted, (5, 5), 0)
+    # 4) Sharpen
+    if SHARP_STRENGTH > 0:
+        blurred = cv2.GaussianBlur(adjusted, (5,5), 0)
         f_ad = adjusted.astype(np.float32)
         f_bl = blurred.astype(np.float32)
         mask = f_ad - f_bl
@@ -79,16 +64,7 @@ def post_process_frame(frame):
 
     return adjusted
 
-# ------------------------------------------------------------------
-# BOUNDING BOX ANNOTATION LOGIC
-# ------------------------------------------------------------------
 def custom_annotate(results, img):
-    """
-    If draw_bounding_boxes == False, returns a copy unmodified.
-    Otherwise:
-      - We label 'Pad' bounding boxes top->bottom as pad8..pad1
-      - Others are drawn in a different color
-    """
     if not draw_bounding_boxes:
         return img.copy()
 
@@ -97,12 +73,13 @@ def custom_annotate(results, img):
     names = results.names
 
     pad_boxes = []
+
     for box in boxes:
         cls_id = int(box.cls[0])
         class_name = names[cls_id]
         conf = float(box.conf[0])
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-        center_y = (y1 + y2) / 2
+        center_y = (y1 + y2)/2
 
         if class_name == "Pad":
             pad_boxes.append((x1, y1, x2, y2, center_y, conf))
@@ -112,31 +89,28 @@ def custom_annotate(results, img):
             cv2.putText(annotated_img, label, (x1, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-    # Sort 'Pad' boxes from top -> bottom (lowest center_y first)
+    # Sort pad boxes top->bottom
     pad_boxes.sort(key=lambda b: b[4])
     pad_index = 8
-    for (x1, y1, x2, y2, center_y, conf) in pad_boxes:
+    for (x1,y1,x2,y2,cy,conf) in pad_boxes:
         label = f"pad{pad_index} {conf:.2f}"
-        pad_index -= 1
-        cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (255, 255, 0), 2)
-        cv2.putText(annotated_img, label, (x1, y2 + 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+        pad_index-=1
+        cv2.rectangle(annotated_img,(x1,y1),(x2,y2),(255,255,0),2)
+        cv2.putText(annotated_img,label,(x1,y2+15),
+                    cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,0),1)
 
     return annotated_img
 
+# Store the last bounding boxes for CF_tip & GC_tip
+last_cf_box = None
+last_gc_box = None
 
 def open_camera(camera_index=0, model_path="best.pt"):
-    """
-    1) Captures frames from camera_index.
-    2) Adjust each frame's contrast/brightness/saturation/gamma/sharpness.
-    3) YOLO detect => custom_annotate => possibly record frames & save still images.
-    4) Press 'q' to exit the camera loop.
-    """
-    global draw_bounding_boxes
     global record_camera0, record_camera1
-    global record_dir0, record_dir1
     global video_writers, run_timestamps
     global frames_per_still, frame_counts
+
+    global last_cf_box, last_gc_box
 
     model = YOLO(model_path)
     cap = cv2.VideoCapture(camera_index)
@@ -157,47 +131,57 @@ def open_camera(camera_index=0, model_path="best.pt"):
         if not ret:
             break
 
-        # (1) Software-based approach: post-process for contrast, brightness, etc.
+        # 1) Post-process
         frame = post_process_frame(frame)
 
-        # (2) YOLO detection
+        # 2) YOLO detect
         results = model.predict(frame, conf=0.5, verbose=False)
+        boxes = results[0].boxes
+        names = results[0].names
 
-        # (3) Annotate bounding boxes if toggled
+        if camera_index == 0:
+            cf_found = None
+            gc_found = None
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                class_name = names[cls_id]
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+
+                # **Case sensitive**: "CF_Tip" & "GC_Tip" from your trained model
+                if class_name == "CF_Tip":
+                    cf_found = (x1, y1, x2, y2)
+                elif class_name == "GC_Tip":
+                    gc_found = (x1, y1, x2, y2)
+
+            if cf_found is not None:
+                last_cf_box = cf_found
+            if gc_found is not None:
+                last_gc_box = gc_found
+
+        # 3) bounding box annotation
         annotated_frame = custom_annotate(results[0], frame)
 
-        # (4) Recording logic
-        # Determine if camera0 or camera1 is toggled to record
-        rec_flag = (camera_index == 0 and record_camera0) or (camera_index == 1 and record_camera1)
+        # 4) Recording logic
+        rec_flag = (camera_index==0 and record_camera0) or (camera_index==1 and record_camera1)
         if rec_flag:
-            # If not already recording, start now (timestamped file)
             if video_writers[camera_index] is None:
                 run_timestamps[camera_index] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                if camera_index == 0:
-                    os.makedirs(record_dir0, exist_ok=True)
-                    video_path = os.path.join(
-                        record_dir0,
-                        f"camera{camera_index}_{run_timestamps[camera_index]}.avi"
-                    )
-                else:
-                    os.makedirs(record_dir1, exist_ok=True)
-                    video_path = os.path.join(
-                        record_dir1,
-                        f"camera{camera_index}_{run_timestamps[camera_index]}.avi"
-                    )
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                if camera_index==0:
+                    os.makedirs(record_dir0,exist_ok=True)
+                    video_path = os.path.join(record_dir0, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
+                else:
+                    os.makedirs(record_dir1,exist_ok=True)
+                    video_path = os.path.join(record_dir1, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
                 video_writers[camera_index] = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
                 print(f"[Camera {camera_index}] Recording started => {video_path}")
 
-            # Write annotated frame
             video_writers[camera_index].write(annotated_frame)
-
-            # Save still image every N frames
             fc = frame_counts[camera_index]
-            if fc % frames_per_still == 0:
+            if fc % frames_per_still==0:
                 if run_timestamps[camera_index] is None:
                     run_timestamps[camera_index] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                if camera_index == 0:
+                if camera_index==0:
                     still_path = os.path.join(
                         record_dir0,
                         f"frame_{fc}_camera{camera_index}_{run_timestamps[camera_index]}.jpg"
@@ -209,43 +193,61 @@ def open_camera(camera_index=0, model_path="best.pt"):
                     )
                 cv2.imwrite(still_path, annotated_frame)
 
-            frame_counts[camera_index] += 1
+            frame_counts[camera_index]+=1
         else:
-            # Not recording => close writer if open
             if video_writers[camera_index] is not None:
                 video_writers[camera_index].release()
-                video_writers[camera_index] = None
+                video_writers[camera_index]=None
                 print(f"[Camera {camera_index}] Recording stopped.")
 
-        # (5) Show feed
         cv2.imshow(f"Camera {camera_index}", annotated_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(1)&0xFF==ord('q'):
             break
 
-    # Cleanup
     cap.release()
     cv2.destroyAllWindows()
     print(f"[Camera {camera_index}] feed ended.")
 
-    # finalize if user didn't manually stop
     if rec_flag and video_writers[camera_index]:
         video_writers[camera_index].release()
-        video_writers[camera_index] = None
+        video_writers[camera_index]=None
         print(f"[Camera {camera_index}] Recording stopped at exit.")
 
 
-# ------------------------------------------------------------------
-# UTILITY FUNCTIONS
-# ------------------------------------------------------------------
-
+# Utility
 def center_of_bbox(bbox):
-    x1, y1, x2, y2 = bbox
-    return ((x1 + x2) / 2, (y1 + y2) / 2)
+    (x1,y1,x2,y2) = bbox
+    cx = (x1 + x2)/2
+    cy = (y1 + y2)/2
+    return (cx,cy)
 
-def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
-    dist = math.hypot(
-        center_of_bbox(bboxB)[0] - center_of_bbox(bboxA)[0],
-        center_of_bbox(bboxB)[1] - center_of_bbox(bboxA)[1]
-    )
-    steps = µm_to_steps(known_um, axis)
-    return steps / dist
+def compute_angle_between(cf_box, gc_box):
+    """
+    Return the angle (in degrees) from CF->GC relative to the x-axis
+    (0° => horizontally with CF on left, GC on right).
+    """
+    (cx_cf, cy_cf) = center_of_bbox(cf_box)
+    (cx_gc, cy_gc) = center_of_bbox(gc_box)
+
+    dx = cx_gc - cx_cf
+    dy = cy_gc - cy_cf
+
+    angle_rads = math.atan2(dy, dx)  # -pi..pi
+    angle_degs = math.degrees(angle_rads)
+    return angle_degs
+
+def analyze_cf_gc_angle():
+    """
+    Called by the GUI button => compute angle if we have last_cf_box & last_gc_box
+    """
+    global last_cf_box, last_gc_box
+    if last_cf_box is None:
+        print("No CF_Tip bounding box stored yet.")
+        return
+    if last_gc_box is None:
+        print("No GC_Tip bounding box stored yet.")
+        return
+
+    angle_degs = compute_angle_between(last_cf_box, last_gc_box)
+    print(f"Angle CF->GC => {angle_degs:.2f}° (0° => horizontal)")
+
