@@ -26,7 +26,7 @@ from relay_control import (
 )
 
 import image_recognition
-from image_recognition import open_camera, analyze_cf_gc_angle
+from image_recognition import open_camera, analyze_cf_gc_angle, extrude, r_align
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -105,12 +105,12 @@ def toggle_keyboard_control():
 def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
-        move_linear_stage("Z", "+", 350, wait_for_stop=True, max_wait=30.0)
-        # laser_relay_on()
+        move_linear_stage("Z", "+", 2200, wait_for_stop=True, max_wait=30.0)
+        #laser_relay_on()
         move_linear_stage("T", "+", 40000, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 350, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 2200, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
@@ -129,16 +129,26 @@ def run_full_manual_loop():
         print(f"Moving to Pad #1 offset: {FIRST_PAD_OFFSET} µm (neg direction)")
         move_linear_stage("X", "-", FIRST_PAD_OFFSET, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting on Pad #1")
+        extrude()
+        r_align()
+        update_speed(30)
         laser_cut()
+        go_to_all_origins()
 
         for pad_index in range(2, PAD_COUNT + 1):
-            print(f"Moving to Pad #{pad_index} offset: {PAD_SPACING} µm (neg direction)")
-            move_linear_stage("X", "-", PAD_SPACING, wait_for_stop=True, max_wait=30.0)
+            # Cumulative offset = FIRST_PAD_OFFSET + (pad_index - 1)*PAD_SPACING
+            cumulative_offset = FIRST_PAD_OFFSET + (pad_index - 1)*PAD_SPACING
+
+            print(f"Moving to Pad #{pad_index} offset: {cumulative_offset} µm (neg direction)")
+            move_linear_stage("X", "-", cumulative_offset, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_index}")
+            extrude()
+            r_align()
+            update_speed(30)
             laser_cut()
+            go_to_all_origins()
 
         print("--- Full Manual Loop completed ---")
-        go_to_all_origins()
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
@@ -392,7 +402,7 @@ def launch_gui():
 
     # BOUNDING BOX radio
     global box_var
-    box_var = tk.StringVar(value='Off')  # default => bounding boxes off
+    box_var = tk.StringVar(value='On')  # default => bounding boxes off
     box_frame = tk.Frame(root)
     box_frame.pack(pady=5)
     tk.Label(box_frame, text="Bounding Boxes: ").pack(side='left')
@@ -411,10 +421,8 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
-    # Add a button to analyze CF->GC angle
-    tk.Button(root, text="Compute CF->GC Angle", 
-              command=analyze_cf_gc_angle
-    ).pack(pady=5)
+    tk.Button(root, text="Extrude CF to Pad", command=image_recognition.extrude).pack(pady=5)
+    tk.Button(root, text="Align R-Axis", command=image_recognition.r_align).pack(pady=5)
 
     # Full manual loop
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)
