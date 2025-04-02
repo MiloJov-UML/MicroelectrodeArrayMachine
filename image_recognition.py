@@ -18,8 +18,8 @@ draw_bounding_boxes = True
 record_camera0 = False
 record_camera1 = False
 
-record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-03-27"
-record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-03-27"
+record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-04-01"
+record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-04-01"
 
 video_writers = {0: None, 1: None}
 run_timestamps = {0: None, 1: None}
@@ -66,8 +66,11 @@ def post_process_frame(frame):
 
     return adjusted
 
+pad_box_dict = {}  # e.g. {"pad1": (x1,y1,x2,y2), "pad2": ..., etc.}
 
 def custom_annotate(results, img):
+    global pad_box_dict
+
     if not draw_bounding_boxes:
         return img.copy()
 
@@ -77,6 +80,7 @@ def custom_annotate(results, img):
 
     pad_boxes = []
 
+    # 1) gather bounding boxes
     for box in boxes:
         cls_id = int(box.cls[0])
         class_name = names[cls_id]
@@ -84,7 +88,6 @@ def custom_annotate(results, img):
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
         center_y = (y1 + y2)/2
 
-        # If it's the main "Pad", we store it for reference
         if class_name == "Pad":
             pad_boxes.append((x1, y1, x2, y2, center_y, conf))
         else:
@@ -93,18 +96,24 @@ def custom_annotate(results, img):
             cv2.putText(annotated_img, label, (x1, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-    # Sort pad boxes top->bottom
+    # 2) sort the Pad boxes top->bottom (lowest center_y => bottom)
     pad_boxes.sort(key=lambda b: b[4])
     pad_index = 8
-    for (x1,y1,x2,y2,cy,conf) in pad_boxes:
+
+    # 3) label them from pad8..pad1
+    for (bx1, by1, bx2, by2, cy, conf) in pad_boxes:
         label = f"pad{pad_index} {conf:.2f}"
-        pad_index-=1
-        cv2.rectangle(annotated_img,(x1,y1),(x2,y2),(255,255,0),2)
-        cv2.putText(annotated_img,label,(x1 + 3,y2 - 3),
-                    cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,0),1)
+        # store bounding box in a dictionary keyed by that pad label (like "pad8")
+        pure_label = f"pad{pad_index}"  
+        pad_box_dict[pure_label] = (bx1, by1, bx2, by2)  # store bounding box globally
+
+        pad_index -= 1
+
+        cv2.rectangle(annotated_img, (bx1, by1), (bx2, by2), (255, 255, 0), 2)
+        cv2.putText(annotated_img, label, (bx1 + 3, by2 - 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
 
     return annotated_img
-
 
 # Globals for bounding boxes
 last_cf_box = None
@@ -237,15 +246,15 @@ def center_of_bbox(bbox):
     cy = (y1 + y2)/2
     return (cx,cy)
 
-def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
+def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=1000):
     """
     1) Measures the pixel distance between two bounding boxes (bboxA, bboxB).
-    2) Uses the fact that physically they are 'known_um' micrometers apart.
-    3) Converts that known_um to steps (using µm_to_steps from motor_control).
+    2) Uses the fact that physically they are 'known_µm' micrometers apart.
+    3) Converts that known_µm to steps (using µm_to_steps from motor_control).
     4) Returns steps_per_pixel, i.e. how many motor steps correspond to 1 pixel.
     
     Example usage:
-        steps_pp = compute_steps_per_pixel(pad_box, cf_box, axis='X', known_um=1000)
+        steps_pp = compute_steps_per_pixel(pad_box, cf_box, axis='X', known_µm=1000)
         # 1 px => steps_pp motor steps
     """
     (cxA, cyA) = center_of_bbox(bboxA)
@@ -255,8 +264,8 @@ def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_um=1000):
         # Avoid division by zero if boxes are nearly the same center
         return 0.0
 
-    steps_for_known_um = µm_to_steps(known_um, axis=axis)
-    steps_per_pixel = steps_for_known_um / pixel_dist  # steps / px
+    steps_for_known_µm = µm_to_steps(known_µm, axis=axis)
+    steps_per_pixel = steps_for_known_µm / pixel_dist  # steps / px
     return steps_per_pixel
 
 def compute_angle_between(cf_box, gc_box):
@@ -292,13 +301,12 @@ def analyze_cf_gc_angle():
 # --------------------------------------------------------
 # EXTRUDE: measure distance in µm using compute_steps_per_pixel
 # --------------------------------------------------------
-def extrude(max_iterations=50, known_um=1000):
+def extrude(max_iterations=20, known_µm=1000):
     """
     Moves the 't' axis in +100µm increments to align Pad & CF_Tip horizontally 
     within ±10µm. We'll measure the distance in steps or µm by:
       1) Using compute_steps_per_pixel => steps_per_pixel
       2) Dist(px) * steps_per_pixel => motor steps
-         or Dist(px) * (known_um / px_dist) => real µm
 
     We'll do jam detection: if CF_Tip doesn't shift by >=50µm, we undo the step.
     """
@@ -313,10 +321,18 @@ def extrude(max_iterations=50, known_um=1000):
     # 1) slow speed
     update_speed(1)
 
-    step_size_um = 100.0
-    distance_tolerance_um = 10.0
-    jam_threshold_um = 50.0
+    step_size_µm = 100.0
+    distance_tolerance_µm = 10.0
+    jam_threshold_µm = 50.0
     wait_between_moves = 2.0  # seconds
+
+    # We need two known adjacent pads, e.g. "pad1", "pad2" for scale
+    # Suppose we always assume "pad1" & "pad2" are physically known_µm apart
+    bboxPad1 = pad_box_dict.get("pad1")
+    bboxPad2 = pad_box_dict.get("pad2")
+    if bboxPad1 is None or bboxPad2 is None:
+        print("[Extrude] Missing pad1/pad2 => no calibration => abort.")
+        return
 
     # We'll store the last CF Tip center in px for jam detection
     last_cf_x_px = None
@@ -326,9 +342,8 @@ def extrude(max_iterations=50, known_um=1000):
 
         # If we have bounding boxes for Pad & CF:
         if (last_pad_box is not None) and (last_cf_box is not None):
-            # 1) measure steps_per_pixel => from known_um
-            steps_pp = compute_steps_per_pixel(last_pad_box, last_cf_box, axis='X', known_um=known_um)
-            # or measure px_dist directly
+            # 1) measure steps_per_pixel => from known_µm
+            steps_pp = compute_steps_per_pixel(bboxPad1, bboxPad2, axis='X', known_µm=known_µm)
             (pxA, pyA) = center_of_bbox(last_pad_box)
             (pxB, pyB) = center_of_bbox(last_cf_box)
             px_dist = abs(pxB - pxA)
@@ -337,36 +352,27 @@ def extrude(max_iterations=50, known_um=1000):
                 print("[Extrude] CF Tip and Pad appear at same center => done.")
                 return
 
-            # 2) Convert px_dist => real µm if we assume 'known_um' => px_dist_of_known
-            # but we have compute_steps_per_pixel => steps/pixel => we can do:
-            # steps_for_current_dist = px_dist * steps_pp
-            # or we do simpler approach: ratio => (px_dist / known_px_dist) * known_um
-            # We'll do a direct ratio approach:
-            # Dist in steps => px_dist * steps_pp
             dist_in_steps = px_dist * steps_pp
-            # Convert steps => µm using motor_control steps->µm
-            # We invert µm_to_steps => steps => µm
-            # We'll define a helper: steps_to_µm(steps, axis='X')
+            
             from motor_control import steps_to_µm
-            dist_in_um = steps_to_µm(dist_in_steps, axis='X')
+            dist_in_µm = steps_to_µm(dist_in_steps, axis='X')
 
-            print(f"    Pad–CF horizontal distance => ~{dist_in_um:.1f} µm")
+            print(f"    Pad–CF horizontal distance => ~{dist_in_µm:.1f} µm")
 
-            if dist_in_um <= distance_tolerance_um:
-                print(f"[Extrude] Aligned within ±{distance_tolerance_um}µm. Done.")
+            if dist_in_µm <= distance_tolerance_µm:
+                print(f"[Extrude] Aligned within ±{distance_tolerance_µm}µm. Done.")
                 return
 
             # jam detection reference
             last_cf_x_px = pxB
         else:
             print("    Missing bounding boxes => can't measure distance. Using old data if any.")
-            # if we never had bounding boxes => we can't do anything
             if last_cf_x_px is None:
                 print("    We have no prior data => continuing anyway.")
         
         # 2) Move +100µm in 't'
-        print(f"    Move +{step_size_um}µm along 't' axis.")
-        move_linear_stage('t', '+', step_size_um, wait_for_stop=True, max_wait=30.0)
+        print(f"    Move +{step_size_µm}µm along 't' axis.")
+        move_linear_stage('t', '+', step_size_µm, wait_for_stop=True, max_wait=30.0)
 
         # 3) wait so YOLO can update
         time.sleep(wait_between_moves)
@@ -375,24 +381,85 @@ def extrude(max_iterations=50, known_um=1000):
         if (last_pad_box is not None) and (last_cf_box is not None) and (last_cf_x_px is not None):
             new_cf_x_px = center_of_bbox(last_cf_box)[0]
             shift_in_px = abs(new_cf_x_px - last_cf_x_px)
-            # We'll measure shift in px => convert to µm using the same steps_pp or ratio:
-            # steps_pp again:
-            steps_pp_now = compute_steps_per_pixel(last_pad_box, last_cf_box, axis='X', known_um=known_um)
+            steps_pp_now = compute_steps_per_pixel(last_pad_box, last_cf_box, axis='X', known_µm=known_µm)
             shift_in_steps = shift_in_px * steps_pp_now
             from motor_control import steps_to_µm
-            shift_in_um = steps_to_µm(shift_in_steps, axis='X')
+            shift_in_µm = steps_to_µm(shift_in_steps, axis='X')
 
-            if shift_in_um < jam_threshold_um:
-                print(f"    Jam? CF Tip advanced only {shift_in_um:.1f}µm. Undo step.")
-                # move -100µm
-                move_linear_stage('t', '-', step_size_um, wait_for_stop=True, max_wait=30.0)
+            if shift_in_µm < jam_threshold_µm:
+                print(f"    Jam? CF Tip advanced only {shift_in_µm:.1f}µm. Undo step.")
+                move_linear_stage('t', '-', step_size_µm, wait_for_stop=True, max_wait=30.0)
                 time.sleep(wait_between_moves)
             else:
-                print(f"    CF Tip advanced ~{shift_in_um:.1f}µm => OK.")
+                print(f"    CF Tip advanced ~{shift_in_µm:.1f}µm => OK.")
         else:
             print("    Missing bounding boxes => skipping jam detection this iteration.")
 
-    print(f"[Extrude] Gave up after {max_iterations} attempts (>±{distance_tolerance_um}µm?).")
+    print(f"[Extrude] Gave up after {max_iterations} attempts (>±{distance_tolerance_µm}µm?).")
+
+# --------------------------------------------------------
+# X-axis alignment: measure distance in µm using compute_steps_per_pixel
+# --------------------------------------------------------
+def x_align(known_µm=1000):
+    """
+    Align CF_Tip vertically (or horizontally) to a chosen pad in one move.
+    1) Calibrate from two adjacent pads in pad_box_dict, e.g. "pad1" & "pad2" => steps_per_pixel.
+    2) Measure the vertical pixel difference between CF_Tip and last_pad_box.
+    3) Convert to motor steps => single big move on the 't' (or 'X') axis.
+    4) No jam detection or iteration, just a direct move.
+    """
+
+    import math
+    from motor_control import update_speed, move_linear_stage, steps_to_µm
+
+    global pad_box_dict, last_pad_box, last_cf_box
+
+    # 1) We assume "pad1" & "pad2" are physically known_µm apart for calibration
+    bbox_pad1 = pad_box_dict.get("pad1")
+    bbox_pad2 = pad_box_dict.get("pad2")
+    if bbox_pad1 is None or bbox_pad2 is None:
+        print("[x_align] Missing pad1/pad2 => cannot calibrate scale => abort.")
+        return
+
+    # 2) Ensure we have a bounding box for the pad we want to align to (last_pad_box) and CF tip
+    if last_pad_box is None:
+        print("[x_align] No last_pad_box => no pad chosen to align => abort.")
+        return
+    if last_cf_box is None:
+        print("[x_align] No CF_Tip => cannot align => abort.")
+        return
+
+    # 3) Compute steps_per_pixel from pad1..pad2
+    steps_pp = compute_steps_per_pixel(bbox_pad1, bbox_pad2, axis='X', known_µm=known_µm)
+    if steps_pp == 0.0:
+        print("[x_align] pad1/pad2 appear at same center => invalid scale => abort.")
+        return
+    print(f"[x_align] steps_per_pixel => {steps_pp:.4f} steps/px (from pad1..pad2)")
+
+    # 4) Measure the vertical pixel difference between last_pad_box & last_cf_box
+    #    If your camera has Y increasing downward, do (cyCF - cyPad). 
+    (pxPad, pyPad) = center_of_bbox(last_pad_box)
+    (pxCF, pyCF)   = center_of_bbox(last_cf_box)
+    
+    # For "vertical" difference in the camera:
+    delta_px = (pyCF - pyPad)  # CF minus pad. If positive => CF is below pad.
+
+    print(f"[x_align] Measured vertical difference => {delta_px:.2f}px")
+
+    # 5) Convert that pixel difference => motor steps
+    steps_needed = delta_px * steps_pp
+    direction    = '+' if steps_needed >= 0 else '-'
+    magnitude    = abs(steps_needed)
+
+    # Optional: see how many µm that is
+    dist_in_µm = steps_to_µm(magnitude, axis='X')  # or 't' if your axis name is 't'
+    print(f"[x_align] We'll move ~{dist_in_µm:.1f}µm => {magnitude:.1f} steps, axis='t' (for example).")
+
+    # 6) Single direct move
+    update_speed(20)  # or however fast you want
+    move_linear_stage('t', direction, magnitude, wait_for_stop=True, max_wait=30.0)
+
+    print("[x_align] Single alignment move complete.")
 
 # --------------------------------------------------------
 # R-axis alignment: measure angle in degrees using compute_angle_between
@@ -403,7 +470,7 @@ def r_align(angle_tolerance=0.5):
     2) Compute angle_degs from compute_angle_between(...), which you set to return 
        the correct sign for a direct rotation on axis 'r'.
     3) If abs(angle_degs) < angle_tolerance => print "already aligned" and return.
-    4) Else, update_speed(10), rotate 'r' axis by angle_degs, then re-check and print final angle.
+    4) Else, update_speed(1), rotate 'r' axis by angle_degs, then re-check and print final angle.
     """
 
     from motor_control import update_speed, move_linear_stage

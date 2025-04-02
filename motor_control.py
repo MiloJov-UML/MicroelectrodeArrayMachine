@@ -299,7 +299,7 @@ def query_all_axes_positions():
     print("--- End of Query ---\n")
 
 def go_to_all_origins():
-    axes_to_move = ['X','Y','Z','r','T']  # skip 't' if you want
+    axes_to_move = ['X','Y','Z','r','T']  # skip 't'
     print("\n--- Moving All Axes to Stored Origins ---")
     for ax in axes_to_move:
         current_pos = get_current_position(ax)
