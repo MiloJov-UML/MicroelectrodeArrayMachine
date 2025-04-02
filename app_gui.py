@@ -423,6 +423,7 @@ def launch_gui():
 
     tk.Button(root, text="Extrude CF to Pad", command=image_recognition.extrude).pack(pady=5)
     tk.Button(root, text="Align R-Axis", command=image_recognition.r_align).pack(pady=5)
+    tk.Button(root, text="Align X-Axis", command=image_recognition.x_align).pack(pady=5)
 
     # Full manual loop
     tk.Button(root, text="Run Full Manual Loop", command=run_full_manual_loop).pack(side='bottom', pady=15)

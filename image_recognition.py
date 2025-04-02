@@ -322,9 +322,9 @@ def extrude(max_iterations=20, known_µm=1000):
     update_speed(1)
 
     step_size_µm = 100.0
-    distance_tolerance_µm = 10.0
+    distance_tolerance_µm = 100.0
     jam_threshold_µm = 50.0
-    wait_between_moves = 2.0  # seconds
+    wait_between_moves = 1.5  # seconds
 
     # We need two known adjacent pads, e.g. "pad1", "pad2" for scale
     # Suppose we always assume "pad1" & "pad2" are physically known_µm apart
@@ -453,11 +453,11 @@ def x_align(known_µm=1000):
 
     # Optional: see how many µm that is
     dist_in_µm = steps_to_µm(magnitude, axis='X')  # or 't' if your axis name is 't'
-    print(f"[x_align] We'll move ~{dist_in_µm:.1f}µm => {magnitude:.1f} steps, axis='t' (for example).")
+    print(f"[x_align] We'll move ~{dist_in_µm:.1f}µm => {magnitude:.1f} steps, axis='X' (for example).")
 
     # 6) Single direct move
     update_speed(20)  # or however fast you want
-    move_linear_stage('t', direction, magnitude, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage('X', direction, magnitude, wait_for_stop=True, max_wait=30.0)
 
     print("[x_align] Single alignment move complete.")
 
