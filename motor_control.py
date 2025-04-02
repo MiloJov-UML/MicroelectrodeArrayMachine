@@ -18,7 +18,7 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = {
-    'X': 10380.000,
+    'X': 10580.000,
     'Y': 26072.500,
     'Z': 8932.500,
     'r': 3241.560,

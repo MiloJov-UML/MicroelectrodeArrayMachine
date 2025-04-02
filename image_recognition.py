@@ -301,37 +301,55 @@ def analyze_cf_gc_angle():
 # --------------------------------------------------------
 # EXTRUDE: measure distance in µm using compute_steps_per_pixel
 # --------------------------------------------------------
-def extrude(max_iterations=20, known_µm=1000):
+def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µm=100):
     """
-    Moves the 't' axis in +100µm increments to align Pad & CF_Tip horizontally 
-    within ±10µm. We'll measure the distance in steps or µm by:
-      1) Using compute_steps_per_pixel => steps_per_pixel
-      2) Dist(px) * steps_per_pixel => motor steps
-
-    We'll do jam detection: if CF_Tip doesn't shift by >=50µm, we undo the step.
+    Moves the 't' axis to align CF_Tip with a specific pad (default: pad1) horizontally
+    within a specified tolerance.
+    
+    Parameters:
+    - target_pad_number: The pad number to align with (1-8)
+    - max_iterations: Maximum number of attempts
+    - known_µm: Known distance in µm between adjacent pads for calibration
+    - tolerance_µm: Alignment tolerance in µm
     """
     import time
+    from motor_control import update_speed, move_linear_stage, steps_to_µm
 
-    print("[Extrude] Starting extrude based on Pad–CF distance in µm...")
+    print(f"[Extrude] Starting extrude to align CF_Tip with pad{target_pad_number}...")
 
-    from motor_control import update_speed, move_linear_stage
+    global pad_box_dict, last_cf_box
 
-    global last_pad_box, last_cf_box
-
-    # 1) slow speed
+    # 1) Set slow speed for precision
     update_speed(1)
 
+    # Configuration
     step_size_µm = 100.0
-    distance_tolerance_µm = 100.0
     jam_threshold_µm = 50.0
     wait_between_moves = 1.5  # seconds
 
-    # We need two known adjacent pads, e.g. "pad1", "pad2" for scale
-    # Suppose we always assume "pad1" & "pad2" are physically known_µm apart
-    bboxPad1 = pad_box_dict.get("pad1")
-    bboxPad2 = pad_box_dict.get("pad2")
-    if bboxPad1 is None or bboxPad2 is None:
-        print("[Extrude] Missing pad1/pad2 => no calibration => abort.")
+    # 2) Validate we have required bounding boxes
+    target_pad_key = f"pad{target_pad_number}"
+    target_pad_box = pad_box_dict.get(target_pad_key)
+    
+    # For calibration we need two adjacent pads
+    cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
+    cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
+    
+    # Get the calibration pad boxes
+    cal_box1 = pad_box_dict.get(cal_pad1_key)
+    cal_box2 = pad_box_dict.get(cal_pad2_key)
+    
+    # Validate we have what we need
+    if target_pad_box is None:
+        print(f"[Extrude] Missing {target_pad_key} => cannot align => abort.")
+        return
+        
+    if cal_box1 is None or cal_box2 is None:
+        print(f"[Extrude] Missing {cal_pad1_key} or {cal_pad2_key} => no calibration => abort.")
+        return
+        
+    if last_cf_box is None:
+        print("[Extrude] No CF_Tip detected => cannot align => abort.")
         return
 
     # We'll store the last CF Tip center in px for jam detection
@@ -340,126 +358,176 @@ def extrude(max_iterations=20, known_µm=1000):
     for attempt in range(max_iterations):
         print(f"[Extrude] Attempt {attempt+1}/{max_iterations}")
 
-        # If we have bounding boxes for Pad & CF:
-        if (last_pad_box is not None) and (last_cf_box is not None):
-            # 1) measure steps_per_pixel => from known_µm
-            steps_pp = compute_steps_per_pixel(bboxPad1, bboxPad2, axis='X', known_µm=known_µm)
-            (pxA, pyA) = center_of_bbox(last_pad_box)
-            (pxB, pyB) = center_of_bbox(last_cf_box)
-            px_dist = abs(pxB - pxA)
+        # 3) Re-check we still have CF_Tip detection
+        if last_cf_box is None:
+            print("[Extrude] Lost CF_Tip detection => abort.")
+            return
 
-            if px_dist < 0.01:
-                print("[Extrude] CF Tip and Pad appear at same center => done.")
-                return
+        # 4) Calculate calibration - steps per pixel
+        steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
+        if steps_pp <= 0.0:
+            print(f"[Extrude] Invalid calibration (steps_pp={steps_pp}) => skip this iteration.")
+            continue
 
-            dist_in_steps = px_dist * steps_pp
-            
-            from motor_control import steps_to_µm
-            dist_in_µm = steps_to_µm(dist_in_steps, axis='X')
-
-            print(f"    Pad–CF horizontal distance => ~{dist_in_µm:.1f} µm")
-
-            if dist_in_µm <= distance_tolerance_µm:
-                print(f"[Extrude] Aligned within ±{distance_tolerance_µm}µm. Done.")
-                return
-
-            # jam detection reference
-            last_cf_x_px = pxB
-        else:
-            print("    Missing bounding boxes => can't measure distance. Using old data if any.")
-            if last_cf_x_px is None:
-                print("    We have no prior data => continuing anyway.")
+        # 5) Calculate horizontal distance between pad and CF_Tip
+        (pad_x, pad_y) = center_of_bbox(target_pad_box)
+        (cf_x, cf_y) = center_of_bbox(last_cf_box)
         
-        # 2) Move +100µm in 't'
-        print(f"    Move +{step_size_µm}µm along 't' axis.")
-        move_linear_stage('t', '+', step_size_µm, wait_for_stop=True, max_wait=30.0)
+        # Horizontal distance (positive if CF is right of pad, negative if left)
+        delta_x_px = cf_x - pad_x
+        
+        # Convert to physical distance
+        delta_steps = delta_x_px * steps_pp
+        delta_µm = steps_to_µm(abs(delta_steps), axis='t')
+        
+        # Determine movement direction - if CF needs to move left (toward pad), use '-'
+        direction = '-' if delta_x_px > 0 else '+'
+        
+        print(f"    Pad–CF horizontal distance => {delta_µm:.1f} µm ({direction})")
 
-        # 3) wait so YOLO can update
+        # 6) Check if we're within tolerance
+        if delta_µm <= tolerance_µm:
+            print(f"[Extrude] Aligned within ±{tolerance_µm}µm. Done.")
+            return
+
+        # 7) Prepare for jam detection
+        last_cf_x_px = cf_x
+        
+        # 8) Calculate movement size - either full step or remaining distance
+        move_µm = min(step_size_µm, delta_µm)
+        
+        # 9) Move the stage
+        print(f"    Move {direction}{move_µm:.1f}µm along 't' axis.")
+        move_linear_stage('t', direction, move_µm, wait_for_stop=True, max_wait=30.0)
+
+        # 10) Wait for YOLO to update
         time.sleep(wait_between_moves)
 
-        # 4) jam detection
-        if (last_pad_box is not None) and (last_cf_box is not None) and (last_cf_x_px is not None):
+        # 11) Jam detection
+        if last_cf_box is not None and last_cf_x_px is not None:
             new_cf_x_px = center_of_bbox(last_cf_box)[0]
-            shift_in_px = abs(new_cf_x_px - last_cf_x_px)
-            steps_pp_now = compute_steps_per_pixel(last_pad_box, last_cf_box, axis='X', known_µm=known_µm)
-            shift_in_steps = shift_in_px * steps_pp_now
-            from motor_control import steps_to_µm
-            shift_in_µm = steps_to_µm(shift_in_steps, axis='X')
+            shift_px = abs(new_cf_x_px - last_cf_x_px)
+            shift_steps = shift_px * steps_pp
+            shift_µm = steps_to_µm(shift_steps, axis='t')
 
-            if shift_in_µm < jam_threshold_µm:
-                print(f"    Jam? CF Tip advanced only {shift_in_µm:.1f}µm. Undo step.")
-                move_linear_stage('t', '-', step_size_µm, wait_for_stop=True, max_wait=30.0)
+            if shift_µm < jam_threshold_µm:
+                print(f"    Jam? CF Tip advanced only {shift_µm:.1f}µm. Undo step.")
+                # Move in opposite direction to undo
+                reversed_dir = '+' if direction == '-' else '-'
+                move_linear_stage('t', reversed_dir, move_µm, wait_for_stop=True, max_wait=30.0)
                 time.sleep(wait_between_moves)
+                print("    Reached physical limit - stopping extrusion.")
+                return
             else:
-                print(f"    CF Tip advanced ~{shift_in_µm:.1f}µm => OK.")
+                print(f"    CF Tip moved ~{shift_µm:.1f}µm => OK.")
         else:
-            print("    Missing bounding boxes => skipping jam detection this iteration.")
+            print("    Lost CF_Tip detection during movement => skipping jam check.")
 
-    print(f"[Extrude] Gave up after {max_iterations} attempts (>±{distance_tolerance_µm}µm?).")
+    print(f"[Extrude] Gave up after {max_iterations} attempts (>±{tolerance_µm}µm?).")
 
 # --------------------------------------------------------
 # X-axis alignment: measure distance in µm using compute_steps_per_pixel
 # --------------------------------------------------------
-def x_align(known_µm=1000):
+def x_align(target_pad_number=3, known_µm=1000, tolerance_µm=10):
     """
-    Align CF_Tip vertically (or horizontally) to a chosen pad in one move.
-    1) Calibrate from two adjacent pads in pad_box_dict, e.g. "pad1" & "pad2" => steps_per_pixel.
-    2) Measure the vertical pixel difference between CF_Tip and last_pad_box.
-    3) Convert to motor steps => single big move on the 't' (or 'X') axis.
-    4) No jam detection or iteration, just a direct move.
+    Align CF_Tip vertically with a specified pad in one move.
+    
+    Parameters:
+    - target_pad_number: The pad number to align with (1-8)
+    - known_µm: Known distance in µm between adjacent pads for calibration
+    - tolerance_µm: Alignment tolerance in µm
     """
-
-    import math
+    import time
     from motor_control import update_speed, move_linear_stage, steps_to_µm
 
-    global pad_box_dict, last_pad_box, last_cf_box
+    print(f"[x_align] Starting vertical alignment of CF_Tip with pad{target_pad_number}...")
 
-    # 1) We assume "pad1" & "pad2" are physically known_µm apart for calibration
-    bbox_pad1 = pad_box_dict.get("pad1")
-    bbox_pad2 = pad_box_dict.get("pad2")
-    if bbox_pad1 is None or bbox_pad2 is None:
-        print("[x_align] Missing pad1/pad2 => cannot calibrate scale => abort.")
-        return
+    global pad_box_dict, last_cf_box
 
-    # 2) Ensure we have a bounding box for the pad we want to align to (last_pad_box) and CF tip
-    if last_pad_box is None:
-        print("[x_align] No last_pad_box => no pad chosen to align => abort.")
-        return
-    if last_cf_box is None:
-        print("[x_align] No CF_Tip => cannot align => abort.")
-        return
-
-    # 3) Compute steps_per_pixel from pad1..pad2
-    steps_pp = compute_steps_per_pixel(bbox_pad1, bbox_pad2, axis='X', known_µm=known_µm)
-    if steps_pp == 0.0:
-        print("[x_align] pad1/pad2 appear at same center => invalid scale => abort.")
-        return
-    print(f"[x_align] steps_per_pixel => {steps_pp:.4f} steps/px (from pad1..pad2)")
-
-    # 4) Measure the vertical pixel difference between last_pad_box & last_cf_box
-    #    If your camera has Y increasing downward, do (cyCF - cyPad). 
-    (pxPad, pyPad) = center_of_bbox(last_pad_box)
-    (pxCF, pyCF)   = center_of_bbox(last_cf_box)
+    # 1) Validate we have required bounding boxes
+    target_pad_key = f"pad{target_pad_number}"
+    target_pad_box = pad_box_dict.get(target_pad_key)
     
-    # For "vertical" difference in the camera:
-    delta_px = (pyCF - pyPad)  # CF minus pad. If positive => CF is below pad.
+    # For calibration we need two adjacent pads
+    cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
+    cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
+    
+    # Get the calibration pad boxes
+    cal_box1 = pad_box_dict.get(cal_pad1_key)
+    cal_box2 = pad_box_dict.get(cal_pad2_key)
+    
+    # Validate we have what we need
+    if target_pad_box is None:
+        print(f"[x_align] Missing {target_pad_key} => cannot align => abort.")
+        return
+        
+    if cal_box1 is None or cal_box2 is None:
+        print(f"[x_align] Missing {cal_pad1_key} or {cal_pad2_key} => no calibration => abort.")
+        return
+        
+    if last_cf_box is None:
+        print("[x_align] No CF_Tip detected => cannot align => abort.")
+        return
 
-    print(f"[x_align] Measured vertical difference => {delta_px:.2f}px")
+    # 2) Calculate calibration - steps per pixel
+    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+    if steps_pp <= 0.0:
+        print(f"[x_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
+        return
+    
+    print(f"[x_align] Calibration: {steps_pp:.4f} steps/px (from {cal_pad1_key}..{cal_pad2_key})")
 
-    # 5) Convert that pixel difference => motor steps
-    steps_needed = delta_px * steps_pp
-    direction    = '+' if steps_needed >= 0 else '-'
-    magnitude    = abs(steps_needed)
+    # 3) Calculate vertical distance between pad and CF_Tip
+    (pad_x, pad_y) = center_of_bbox(target_pad_box)
+    (cf_x, cf_y) = center_of_bbox(last_cf_box)
+    
+    # Vertical distance (positive if CF is below pad, negative if above)
+    # Assuming Y increases downward in the camera frame
+    delta_y_px = cf_y - pad_y
+    
+    # Convert to physical distance
+    delta_steps = delta_y_px * steps_pp
+    delta_µm = steps_to_µm(abs(delta_steps), axis='X')
+    
+    # Determine movement direction
+    direction = '-' if delta_y_px >= 0 else '+'
+    
+    print(f"[x_align] Pad–CF vertical distance => {delta_µm:.1f} µm ({direction})")
 
-    # Optional: see how many µm that is
-    dist_in_µm = steps_to_µm(magnitude, axis='X')  # or 't' if your axis name is 't'
-    print(f"[x_align] We'll move ~{dist_in_µm:.1f}µm => {magnitude:.1f} steps, axis='X' (for example).")
+    # 4) Check if we're within tolerance
+    if delta_µm <= tolerance_µm:
+        print(f"[x_align] Already aligned within ±{tolerance_µm}µm. No movement needed.")
+        return
 
-    # 6) Single direct move
-    update_speed(20)  # or however fast you want
-    move_linear_stage('X', direction, magnitude, wait_for_stop=True, max_wait=30.0)
-
-    print("[x_align] Single alignment move complete.")
+    # 5) Set appropriate speed for the move
+    # Use slower speed for more precise alignments
+    if delta_µm < 500:
+        update_speed(10)  # Slower for small movements
+    else:
+        update_speed(30)  # Faster for larger movements
+    
+    # 6) Execute the move
+    print(f"[x_align] Moving {direction}{delta_µm:.1f}µm along 'X' axis...")
+    move_linear_stage('X', direction, delta_µm, wait_for_stop=True, max_wait=30.0)
+    
+    # 7) Verify the alignment if possible
+    time.sleep(1.5)  # Wait for YOLO to update
+    
+    if last_cf_box is not None:
+        new_cf_y = center_of_bbox(last_cf_box)[1]
+        new_delta_y_px = new_cf_y - pad_y
+        new_delta_µm = abs(new_delta_y_px * steps_pp)
+        new_delta_µm = steps_to_µm(new_delta_µm, axis='X')
+        
+        if new_delta_µm <= tolerance_µm:
+            print(f"[x_align] Successfully aligned! Final distance: {new_delta_µm:.1f}µm")
+        else:
+            print(f"[x_align] Alignment completed but final distance ({new_delta_µm:.1f}µm) " 
+                  f"exceeds tolerance (±{tolerance_µm}µm).")
+    else:
+        print("[x_align] Lost CF_Tip detection after movement. Cannot verify final alignment.")
+    
+    print("[x_align] Vertical alignment complete.")
 
 # --------------------------------------------------------
 # R-axis alignment: measure angle in degrees using compute_angle_between
