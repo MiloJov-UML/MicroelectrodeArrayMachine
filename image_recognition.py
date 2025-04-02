@@ -364,7 +364,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
             return
 
         # 4) Calculate calibration - steps per pixel
-        steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
+        steps_pp = 2*compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
         if steps_pp <= 0.0:
             print(f"[Extrude] Invalid calibration (steps_pp={steps_pp}) => skip this iteration.")
             continue
@@ -381,7 +381,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
         delta_µm = steps_to_µm(abs(delta_steps), axis='t')
         
         # Determine movement direction - if CF needs to move left (toward pad), use '-'
-        direction = '-' if delta_x_px > 0 else '+'
+        direction = '+' if delta_x_px > 0 else '-'
         
         print(f"    Pad–CF horizontal distance => {delta_µm:.1f} µm ({direction})")
 
@@ -470,7 +470,7 @@ def x_align(target_pad_number=3, known_µm=1000, tolerance_µm=10):
         return
 
     # 2) Calculate calibration - steps per pixel
-    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+    steps_pp = 2*compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
     if steps_pp <= 0.0:
         print(f"[x_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
         return
