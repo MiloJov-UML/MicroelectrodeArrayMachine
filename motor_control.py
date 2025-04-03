@@ -18,10 +18,10 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = {
-    'X': 10580.000,
-    'Y': 26072.500,
-    'Z': 8932.500,
-    'r': 3241.560,
+    'X': 9530.000,
+    'Y': 27072.500,
+    'Z': 7432.500,
+    'r': 3240.210,
     't': 1823980.000,
     'T': 2610152.500
 }
@@ -298,7 +298,7 @@ def query_all_axes_positions():
             print(f"Axis {ax}: {pos:.3f}")
     print("--- End of Query ---\n")
 
-def go_to_all_origins():
+def return_to_origin():
     axes_to_move = ['X','Y','Z','r','T']  # skip 't'
     print("\n--- Moving All Axes to Stored Origins ---")
     for ax in axes_to_move:

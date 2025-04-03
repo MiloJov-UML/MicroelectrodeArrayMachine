@@ -319,13 +319,14 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 
     global pad_box_dict, last_cf_box
 
-    # 1) Set slow speed for precision
+    # 1) Set slow speed for precision and step until CF_Tip is visible to camera0
     update_speed(1)
-
+    move_linear_stage("t", "+", 400, wait_for_stop=True, max_wait=30.0)
+    
     # Configuration
     step_size_µm = 100.0
     jam_threshold_µm = 50.0
-    wait_between_moves = 1.5  # seconds
+    wait_between_moves = 1  # seconds
 
     # 2) Validate we have required bounding boxes
     target_pad_key = f"pad{target_pad_number}"
@@ -364,7 +365,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
             return
 
         # 4) Calculate calibration - steps per pixel
-        steps_pp = 2*compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
+        steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
         if steps_pp <= 0.0:
             print(f"[Extrude] Invalid calibration (steps_pp={steps_pp}) => skip this iteration.")
             continue
@@ -387,6 +388,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 
         # 6) Check if we're within tolerance
         if delta_µm <= tolerance_µm:
+            move_linear_stage("t", "+", 200, wait_for_stop=True, max_wait=30.0)
             print(f"[Extrude] Aligned within ±{tolerance_µm}µm. Done.")
             return
 
@@ -416,8 +418,6 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
                 reversed_dir = '+' if direction == '-' else '-'
                 move_linear_stage('t', reversed_dir, move_µm, wait_for_stop=True, max_wait=30.0)
                 time.sleep(wait_between_moves)
-                print("    Reached physical limit - stopping extrusion.")
-                return
             else:
                 print(f"    CF Tip moved ~{shift_µm:.1f}µm => OK.")
         else:
@@ -428,7 +428,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 # --------------------------------------------------------
 # X-axis alignment: measure distance in µm using compute_steps_per_pixel
 # --------------------------------------------------------
-def x_align(target_pad_number=3, known_µm=1000, tolerance_µm=10):
+def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
     """
     Align CF_Tip vertically with a specified pad in one move.
     
@@ -470,7 +470,7 @@ def x_align(target_pad_number=3, known_µm=1000, tolerance_µm=10):
         return
 
     # 2) Calculate calibration - steps per pixel
-    steps_pp = 2*compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
     if steps_pp <= 0.0:
         print(f"[x_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
         return
