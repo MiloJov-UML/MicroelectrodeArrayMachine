@@ -215,11 +215,13 @@ def toggle_recording():
     if val == 'On':
         image_recognition.record_camera0 = True
         image_recognition.record_camera1 = True
-        print("[GUI] Recording => ON for both cameras")
+        image_recognition.record_camera2 = True  
+        print("[GUI] Recording => ON for all cameras")
     else:
         image_recognition.record_camera0 = False
         image_recognition.record_camera1 = False
-        print("[GUI] Recording => OFF for both cameras")
+        image_recognition.record_camera2 = False  
+        print("[GUI] Recording => OFF for all cameras")
 
 ###############################
 # IMAGE ADJUSTMENT SLIDER POPUP
@@ -427,11 +429,13 @@ def launch_gui():
 
 def start_camera_threads():
     """
-    Launch camera0 and camera1 in separate threads. 
+    Launch camera0, camera1, and cam2 in separate threads. 
     They run open_camera(...) from image_recognition.
     """
     cam0_thread = threading.Thread(target=open_camera, args=(0,))
     cam1_thread = threading.Thread(target=open_camera, args=(1,))
+    cam2_thread = threading.Thread(target=open_camera, args=(2,))
     cam0_thread.start()
     cam1_thread.start()
-    return cam0_thread, cam1_thread
+    cam2_thread.start()
+    return cam0_thread, cam1_thread, cam2_thread

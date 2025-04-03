@@ -17,15 +17,18 @@ from motor_control import µm_to_steps, update_speed, move_linear_stage
 draw_bounding_boxes = True
 record_camera0 = False
 record_camera1 = False
+record_camera2 = False  # New camera recording flag
 
-record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-04-01"
-record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-04-01"
+# Define recording directories for all cameras
+record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-04-03"  # Updated date to current date
+record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-04-03"  # Updated date to current date
+record_dir2 = r"D:\camera2_pcb2_CFmicrowire_2025-04-03"  # New recording directory for cam2
 
-video_writers = {0: None, 1: None}
-run_timestamps = {0: None, 1: None}
+video_writers = {0: None, 1: None, 2: None}  # Updated to include camera 2
+run_timestamps = {0: None, 1: None, 2: None}  # Updated to include camera 2
 
 frames_per_still = 30
-frame_counts = {0: 0, 1: 0}
+frame_counts = {0: 0, 1: 0, 2: 0}  # Updated to include camera 2
 
 ########################################################
 # SOFTWARE-BASED IMAGE ADJUSTMENTS
@@ -185,7 +188,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
         annotated_frame = custom_annotate(results[0], frame)
 
         # 4) Recording logic
-        rec_flag = (camera_index==0 and record_camera0) or (camera_index==1 and record_camera1)
+        rec_flag = (camera_index==0 and record_camera0) or (camera_index==1 and record_camera1) or (camera_index==2 and record_camera2)
         if rec_flag:
             if video_writers[camera_index] is None:
                 run_timestamps[camera_index] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -193,11 +196,14 @@ def open_camera(camera_index=0, model_path="best.pt"):
                 if camera_index==0:
                     os.makedirs(record_dir0,exist_ok=True)
                     video_path = os.path.join(record_dir0, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
-                else:
+            elif camera_index==1:
                     os.makedirs(record_dir1,exist_ok=True)
                     video_path = os.path.join(record_dir1, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
-                video_writers[camera_index] = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
-                print(f"[Camera {camera_index}] Recording started => {video_path}")
+            else:  # camera_index==2
+                    os.makedirs(record_dir2,exist_ok=True)
+                    video_path = os.path.join(record_dir2, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
+            video_writers[camera_index] = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
+            print(f"[Camera {camera_index}] Recording started => {video_path}")
 
             video_writers[camera_index].write(annotated_frame)
             fc = frame_counts[camera_index]
@@ -208,12 +214,17 @@ def open_camera(camera_index=0, model_path="best.pt"):
                     still_path = os.path.join(
                         record_dir0,
                         f"frame_{fc}_camera{camera_index}_{run_timestamps[camera_index]}.jpg"
-                    )
-                else:
+                        )
+                elif camera_index==1:
                     still_path = os.path.join(
                         record_dir1,
                         f"frame_{fc}_camera{camera_index}_{run_timestamps[camera_index]}.jpg"
-                    )
+                        )
+                else:  # camera_index==2
+                    still_path = os.path.join(
+                        record_dir2,
+                        f"frame_{fc}_camera{camera_index}_{run_timestamps[camera_index]}.jpg"
+                        )
                 cv2.imwrite(still_path, annotated_frame)
 
             frame_counts[camera_index]+=1
