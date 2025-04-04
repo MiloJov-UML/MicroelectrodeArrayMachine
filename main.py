@@ -13,11 +13,9 @@ def main():
     threading.Thread(target=continuous_motor_control).start()
 
     # Start camera threads
-    cam0, cam1, cam2 = start_camera_threads()
+    cam0, cam1 = start_camera_threads()
     cam0.join()
     cam1.join()
-    cam2.join()
 
 if __name__ == "__main__":
     main()
-    

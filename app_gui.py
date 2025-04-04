@@ -106,15 +106,15 @@ def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
         update_speed(30)
-        move_linear_stage("Z", "+", 3700, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 1620, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("T", "+", 23800, wait_for_stop=True, max_wait=30.0)
         laser_relay_on()
-        move_linear_stage("T", "+", 16000, wait_for_stop=True, max_wait=30.0)
         update_speed(1)
-        move_linear_stage("T", "+", 8500, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("T", "+", 700, wait_for_stop=True, max_wait=30.0)
         laser_relay_off()
         update_speed(30)
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 3700, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 1620, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
@@ -130,12 +130,12 @@ def run_full_manual_loop():
         return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
-            extrude(pad_num)
-            time.sleep(30)
-            r_align()
-            time.sleep(8)
-            x_align(pad_num)
-            time.sleep(8)
+            #extrude(pad_num)
+            #time.sleep(30)
+            #r_align()
+            #time.sleep(8)
+            #x_align(pad_num)
+            #time.sleep(8)
             print(f"Laser cutting on Pad #{pad_num}")
             laser_cut()
             
@@ -215,13 +215,11 @@ def toggle_recording():
     if val == 'On':
         image_recognition.record_camera0 = True
         image_recognition.record_camera1 = True
-        image_recognition.record_camera2 = True  
-        print("[GUI] Recording => ON for all cameras")
+        print("[GUI] Recording => ON for both cameras")
     else:
         image_recognition.record_camera0 = False
         image_recognition.record_camera1 = False
-        image_recognition.record_camera2 = False  
-        print("[GUI] Recording => OFF for all cameras")
+        print("[GUI] Recording => OFF for both cameras")
 
 ###############################
 # IMAGE ADJUSTMENT SLIDER POPUP
@@ -429,13 +427,11 @@ def launch_gui():
 
 def start_camera_threads():
     """
-    Launch camera0, camera1, and cam2 in separate threads. 
+    Launch camera0 and camera1 in separate threads. 
     They run open_camera(...) from image_recognition.
     """
     cam0_thread = threading.Thread(target=open_camera, args=(0,))
     cam1_thread = threading.Thread(target=open_camera, args=(1,))
-    cam2_thread = threading.Thread(target=open_camera, args=(2,))
     cam0_thread.start()
     cam1_thread.start()
-    cam2_thread.start()
-    return cam0_thread, cam1_thread, cam2_thread
+    return cam0_thread, cam1_thread
