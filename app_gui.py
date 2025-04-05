@@ -102,6 +102,28 @@ def toggle_keyboard_control():
     status = "enabled" if keyboard_control_enabled else "disabled"
     print(f"Keyboard motor control {status}.")
 
+def wait_for_extrude_done(poll_interval=0.1):
+    """
+    Blocks (sleeps) until image_recognition.extrude_done == True.
+    poll_interval is how often (in seconds) we check the flag.
+    """
+    while not image_recognition.extrude_done:
+        time.sleep(poll_interval)
+
+def wait_for_r_align_done(poll_interval=0.1):
+    """
+    Blocks until image_recognition.r_align_done == True.
+    """
+    while not image_recognition.r_align_done:
+        time.sleep(poll_interval)
+
+def wait_for_x_align_done(poll_interval=0.1):
+    """
+    Blocks until image_recognition.x_align_done == True.
+    """
+    while not image_recognition.x_align_done:
+        time.sleep(poll_interval)
+
 def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
@@ -130,14 +152,16 @@ def run_full_manual_loop():
         return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
+            move_linear_stage("Z", "-", 1620, wait_for_stop=True, max_wait=30.0)
             #extrude(pad_num)
-            #time.sleep(30)
+            #wait_for_extrude_done()
             #r_align()
-            #time.sleep(8)
-            #x_align(pad_num)
-            #time.sleep(8)
+            #wait_for_r_align_done()
+            x_align(pad_num)
+            wait_for_x_align_done()
+            move_linear_stage("Z", "+", 1620, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_num}")
-            laser_cut()
+            #laser_cut()
             
             # Return to origin after finishing this pad
             return_to_origin()
@@ -415,10 +439,6 @@ def launch_gui():
 
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
-
-    tk.Button(root, text="Extrude CF to Pad", command=image_recognition.extrude).pack(pady=5)
-    tk.Button(root, text="X_align", command=image_recognition.x_align).pack(pady=5)
-    tk.Button(root, text="Get R-Axis Angle", command=image_recognition.analyze_cf_gc_angle).pack(pady=5)
 
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)

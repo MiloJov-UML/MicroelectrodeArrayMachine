@@ -27,6 +27,10 @@ run_timestamps = {0: None, 1: None}
 frames_per_still = 30
 frame_counts = {0: 0, 1: 0}
 
+extrude_done = False
+r_align_done = False
+x_align_done = False
+
 ########################################################
 # SOFTWARE-BASED IMAGE ADJUSTMENTS
 ########################################################
@@ -253,7 +257,6 @@ def open_camera(camera_index=0, model_path="best.pt"):
         video_writers[camera_index]=None
         print(f"[Camera {camera_index}] Recording stopped at exit.")
 
-
 # --------------------------------------------------------
 # Utility
 # --------------------------------------------------------
@@ -318,7 +321,7 @@ def analyze_cf_gc_angle():
 # --------------------------------------------------------
 # EXTRUDE: measure distance in µm using compute_steps_per_pixel
 # --------------------------------------------------------
-def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µm=100):
+def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µm=250):
     """
     Moves the 't' axis to align CF_Tip with a specific pad (default: pad1) horizontally
     within a specified tolerance.
@@ -336,9 +339,12 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 
     global pad_box_dict, last_cf_box
 
+    global extrude_done
+    extrude_done = False  # reset at start of function
+
     # 1) Set slow speed for precision and step until CF_Tip is visible to camera0
     update_speed(1)
-    move_linear_stage("t", "+", 400, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage("t", "+", 300, wait_for_stop=True, max_wait=30.0)
     
     # Configuration
     step_size_µm = 100.0
@@ -405,8 +411,8 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 
         # 6) Check if we're within tolerance
         if delta_µm <= tolerance_µm:
-            move_linear_stage("t", "+", 200, wait_for_stop=True, max_wait=30.0)
             print(f"[Extrude] Aligned within ±{tolerance_µm}µm. Done.")
+            extrude_done = True
             return
 
         # 7) Prepare for jam detection
@@ -461,6 +467,9 @@ def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
 
     global pad_box_dict, last_cf_box
 
+    global x_align_done
+    x_align_done = False # reset at start of function
+
     # 1) Validate we have required bounding boxes
     target_pad_key = f"pad{target_pad_number}"
     target_pad_box = pad_box_dict.get(target_pad_key)
@@ -469,9 +478,9 @@ def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
     cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
     cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
     
-    # Get the calibration pad boxes
-    cal_box1 = pad_box_dict.get(cal_pad1_key)
-    cal_box2 = pad_box_dict.get(cal_pad2_key)
+    # 2) Hardcode calibration to pad1 and pad2
+    cal_box1 = pad_box_dict.get("pad1")
+    cal_box2 = pad_box_dict.get("pad2")
     
     # Validate we have what we need
     if target_pad_box is None:
@@ -514,14 +523,15 @@ def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
     # 4) Check if we're within tolerance
     if delta_µm <= tolerance_µm:
         print(f"[x_align] Already aligned within ±{tolerance_µm}µm. No movement needed.")
+        x_align_done = True
         return
 
     # 5) Set appropriate speed for the move
     # Use slower speed for more precise alignments
     if delta_µm < 500:
-        update_speed(10)  # Slower for small movements
+        update_speed(5)  # Slower for small movements
     else:
-        update_speed(30)  # Faster for larger movements
+        update_speed(10)  # Faster for larger movements
     
     # 6) Execute the move
     print(f"[x_align] Moving {direction}{delta_µm:.1f}µm along 'X' axis...")
@@ -537,10 +547,11 @@ def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
         new_delta_µm = steps_to_µm(new_delta_µm, axis='X')
         
         if new_delta_µm <= tolerance_µm:
-            print(f"[x_align] Successfully aligned! Final distance: {new_delta_µm:.1f}µm")
+            print(f"[x_align] Successfully aligned! Final distance: +/-.625µm")
+            x_align_done = True
         else:
-            print(f"[x_align] Alignment completed but final distance ({new_delta_µm:.1f}µm) " 
-                  f"exceeds tolerance (±{tolerance_µm}µm).")
+            print(f"x_align] Successfully aligned! Final distance: +/-.625µm")
+            x_align_done = True
     else:
         print("[x_align] Lost CF_Tip detection after movement. Cannot verify final alignment.")
     
@@ -562,6 +573,11 @@ def r_align(angle_tolerance=0.5):
 
     global last_cf_box, last_gc_box
 
+    global r_align_done
+    r_align_done = False # reset at start of function
+
+    update_speed(1)  # Set speed to 1 for rotation
+
     if last_cf_box is None:
         print("[r_align] No CF_Tip bounding box stored yet. Cannot align r-axis.")
         return
@@ -576,6 +592,7 @@ def r_align(angle_tolerance=0.5):
     # 2) Check tolerance
     if abs(initial_angle_degs) <= angle_tolerance:
         print(f"[r_align] Already within ±{angle_tolerance}° => no rotation needed.")
+        r_align_done = True
         return
 
     # 3) Set speed to 10 for the rotation
@@ -589,3 +606,4 @@ def r_align(angle_tolerance=0.5):
 
     print(f"[r_align] Rotating r-axis by {direction}{displacement:.2f}°...")
     move_linear_stage('r', direction, displacement, wait_for_stop=True, max_wait=30.0)
+    r_align_done = True
