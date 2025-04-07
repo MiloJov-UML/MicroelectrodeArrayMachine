@@ -104,7 +104,7 @@ def custom_annotate(results, img):
     pad_boxes.sort(key=lambda b: b[4], reverse=True)
     pad_index = 1
 
-    # 3) label them from pad8..pad1
+    # 3) label them from pad1..padN
     for (bx1, by1, bx2, by2, cy, conf) in pad_boxes:
         label = f"pad{pad_index} {conf:.2f}"
         # store bounding box in a dictionary keyed by that pad label (like "pad8")
@@ -324,7 +324,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
     within a specified tolerance.
     
     Parameters:
-    - target_pad_number: The pad number to align with (1-8)
+    - target_pad_number: The pad number to align with (1-N)
     - max_iterations: Maximum number of attempts
     - known_µm: Known distance in µm between adjacent pads for calibration
     - tolerance_µm: Alignment tolerance in µm
@@ -452,7 +452,7 @@ def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
      """
      Align CF_Tip vertically with a specified pad in one move.
      Parameters:
-     - target_pad_number: The pad number to align with (1-8)
+     - target_pad_number: The pad number to align with (1-N)
      - known_µm: Known distance in µm between adjacent pads for calibration
      - tolerance_µm: Alignment tolerance in µm
      """
