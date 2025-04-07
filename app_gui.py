@@ -26,7 +26,7 @@ from relay_control import (
 )
 
 import image_recognition
-from image_recognition import open_camera, extrude, r_x_align
+from image_recognition import open_camera, extrude, x_align, r_align
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -128,7 +128,7 @@ def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
         update_speed(1)
-        move_linear_stage("Z", "+", 1100, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 1150, wait_for_stop=True, max_wait=30.0)
         update_speed(30)
         move_linear_stage("T", "+", 23500, wait_for_stop=True, max_wait=30.0)
         laser_relay_on()
@@ -137,7 +137,7 @@ def laser_cut():
         laser_relay_off()
         update_speed(30)
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 1100, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 1150, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
@@ -150,14 +150,15 @@ def run_full_manual_loop():
         print("--- Starting Automated Routine ---")
         
         # Move everything to origin before we begin
-        return_to_origin()
+        #return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
             move_linear_stage("Z", "-", 1020, wait_for_stop=True, max_wait=30.0)
-            extrude(pad_num)
-            wait_for_extrude_done()
-            r_x_align(pad_num)
+            #extrude(pad_num)
+            #wait_for_extrude_done()
+            r_align(pad_num)
             wait_for_r_align_done()
+            x_align(pad_num)
             wait_for_x_align_done()
             move_linear_stage("Z", "+", 1020, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_num}")

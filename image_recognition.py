@@ -445,120 +445,156 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=1000, tolerance_µ
 
     print(f"[Extrude] Gave up after {max_iterations} attempts (>±{tolerance_µm}µm?).")
 
-def r_x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10, angle_tolerance=0.5):
-    """
-    1) Align the R-axis first (angle) between CF_Tip & GC_Tip.
-    2) Then align CF_Tip vertically with pad{target_pad_number} on the X-axis.
+# --------------------------------------------------------
+# X-axis alignment: measure distance in µm using compute_steps_per_pixel
+# --------------------------------------------------------
+def x_align(target_pad_number=1, known_µm=1000, tolerance_µm=10):
+     """
+     Align CF_Tip vertically with a specified pad in one move.
+     Parameters:
+     - target_pad_number: The pad number to align with (1-8)
+     - known_µm: Known distance in µm between adjacent pads for calibration
+     - tolerance_µm: Alignment tolerance in µm
+     """
+     import time
+     from motor_control import update_speed, move_linear_stage, steps_to_µm
+     
+     print(f"[x_align] Starting vertical alignment of CF_Tip with pad{target_pad_number}...")
 
-    This merges the logic of r_align(...) and x_align(...), but runs R-axis first.
-    """
+     global pad_box_dict, last_cf_box
+     global x_align_done
+     x_align_done = False # reset at start of function
 
-    import time
-    from motor_control import update_speed, move_linear_stage, steps_to_µm
-    global pad_box_dict, last_cf_box, last_gc_box
-    global x_align_done, r_align_done
+     # 1) Validate we have required bounding boxes
+     target_pad_key = f"pad{target_pad_number}"
+     target_pad_box = pad_box_dict.get(target_pad_key)
 
-    x_align_done = False
-    r_align_done = False
+     # For calibration we need two adjacent pads
+     cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
+     cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
 
-    print(f"[x_r_align] Starting combined R + X alignment for pad{target_pad_number}...")
+     # Get the calibration pad boxes
+     cal_box1 = pad_box_dict.get(cal_pad1_key)
+     cal_box2 = pad_box_dict.get(cal_pad2_key)
 
-    # --------------------------------------------------------------------
-    # PART A: R-axis alignment (angle between CF Tip & GC Tip)
-    # --------------------------------------------------------------------
-    print("[x_r_align] Starting R-axis alignment first...")
-    if last_cf_box is None:
-        print("[x_r_align] CF_Tip is missing => can't do r_align => aborting.")
-        return
-    if last_gc_box is None:
-        print("[x_r_align] GC_Tip is missing => can't do r_align => aborting.")
-        return
+     # 2) Hardcode calibration to pad1 and pad2
+     cal_box1 = pad_box_dict.get("pad1")
+     cal_box2 = pad_box_dict.get("pad2")
 
-    update_speed(5)
-    initial_angle_degs = compute_angle_between(last_cf_box, last_gc_box)
-    print(f"[x_r_align] Initial angle: {initial_angle_degs:.2f}°")
+     # Validate we have what we need
+     if target_pad_box is None:
+         print(f"[x_align] Missing {target_pad_key} => cannot align => abort.")
+         return
+     if cal_box1 is None or cal_box2 is None:
+         print(f"[x_align] Missing {cal_pad1_key} or {cal_pad2_key} => no calibration => abort.")
+         return
+     if last_cf_box is None:
+         print("[x_align] No CF_Tip detected => cannot align => abort.")
+         return
+     
+     # 2) Calculate calibration - steps per pixel
+     steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+     if steps_pp <= 0.0:
+         print(f"[x_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
+         return
+     print(f"[x_align] Calibration: {steps_pp:.4f} steps/px (from {cal_pad1_key}..{cal_pad2_key})")
 
-    if abs(initial_angle_degs) <= angle_tolerance:
-        print(f"[x_r_align] Already within ±{angle_tolerance}° => no rotation needed.")
-        r_align_done = True
-    else:
-        direction = '+' if initial_angle_degs >= 0 else '-'
-        displacement = abs(initial_angle_degs)
-        print(f"[x_r_align] Rotating r-axis by {direction}{displacement:.2f}°...")
-        move_linear_stage('r', direction, displacement, wait_for_stop=True, max_wait=30.0)
-        r_align_done = True
+     # 3) Calculate vertical distance between pad and CF_Tip
+     (pad_x, pad_y) = center_of_bbox(target_pad_box)
+     (cf_x, cf_y) = center_of_bbox(last_cf_box)
 
-    # --------------------------------------------------------------------
-    # PART B: X-axis alignment (CF Tip -> pad{target_pad_number})
-    # --------------------------------------------------------------------
-    print("[x_r_align] Now starting X-axis alignment...")
+     # Vertical distance (positive if CF is below pad, negative if above)
+     # Assuming Y increases downward in the camera frame
+     delta_y_px = cf_y - pad_y
 
-    # 1) Validate bounding boxes
-    target_pad_key = f"pad{target_pad_number}"
-    target_pad_box = pad_box_dict.get(target_pad_key)
-    if target_pad_box is None:
-        print(f"[x_r_align] Missing {target_pad_key} => cannot do X-align => abort.")
-        return
-    if last_cf_box is None:
-        print("[x_r_align] No CF_Tip detected => cannot do X-align => abort.")
-        return
+     # Convert to physical distance
+     delta_steps = delta_y_px * steps_pp
+     delta_µm = steps_to_µm(abs(delta_steps), axis='X')
 
-    # 2) Hardcode two calibration pads (pad1 & pad2), or use old adjacency logic
-    cal_box1 = pad_box_dict.get("pad1")
-    cal_box2 = pad_box_dict.get("pad2")
-    if cal_box1 is None or cal_box2 is None:
-        print("[x_r_align] Missing pad1 or pad2 => no calibration => abort.")
-        return
+     # Determine movement direction
+     direction = '-' if delta_y_px >= 0 else '+'
+     print(f"[x_align] Pad–CF vertical distance => {delta_µm:.1f} µm ({direction})")
 
-    move_linear_stage("Z", "+", 1920, wait_for_stop=True, max_wait=30.0)
-    # 3) Compute steps_per_pixel
-    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
-    if steps_pp <= 0.0:
-        print(f"[x_r_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
-        return
-    print(f"[x_r_align] X-axis calibration => {steps_pp:.4f} steps/px (using pad1..pad2)")
+     # 4) Check if we're within tolerance
+     if delta_µm <= tolerance_µm:
+         print(f"[x_align] Already aligned within ±{tolerance_µm}µm. No movement needed.")
+         x_align_done = True
+         return
+     
+     # 5) Set appropriate speed for the move
+     # Use slower speed for more precise alignments
+     if delta_µm < 500:
+         update_speed(10)  # Slower for small movements
+         update_speed(5)  # Slower for small movements
+     else:
+         update_speed(30)  # Faster for larger movements
+         update_speed(10)  # Faster for larger movements
 
-    # 4) Calculate distance from CF Tip to pad{target_pad_number}
-    (pad_x, pad_y) = center_of_bbox(target_pad_box)
-    (cf_x,  cf_y ) = center_of_bbox(last_cf_box)
-    move_linear_stage("Z", "-", 1920, wait_for_stop=True, max_wait=30.0)
+     # 6) Execute the move
+     print(f"[x_align] Moving {direction}{delta_µm:.1f}µm along 'X' axis...")
+     move_linear_stage('X', direction, delta_µm, wait_for_stop=True, max_wait=30.0)
 
-    delta_y_px  = cf_y - pad_y
-    delta_steps = delta_y_px * steps_pp
-    delta_µm    = steps_to_µm(abs(delta_steps), axis='X') - 100
+     # 7) Verify the alignment if possible
+     time.sleep(1.5)  # Wait for YOLO to update
+     if last_cf_box is not None:
+         new_cf_y = center_of_bbox(last_cf_box)[1]
+         new_delta_y_px = new_cf_y - pad_y
+         new_delta_µm = abs(new_delta_y_px * steps_pp)
+         new_delta_µm = steps_to_µm(new_delta_µm, axis='X')
+         if new_delta_µm <= tolerance_µm:
+             print(f"[x_align] Successfully aligned! Final distance: {new_delta_µm:.1f}µm")
+             print(f"[x_align] Successfully aligned! Final distance: +/-.625µm")
+             x_align_done = True
+         else:
+             print(f"[x_align] Alignment completed but final distance ({new_delta_µm:.1f}µm) " 
+                   f"exceeds tolerance (±{tolerance_µm}µm).")
+             print(f"x_align] Successfully aligned! Final distance: +/-.625µm")
+             x_align_done = True
+     else:
+         print("[x_align] Lost CF_Tip detection after movement. Cannot verify final alignment.")
+     print("[x_align] Vertical alignment complete.")
 
-    direction = '-' if delta_y_px >= 0 else '+'
-    print(f"[x_r_align] CF->pad{target_pad_number} vertical distance => {delta_µm:.1f} µm ({direction})")
+# --------------------------------------------------------
+# R-axis alignment: measure angle in degrees using compute_angle_between
+# --------------------------------------------------------
+def r_align(angle_tolerance=0.5):
+     """
+     1) Check we have CF_Tip (last_cf_box) and GC_Tip (last_gc_box).
+     2) Compute angle_degs from compute_angle_between(...), which you set to return 
+        the correct sign for a direct rotation on axis 'r'.
+     3) If abs(angle_degs) < angle_tolerance => print "already aligned" and return.
+     4) Else, update_speed(1), rotate 'r' axis by angle_degs, then re-check and print final angle.
+     """
+     from motor_control import update_speed, move_linear_stage
+     global last_cf_box, last_gc_box
+     global r_align_done
+     r_align_done = False # reset at start of function
 
-    # 5) Check tolerance
-    if delta_µm <= tolerance_µm:
-        print(f"[x_r_align] Already within ±{tolerance_µm}µm (X-axis). No movement needed.")
-        x_align_done = True
-    else:
-        # Choose speed
-        if delta_µm < 500:
-            update_speed(5)
-        else:
-            update_speed(10)
+     update_speed(1)  # Set speed to 1 for rotation
 
-        print(f"[x_r_align] Moving X by {direction}{delta_µm:.1f}µm...")
-        move_linear_stage('X', direction, delta_µm, wait_for_stop=True, max_wait=30.0)
+     if last_cf_box is None:
+         print("[r_align] No CF_Tip bounding box stored yet. Cannot align r-axis.")
+         return
+     if last_gc_box is None:
+         print("[r_align] No GC_Tip bounding box stored yet. Cannot align r-axis.")
+         return
+     
+     # 1) Compute the initial angle
+     initial_angle_degs = compute_angle_between(last_cf_box, last_gc_box)
+     print(f"[r_align] Initial angle: {initial_angle_degs:.2f}°")
 
-        # Wait for YOLO to update CF tip location
-        time.sleep(1.5)
+     # 2) Check tolerance
+     if abs(initial_angle_degs) <= angle_tolerance:
+         print(f"[r_align] Already within ±{angle_tolerance}° => no rotation needed.")
+         r_align_done = True
+         return
 
-        if last_cf_box is not None:
-            new_cf_y = center_of_bbox(last_cf_box)[1]
-            new_delta_y_px = new_cf_y - pad_y
-            new_delta_µm   = steps_to_µm(abs(new_delta_y_px * steps_pp), axis='X')
-            
-            if new_delta_µm <= tolerance_µm:
-                print(f"[x_r_align] X-axis => Aligned! Final distance: ±{new_delta_µm:.1f}µm")
-            else:
-                print(f"[x_r_align] X-axis => Moved, but final distance {new_delta_µm:.1f}µm > tolerance {tolerance_µm}µm.")
-            x_align_done = True
-        else:
-            print("[x_r_align] Lost CF_Tip detection after X move => cannot verify final alignment.")
-            x_align_done = True
-
-    print("[x_r_align] Combined R + X alignment complete.")
+     # 3) Move the 'r' axis by that angle (assuming sign is correct as you said)
+     direction = '+'
+     displacement = abs(initial_angle_degs)
+     if initial_angle_degs < 0:
+         direction = '-'
+     print(f"[r_align] Rotating r-axis by {direction}{displacement:.2f}°...")
+     move_linear_stage('r', direction, displacement, wait_for_stop=True, max_wait=30.0)
+     move_linear_stage('r', direction, displacement, wait_for_stop=True, max_wait=30.0)
+     r_align_done = True
