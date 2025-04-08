@@ -150,19 +150,19 @@ def run_full_manual_loop():
         print("--- Starting Automated Routine ---")
         
         # Move everything to origin before we begin
-        #return_to_origin()
+        return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
             move_linear_stage("Z", "-", 1020, wait_for_stop=True, max_wait=30.0)
             #extrude(pad_num)
             #wait_for_extrude_done()
-            r_align(pad_num)
+            r_align()
             wait_for_r_align_done()
             x_align(pad_num)
             wait_for_x_align_done()
             move_linear_stage("Z", "+", 1020, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_num}")
-            laser_cut()
+            #laser_cut()
             
             # Return to origin after finishing this pad
             return_to_origin()
