@@ -128,7 +128,7 @@ def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
         update_speed(1)
-        move_linear_stage("Z", "+", 1650, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 1700, wait_for_stop=True, max_wait=30.0)
         update_speed(30)
         move_linear_stage("T", "+", 23500, wait_for_stop=True, max_wait=30.0)
         laser_relay_on()
@@ -137,7 +137,7 @@ def laser_cut():
         laser_relay_off()
         update_speed(30)
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage("Z", "-", 1650, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 1700, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
