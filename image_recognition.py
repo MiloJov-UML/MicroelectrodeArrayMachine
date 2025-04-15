@@ -377,12 +377,12 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     target_pad_box = pad_box_dict.get(target_pad_key)
     
     # For calibration we need two adjacent pads
-    cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
+    cal_pad1_key = f"pad{max(1, target_pad_number)}"  # Use target or one above
     cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
     
     # Get the calibration pad boxes
-    cal_box1 = pad_box_dict.get(cal_pad1_key)
-    cal_box2 = pad_box_dict.get(cal_pad2_key)
+    #cal_box1 = pad_box_dict.get(cal_pad1_key)
+    #cal_box2 = pad_box_dict.get(cal_pad2_key)
 
     #Hardcode calibration to pad1 and pad2
     cal_box1 = pad_box_dict.get("pad1")
@@ -440,7 +440,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
         # Determine movement direction - if CF needs to move left (toward pad), use '-'
         direction = '+' if delta_x_px > 0 else '-'
         
-        print(f"    Pad–CF horizontal distance => {delta_µm:.1f} µm ({direction})")
+        print(f"Pad–CF horizontal distance => {delta_µm:.1f} µm ({direction})")
 
         # 6) Check if we're within tolerance
         if delta_µm <= tolerance_µm:
@@ -510,12 +510,12 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
     target_pad_box = pad_box_dict.get(target_pad_key)
  
     # For calibration we need two adjacent pads
-    cal_pad1_key = f"pad{max(1, target_pad_number-1)}"  # Use target or one above
+    cal_pad1_key = f"pad{max(1, target_pad_number)}"  # Use target or one above
     cal_pad2_key = f"pad{min(8, target_pad_number+1)}"  # Use target or one below
  
     # Get the calibration pad boxes
-    cal_box1 = pad_box_dict.get(cal_pad1_key)
-    cal_box2 = pad_box_dict.get(cal_pad2_key)
+    #cal_box1 = pad_box_dict.get(cal_pad1_key)
+    #cal_box2 = pad_box_dict.get(cal_pad2_key)
  
     #Hardcode calibration to pad1 and pad2
     cal_box1 = pad_box_dict.get("pad1")
@@ -564,7 +564,7 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
  
     # Convert to physical distance
     delta_steps = delta_y_px * steps_pp
-    delta_µm = steps_to_µm(abs(delta_steps), axis='X')
+    delta_µm = steps_to_µm(abs(delta_steps), axis='X') - 250 # Adjust for camera offset 
  
     # Determine movement direction
     direction = '-' if delta_y_px >= 0 else '+'
