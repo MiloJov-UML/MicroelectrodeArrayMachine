@@ -17,7 +17,7 @@ from motor_control import (
     return_to_origin,
     stop_motor_control,
     move_linear_stage,
-    set_origin_to_current
+    set_origin_to_current,
 )
 
 from relay_control import (
@@ -35,6 +35,12 @@ from image_recognition import (
     extrude, 
     x_align, 
     r_align)
+
+# ################################
+# # GLOBAL VARIABLES & SETTINGS edit:11/05/2025
+# def launch_gui():
+#     global axis_entry, displacement_entry
+# ################################
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -403,14 +409,42 @@ def launch_gui():
     displacement_entry.pack()
 
     def move_stage_gui():
+        #New code to fix the stop issue  edit:11/05/2025
+        import threading
         try:
             axis = axis_entry.get().strip()
-            displacement_value = float(displacement_entry.get().strip())
-            direction = '+' if displacement_value >= 0 else '-'
-            magnitude = abs(displacement_value)
-            move_linear_stage(axis, direction, magnitude, wait_for_stop=True, max_wait=30.0)
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid displacement: {e}")
+            
+            raw = displacement_entry.get().strip()
+            value = float(raw)
+
+            direction = '+' if value >= 0 else '-'
+            displacement = abs(value)
+        except ValueError:
+            messagebox.showerror("Error","Invalid displacement entry")
+            return
+        def move_thread():
+
+            try:
+                move_linear_stage(axis, direction, displacement, wait_for_stop=True, max_wait=30.0)
+            except Exception as e:
+                messagebox.showerror("Error", f"Movement error: {e}")
+            finally:
+                axis_entry.config(state='normal')
+                displacement_entry.config(state='normal')
+        axis_entry.config(state='disabled')
+        displacement_entry.config(state='disabled')
+        threading.Thread(target=move_thread).start()
+      
+        #---------------------------
+        # ORIGINAL CODE COMMENTED OUT FOR TESTING PURPOSES  edit:11/05/2025
+        # try:
+        #     axis = axis_entry.get().strip()
+        #     displacement_value = float(displacement_entry.get().strip())
+        #     direction = '+' if displacement_value >= 0 else '-'
+        #     magnitude = abs(displacement_value)
+        #     move_linear_stage(axis, direction, magnitude, wait_for_stop=True, max_wait=30.0)
+        # except ValueError as e:
+        #     messagebox.showerror("Error", f"Invalid displacement: {e}")
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
     tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
@@ -463,6 +497,14 @@ def launch_gui():
 
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
+
+    from pcb_mapping import print_trace_pattern
+    from pcb_mapping import test_diagonal
+    # Button: Print Trace Pattern
+    tk.Button(root, text="Print Trace Pattern", command=print_trace_pattern).pack(pady=10)
+
+    # Button: Test Diagonal Move
+    tk.Button(root, text="Test Diagonal Move", command=test_diagonal).pack(pady=10)
 
     root.mainloop()
 

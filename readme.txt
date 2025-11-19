@@ -3,7 +3,9 @@
 https://github.com/MiloJov-UML/MicroelectrodeArrayMachine
 
 ## Overview
-This repository contains the Python code for a Microelectrode Array Machine capstone project. The system integrates motor control, relay control, and image recognition to automate the process of working with microelectrode arrays. The machine uses computer vision for alignment and precise positioning, and includes laser cutting capabilities for microelectrode processing.
+This repository contains the Python code for a Microelectrode Array Machine capstone project. The system integrates motor control, 
+relay control, and image recognition to automate the process of working with microelectrode arrays. The machine uses computer vision 
+for alignment and precise positioning, and includes laser cutting capabilities for microelectrode processing.
 
 ## Features
 - **Motor Control**: Precise multi-axis control system (X, Y, Z, r, t, T) for accurate positioning
@@ -84,7 +86,9 @@ pip install numpy opencv-python pillow pyserial keyboard ultralytics torch torch
 ### 4. Hardware setup
 1. Connect the USB-SERIAL CH340 motor controller to a USB port
 2. Connect the USB relay controller to a USB port
-3. Connect both USB cameras to available USB ports
+3. Connect both USB cameras to available USB ports (make sure camera0 is the vertical camera watching the PCB 
+pads/capillary/carbon fiber and Camera1 is the horizontal camera above the laser/Camera2 is the vertical camera 
+watching the wheels of the extruder for clogs)
 4. Ensure all stepper motors are properly connected to the controller
 
 ## Usage
@@ -98,7 +102,7 @@ python main.py
 Upon startup, you'll be prompted to enter:
 - Number of pads to process
 - Distance between pad centers (µm)
-- Distance from reference point to first pad (µm)
+- Distance from reference point to first pad (µm) (this field is now redundant)
 
 ### Basic Controls
 - **Motor Control**: Enter axis (X, Y, Z, r, t, T), direction, and displacement
