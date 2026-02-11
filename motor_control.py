@@ -22,11 +22,11 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = { ##gustavo edit:11/05/2025
-    'X': 98572.500, # old 102032.500
-    'Y': 16880.000, #old 15837.500
-    'Z': 19027.500, # old 17557.500
-    'r': 4300.840,  #old 4001.740
-    't': 3010020.000, #old 2647220.000
+    'X': 65117.500, # old 102032.500
+    'Y': 2603875.000, #old 15837.500
+    'Z': 18290.000, # old 17557.500
+    'r': 4362.575,  #old 4001.740
+    't': 3020520.000, #old 2647220.000
     'T': 2611552.500
 }
 
@@ -75,6 +75,12 @@ def auto_connect_motor():
         connect_to_device(motor_port, "Motor Controller")
     else:
         messagebox.showerror("Error", "Motor control device not found.")
+
+def direct_command(ser, command):
+    """Send a direct command string to the motor controller."""
+    ser.write(command.encode())
+    print(f"{command}")
+    
 
 def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retries=100, delay=0.125):
     """

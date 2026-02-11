@@ -1,7 +1,8 @@
 #include <Adafruit_MotorShield.h>
 
 const int relayPin = 10; // Pin connected to relay
-
+const int solPin = 11; // Pin connected to relay2
+const int nordPin = 7;
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 
@@ -10,7 +11,12 @@ Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
 
 void setup() {
   pinMode(relayPin, OUTPUT);      // Set relay pin as output
+  pinMode(solPin, OUTPUT);
+  pinMode(nordPin, OUTPUT);
+          // Set solenoid relay pin as output
   digitalWrite(relayPin, LOW);    // Start with the relay off for safety
+  digitalWrite(solPin, LOW);
+  digitalWrite(nordPin, LOW);      // Start with the solenoid relay off for safety
   Serial.begin(9600);             // Initialize serial communication
   
   // Initialize the motor shield
@@ -42,6 +48,27 @@ void loop() {
       digitalWrite(relayPin, LOW);  // Turn relay OFF
       Serial.println("Relay turned OFF"); // Confirmation message
     }
+
+    // Solenoid control commands
+    if (command.equalsIgnoreCase("Solenoid_Relay_On")) {
+      digitalWrite(solPin, HIGH); // Turn solenoid relay ON
+      Serial.println("Solenoid relay turned ON"); // Confirmation message
+    }
+    else if (command.equalsIgnoreCase("Solenoid_Relay_Off")) {
+      digitalWrite(solPin, LOW);  // Turn solenoid relay OFF
+      Serial.println("Solenoid relay turned OFF"); // Confirmation message
+    }
+
+    // Nordson control commands
+    if (command.equalsIgnoreCase("Nordson_On")) {
+      digitalWrite(nordPin, HIGH); // Turn solenoid relay ON
+      Serial.println("Nordson turned ON"); // Confirmation message
+    }
+    else if (command.equalsIgnoreCase("Nordson_Off")) {
+      digitalWrite(nordPin, LOW);  // Turn solenoid relay OFF
+      Serial.println("Nordson turned OFF"); // Confirmation message
+    }
+
     // Motor control commands
     else if (command.startsWith("Motor_Forward_")) {
       int steps = command.substring(14).toInt();  // Extract number after "Motor_Forward_"

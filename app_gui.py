@@ -18,6 +18,7 @@ from motor_control import (
     stop_motor_control,
     move_linear_stage,
     set_origin_to_current,
+    
 )
 
 from relay_control import (
@@ -26,7 +27,11 @@ from relay_control import (
     motor_backward,
     motor_release,
     laser_relay_on,
-    laser_relay_off
+    laser_relay_off,
+    solenoid_relay_on,
+    solenoid_relay_off,
+    nordson_on,
+    nordson_off
 )
 
 import image_recognition
@@ -366,6 +371,7 @@ def launch_gui():
     # Connect motor & relay
     auto_connect_motor()
     auto_connect_relay()
+    
     retrieve_motor_speed()
 
     info_label = tk.Label(
@@ -469,6 +475,34 @@ def launch_gui():
     tk.Label(laser_frame, text="Laser: ").pack(side='left')
     tk.Radiobutton(laser_frame, text="On", variable=laser_state, value='On', command=set_laser).pack(side='left')
     tk.Radiobutton(laser_frame, text="Off", variable=laser_state, value='Off', command=set_laser).pack(side='left')
+
+    # Solenoid radio Phill's edit
+    solenoid_state = tk.StringVar(value='Off')
+    def set_solenoid():
+        if solenoid_state.get() == 'On':
+            solenoid_relay_on()
+        else:
+            solenoid_relay_off()
+
+    solenoid_frame = tk.Frame(root)
+    solenoid_frame.pack(pady=8)
+    tk.Label(solenoid_frame, text="Solenoid: ").pack(side='left')
+    tk.Radiobutton(solenoid_frame, text="On", variable=solenoid_state, value='On', command=set_solenoid).pack(side='left')
+    tk.Radiobutton(solenoid_frame, text="Off", variable=solenoid_state, value='Off', command=set_solenoid).pack(side='left')
+
+    # Nordson radio
+    nord_state = tk.StringVar(value='Off')
+    def set_nord():
+        if nord_state.get() == 'On':
+            nordson_on()
+        else:
+            nordson_off()
+
+    nord_frame = tk.Frame(root)
+    nord_frame.pack(pady=10)
+    tk.Label(nord_frame, text="Nordson: ").pack(side='left')
+    tk.Radiobutton(nord_frame, text="On", variable=nord_state, value='On', command=set_nord).pack(side='left')
+    tk.Radiobutton(nord_frame, text="Off", variable=nord_state, value='Off', command=set_nord).pack(side='left')
 
     # Query & origin
     tk.Button(root, text="Set Origin", command=set_origin_to_current).pack(pady=5)

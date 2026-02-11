@@ -3,9 +3,11 @@
 import serial
 import time
 from tkinter import messagebox
-from motor_control import serial_lock, send_command, find_port
+from motor_control import serial_lock, direct_command, send_command, find_port
 
 relay_ser = None
+sol_ser = None
+nord_ser = None
 
 def auto_connect_relay():
     """Auto-detect and connect to the relay device (Arduino)."""
@@ -29,6 +31,7 @@ def connect_relay(port):
         messagebox.showerror("Error", f"Failed to connect to relay on {port}")
         return None
 
+
 def laser_relay_on():
     """Turn the laser on."""
     global relay_ser
@@ -44,6 +47,30 @@ def laser_relay_off():
         send_command(relay_ser, "Laser_Relay_Off", "Relay Controller")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
+
+def solenoid_relay_on():
+    """Turn the laser on."""
+    global relay_ser
+    direct_command(relay_ser, "Solenoid_Relay_On")
+    
+
+def solenoid_relay_off():
+    """Turn the laser off."""
+    global relay_ser
+    direct_command(relay_ser, "Solenoid_Relay_Off")
+
+
+def nordson_on():
+    """Turn the Nordson on."""
+    global relay_ser
+    direct_command(relay_ser, "Nordson_On")
+    
+
+def nordson_off():
+    """Turn the Nordson off."""
+    global relay_ser
+    direct_command(relay_ser, "Nordson_Off")
+    
 
 def motor_forward(steps=100, wait_for_completion=True, timeout=30):
     """Move the stepper motor forward by the specified number of steps.
