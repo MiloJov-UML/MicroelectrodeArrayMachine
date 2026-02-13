@@ -77,7 +77,7 @@ def auto_connect_motor():
         messagebox.showerror("Error", "Motor control device not found.")
 
 def direct_command(ser, command):
-    """Send a direct command string to the motor controller."""
+    """Directly send a command string to the serial port."""
     ser.write(command.encode())
     print(f"{command}")
     

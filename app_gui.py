@@ -34,6 +34,8 @@ from relay_control import (
     nordson_off
 )
 
+from trace_test import line_test_1
+
 import image_recognition
 from image_recognition import (
     open_camera, 
@@ -539,6 +541,9 @@ def launch_gui():
 
     # Button: Test Diagonal Move
     tk.Button(root, text="Test Diagonal Move", command=test_diagonal).pack(pady=10)
+
+    # Button: Test Diagonal Move
+    tk.Button(root, text="Trace test 1", command=line_test_1).pack(pady=11)
 
     root.mainloop()
 

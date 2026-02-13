@@ -70,6 +70,16 @@ def nordson_off():
     """Turn the Nordson off."""
     global relay_ser
     direct_command(relay_ser, "Nordson_Off")
+
+def step_up():
+    """Step the motor forward by one step."""
+    global relay_ser
+    direct_command(relay_ser, "Step_Up")
+    
+def step_down():
+    """Step the motor forward by one step."""
+    global relay_ser
+    direct_command(relay_ser, "Step_Down")
     
 
 def motor_forward(steps=100, wait_for_completion=True, timeout=30):
