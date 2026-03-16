@@ -10,10 +10,7 @@ from tkinter import messagebox
 # Globals for motor
 motor_ser = None
 serial_lock = Lock()
-
-#STOP BUTTON FLAG AND FIX  edit:11/05/2025
 request_stop_flag = False
-#---------------------------
 
 # Speed-related
 current_speed = 75  # default speed
@@ -21,13 +18,13 @@ last_command_time = 0
 command_cooldown = 0.002
 
 # Hardcoded origin for each axis
-axis_origins = { ##gustavo edit:11/05/2025
-    'X': 65117.500, # old 102032.500
-    'Y': 2603875.000, #old 15837.500
-    'Z': 18290.000, # old 17557.500
-    'r': 4362.575,  #old 4001.740
-    't': 3020520.000, #old 2647220.000
-    'T': 2611552.500
+axis_origins = { 
+    'X': 74755.000, 
+    'Y': 2575477.500, 
+    'Z': 2608587.500, 
+    'r': 4372.490,  
+    't': 3020520.000, 
+    'T': 2611552.500 #fixed to no needed to be change for now 
 }
 
 # For manual control
@@ -278,7 +275,6 @@ def move_linear_stage(axis, direction, displacement_µm,
         resp = send_command(motor_ser, cmd, "Motor Controller")
         if not resp:
             print(f"Warning: No response for movement on axis {axis}.")
-        #IF stop is resset  edit:11/05/2025
         global request_stop_flag
         if request_stop_flag:
             print("Movement interrupted by stop request.")
@@ -292,12 +288,12 @@ def move_linear_stage(axis, direction, displacement_µm,
                 print(f"Warning: axis {axis} may still be moving after {max_wait}s.")
             else:
                 print(f"Axis {axis} move complete.")
+                motor_ser.reset_input_buffer()  # clear any leftover data after movement
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
         print(f"Exception: {e}")
 
 def stop_motor_control():
- #ADDING STOP REQUEST FLAG SETTING  edit:11/05/2025
     global motor_ser, request_stop_flag
     request_stop_flag = True
     if motor_ser:
@@ -305,21 +301,11 @@ def stop_motor_control():
         print("Motor STOP command.")
     else:
         messagebox.showerror("Error", "Not connected to motor control device.")
-    #---------------------------
-    #ORIGINAL
-    # global motor_ser
-    # if motor_ser:
-    #     send_command(motor_ser, "STOP", "Motor Controller")
-    #     print("Motor control stopped.")
-    # else:
-    #     messagebox.showerror("Error", "Not connected to motor control device.")
 
-#ADDING STOP REQUEST FUNCTION  edit:11/05/2025 
 def request_stop():
     global request_stop_flag
     request_stop_flag = True
     print("Stop requested.")
-#---------------------------
 
 def query_all_axes_positions():
     axes_list = ['X','Y','Z','r','t','T']

@@ -3,106 +3,97 @@
 const int relayPin = 10; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
 const int nordPin = 7;
-// Create the motor shield object with the default I2C address
-Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 
-// Connect a stepper motor with 200 steps per revolution (1.8 degree) to motor port M1/M2
+Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
 
 void setup() {
-  pinMode(relayPin, OUTPUT);      // Set relay pin as output
+  pinMode(relayPin, OUTPUT);
   pinMode(solPin, OUTPUT);
   pinMode(nordPin, OUTPUT);
-          // Set solenoid relay pin as output
   digitalWrite(relayPin, LOW);    // Start with the relay off for safety
   digitalWrite(solPin, LOW);
-  digitalWrite(nordPin, LOW);      // Start with the solenoid relay off for safety
-  Serial.begin(9600);             // Initialize serial communication
+  digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
+  Serial.begin(9600);
   
-  // Initialize the motor shield
   if (!AFMS.begin()) {
     Serial.println("Could not find Motor Shield. Check wiring.");
     while (1);
   }
   
-  // Set default stepper speed (RPM)
-  myStepper->setSpeed(100);  // Increased to 100 RPM for smoother motion
+  myStepper->setSpeed(1);  // lower speed = more torque
   
-  Serial.println("Arduino is ready to receive commands."); // Debugging statements
+  Serial.println("Arduino is ready to receive commands.");
 }
 
 void loop() {
   if (Serial.available() > 0) {
-    String command = Serial.readStringUntil('\n'); // Read command from serial
-    command.trim(); // Remove any leading or trailing whitespace
-
-    Serial.print("Received command: "); // Print received command for debugging
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    Serial.print("Received command: ");
     Serial.println(command);
 
-    // Relay control commands
     if (command.equalsIgnoreCase("Laser_Relay_On")) {
-      digitalWrite(relayPin, HIGH); // Turn relay ON
-      Serial.println("Relay turned ON"); // Confirmation message
+      digitalWrite(relayPin, HIGH);
+      Serial.println("Relay turned ON");
     }
     else if (command.equalsIgnoreCase("Laser_Relay_Off")) {
-      digitalWrite(relayPin, LOW);  // Turn relay OFF
-      Serial.println("Relay turned OFF"); // Confirmation message
+      digitalWrite(relayPin, LOW);
+      Serial.println("Relay turned OFF");
     }
 
     // Solenoid control commands
     if (command.equalsIgnoreCase("Solenoid_Relay_On")) {
-      digitalWrite(solPin, HIGH); // Turn solenoid relay ON
-      Serial.println("Solenoid relay turned ON"); // Confirmation message
+      digitalWrite(solPin, HIGH);
+      Serial.println("Solenoid relay turned ON");
     }
     else if (command.equalsIgnoreCase("Solenoid_Relay_Off")) {
-      digitalWrite(solPin, LOW);  // Turn solenoid relay OFF
-      Serial.println("Solenoid relay turned OFF"); // Confirmation message
+      digitalWrite(solPin, LOW);
+      Serial.println("Solenoid relay turned OFF");
     }
 
     // Nordson control commands
     if (command.equalsIgnoreCase("Nordson_On")) {
-      digitalWrite(nordPin, HIGH); // Turn solenoid relay ON
-      Serial.println("Nordson turned ON"); // Confirmation message
+      digitalWrite(nordPin, HIGH);
+      Serial.println("Nordson turned ON");
     }
     else if (command.equalsIgnoreCase("Nordson_Off")) {
-      digitalWrite(nordPin, LOW);  // Turn solenoid relay OFF
-      Serial.println("Nordson turned OFF"); // Confirmation message
+      digitalWrite(nordPin, LOW);
+      Serial.println("Nordson turned OFF");
     }
 
-    // Motor control commands
     else if (command.startsWith("Motor_Forward_")) {
-      int steps = command.substring(14).toInt();  // Extract number after "Motor_Forward_"
-      if (steps > 0 && steps <= 10000) {  // Limit to reasonable range
+      int steps = command.substring(14).toInt();
+      if (steps > 0 && steps <= 10000) {
         Serial.print("Moving motor forward ");
         Serial.print(steps);
         Serial.println(" steps");
-        myStepper->step(steps, FORWARD, MICROSTEP);  // MICROSTEP for smoother motion
-        myStepper->release();  // Release motor coils to prevent holding torque pulsing
+        myStepper->step(steps, FORWARD, MICROSTEP);  // MICROSTEP for more torque
+        myStepper->release();
         Serial.println("Motor forward complete");
       } else {
         Serial.println("Invalid step count (must be 1-10000)");
       }
     }
     else if (command.startsWith("Motor_Backward_")) {
-      int steps = command.substring(15).toInt();  // Extract number after "Motor_Backward_"
-      if (steps > 0 && steps <= 10000) {  // Limit to reasonable range
+      int steps = command.substring(15).toInt();
+      if (steps > 0 && steps <= 10000) {
         Serial.print("Moving motor backward ");
         Serial.print(steps);
         Serial.println(" steps");
-        myStepper->step(steps, BACKWARD, MICROSTEP);  // MICROSTEP for smoother motion
-        myStepper->release();  // Release motor coils to prevent holding torque pulsing
+        myStepper->step(steps, BACKWARD, MICROSTEP);  // MICROSTEP for more torque
+        myStepper->release();
         Serial.println("Motor backward complete");
       } else {
         Serial.println("Invalid step count (must be 1-10000)");
       }
     }
-    // Motor release command (to stop holding torque when idle)
     else if (command.equalsIgnoreCase("Motor_Release")) {
       myStepper->release();
       Serial.println("Motor released");
     }
     else {
-      Serial.println("Unknown command"); // For unrecognized commands
+      Serial.println("Unknown command");
     }
   }
 }

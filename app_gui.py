@@ -18,12 +18,11 @@ from motor_control import (
     stop_motor_control,
     move_linear_stage,
     set_origin_to_current,
-    
 )
 
 from relay_control import (
     auto_connect_relay,
-    motor_forward, 
+    motor_forward,
     motor_backward,
     motor_release,
     laser_relay_on,
@@ -34,20 +33,16 @@ from relay_control import (
     nordson_off
 )
 
-from trace_test import line_test_1
-
+from trace_test import (
+    line_test_1,
+    test_approach_C
+)
 import image_recognition
 from image_recognition import (
-    open_camera, 
-    extrude, 
-    x_align, 
+    open_camera,
+    extrude,
+    x_align,
     r_align)
-
-# ################################
-# # GLOBAL VARIABLES & SETTINGS edit:11/05/2025
-# def launch_gui():
-#     global axis_entry, displacement_entry
-# ################################
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -373,7 +368,7 @@ def launch_gui():
     # Connect motor & relay
     auto_connect_motor()
     auto_connect_relay()
-    
+
     retrieve_motor_speed()
 
     info_label = tk.Label(
@@ -442,17 +437,6 @@ def launch_gui():
         axis_entry.config(state='disabled')
         displacement_entry.config(state='disabled')
         threading.Thread(target=move_thread).start()
-      
-        #---------------------------
-        # ORIGINAL CODE COMMENTED OUT FOR TESTING PURPOSES  edit:11/05/2025
-        # try:
-        #     axis = axis_entry.get().strip()
-        #     displacement_value = float(displacement_entry.get().strip())
-        #     direction = '+' if displacement_value >= 0 else '-'
-        #     magnitude = abs(displacement_value)
-        #     move_linear_stage(axis, direction, magnitude, wait_for_stop=True, max_wait=30.0)
-        # except ValueError as e:
-        #     messagebox.showerror("Error", f"Invalid displacement: {e}")
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
     tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
@@ -531,6 +515,39 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
+    # Glue dispenser test (NEMA17 via relay_control)
+    tk.Label(root, text="Glue Dispenser Test (NEMA17):").pack(pady=(10, 2))
+
+    glue_steps_var = tk.StringVar(value="100")
+    glue_frame = tk.Frame(root)
+    glue_frame.pack(pady=5)
+
+    tk.Label(glue_frame, text="Steps:").pack(side='left')
+    tk.OptionMenu(glue_frame, glue_steps_var, "50", "100", "200", "500", "1000").pack(side='left', padx=5)
+
+    glue_custom = tk.Entry(glue_frame, width=6)
+    glue_custom.insert(0, "custom")
+    glue_custom.pack(side='left', padx=3)
+
+    def set_glue_custom(event=None):
+        try:
+            int(glue_custom.get())
+            glue_steps_var.set(glue_custom.get())
+        except ValueError:
+            pass
+
+    glue_custom.bind("<Return>", set_glue_custom)
+    tk.Button(glue_frame, text="Set", command=set_glue_custom).pack(side='left')
+
+    glue_btn_frame = tk.Frame(root)
+    glue_btn_frame.pack(pady=5)
+    tk.Button(glue_btn_frame, text="Dispense", width=12,
+              command=lambda: motor_forward(steps=int(glue_steps_var.get()))).pack(side='left', padx=5)
+    tk.Button(glue_btn_frame, text="Retract", width=12,
+              command=lambda: motor_backward(steps=int(glue_steps_var.get()))).pack(side='left', padx=5)
+    tk.Button(glue_btn_frame, text="Release", width=12,
+              command=motor_release).pack(side='left', padx=5)
+
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
@@ -544,6 +561,18 @@ def launch_gui():
 
     # Button: Test Diagonal Move
     tk.Button(root, text="Trace test 1", command=line_test_1).pack(pady=11)
+    
+    #test diagonal movements
+    tk.Label(root, text="Diagonal Tests:").pack(pady=(10, 2))
+    diag_frame = tk.Frame(root)
+    diag_frame.pack(pady=2)
+    # tk.Button(diag_frame, text="Diagonal A", command=lambda: threading.Thread(target=test_approach_A).start()).pack(side='left', padx=3)
+    # tk.Button(diag_frame, text="Diagonal B", command=lambda: threading.Thread(target=test_approach_B).start()).pack(side='left', padx=3)
+    tk.Button(diag_frame, text="Diagonal C", command=lambda: threading.Thread(target=test_approach_C).start()).pack(side='left', padx=3)
+    # tk.Button(diag_frame, text="Diagonal D", command=lambda: threading.Thread(target=test_approach_D).start()).pack(side='left', padx=3)
+
+
+
 
     root.mainloop()
 
