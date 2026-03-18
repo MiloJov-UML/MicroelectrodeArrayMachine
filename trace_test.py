@@ -8,7 +8,7 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed
+from motor_control import move_linear_stage, update_speed, get_current_position
 from relay_control import nordson_on, nordson_off
 
 #parameters for line test
@@ -18,7 +18,7 @@ y = 'Y'
 z = 'Z'
 
 l    = 3000.0   # Trace length in steps
-tapl = 2000.0   # Z tap depth 
+tapl = 3000.0   # Z tap depth 
 stp  = 1000.0   # Step-over between parallel lines
 delay = 0.7       # Dispenser settle time
 
@@ -232,32 +232,69 @@ def _dispenser_off(dispenser: str):
 
 #  ORIGINAL TESTS  
 
-def line_test_2():
+def line_test_3():
+    pos = get_current_position("r")
+    print(f"Current position: r={pos:.1f} steps")
+
+def line_test_1():
+    
+    #Successfully created a diagonal
+    update_speed(50)
+    nordson_on()
     for i in range(1, 1000, 1):
         front(100)
         left(100)
 
     print("Line test 1 complete.")
 
-def line_test_1():
-    """Lay down a set of parallel horizontal glue traces."""
+# OLD TESTS — from early development, not updated for new code structure
+def line_test_4():
+     """Lay down a set of parallel horizontal glue traces."""
+     print("Starting line test 1...")
+     tap()
+     for i in range(1, 8, 1):
+         nordson_on()
+         time.sleep(delay)
+         update_speed(40) # speed change mod 0-150
+         front(l)
+         nordson_off()
+         update_speed(50)
+         time.sleep(delay)
+        
+         down(tapl)
+         back(l)
+         time.sleep(delay)
+         left(stp)
+         up(tapl)
+     print("Line test 1 complete.")
+
+def line_test_2():
     print("Starting line test 1...")
-    tap()
-    for i in range(1, 9, 1):
+    down(tapl)
+    for i in range(1, 3, 1):
+        # draw trace
         nordson_on()
-        time.sleep(delay)
-        update_speed(40)
+        time.sleep(delay) ## If needed you can change the value of the delay variable.
+        update_speed(40) ## Find the best speed change use this line
         front(l)
         nordson_off()
         update_speed(50)
         time.sleep(delay)
-        
-        down(tapl)
-        back(l)
-        time.sleep(delay)
-        left(stp)
+
+        # lift Z safe before return
         up(tapl)
+
+        # safe return to origin
+        return_to_origin()
+
+        # step over 100 * i for next trace
+        left(100 * i)
+
+        # lower Z again for next trace
+        down(tapl)
+
     print("Line test 1 complete.")
+
 
 
 #  DEMO TESTS — one per approach

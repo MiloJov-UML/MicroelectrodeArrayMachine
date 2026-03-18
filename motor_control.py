@@ -19,10 +19,10 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = { 
-    'X': 74755.000, 
+    'X': 70455.000, 
     'Y': 2575477.500, 
-    'Z': 2608587.500, 
-    'r': 4372.490,  
+    'Z': 2606287.500, # DONE:need to add  the 3000 so it safe to move bewtenn traces
+    #'r': 4372.490,  
     't': 3020520.000, 
     'T': 2611552.500 #fixed to no needed to be change for now 
 }
@@ -78,7 +78,6 @@ def direct_command(ser, command):
     ser.write(command.encode())
     print(f"{command}")
     
-
 def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retries=100, delay=0.125):
     """
     Sends a command over serial and attempts to read a response.
