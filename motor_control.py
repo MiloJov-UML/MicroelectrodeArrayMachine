@@ -19,12 +19,12 @@ command_cooldown = 0.002
 
 # Hardcoded origin for each axis
 axis_origins = { 
-    'X': 70455.000, 
-    'Y': 2575477.500, 
-    'Z': 2606287.500, # DONE:need to add  the 3000 so it safe to move bewtenn traces
-    'r': 4372.490,  
+    'X': 94127.500, 
+    'Y': 2566977.500, 
+    'Z': 2605600.500, 
+    'r': 4377.490,  
     't': 3020520.000, 
-    'T': 2611552.500 #fixed to no needed to be change for now 
+    'T': 2611552.500 
 }
 
 # For manual control

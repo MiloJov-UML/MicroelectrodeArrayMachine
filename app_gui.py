@@ -34,8 +34,7 @@ from relay_control import (
 )
 
 from trace_test import (
-    line_test_1,
-    test_approach_C
+    line_test_1
 )
 import image_recognition
 from image_recognition import (
@@ -561,17 +560,6 @@ def launch_gui():
 
     # Button: Test Diagonal Move
     tk.Button(root, text="Trace test 1", command=line_test_1).pack(pady=11)
-    
-    #test diagonal movements
-    tk.Label(root, text="Diagonal Tests:").pack(pady=(10, 2))
-    diag_frame = tk.Frame(root)
-    diag_frame.pack(pady=2)
-    # tk.Button(diag_frame, text="Diagonal A", command=lambda: threading.Thread(target=test_approach_A).start()).pack(side='left', padx=3)
-    # tk.Button(diag_frame, text="Diagonal B", command=lambda: threading.Thread(target=test_approach_B).start()).pack(side='left', padx=3)
-    tk.Button(diag_frame, text="Diagonal C", command=lambda: threading.Thread(target=test_approach_C).start()).pack(side='left', padx=3)
-    # tk.Button(diag_frame, text="Diagonal D", command=lambda: threading.Thread(target=test_approach_D).start()).pack(side='left', padx=3)
-
-
 
 
     root.mainloop()

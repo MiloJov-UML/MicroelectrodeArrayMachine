@@ -8,7 +8,7 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed, get_current_position
+from motor_control import move_linear_stage, update_speed, get_current_position, return_to_origin
 from relay_control import nordson_on, nordson_off
 
 #parameters for line test
@@ -20,7 +20,7 @@ z = 'Z'
 l    = 3000.0   # Trace length in steps
 tapl = 3000.0   # Z tap depth 
 stp  = 1000.0   # Step-over between parallel lines
-delay = 0.7       # Dispenser settle time
+delay = 0.5       # Dispenser settle time
 
 SEG = 50.0      # Default segment size for diagonal interpolation (µm)
 
@@ -206,16 +206,15 @@ def diagonal_pulse(dx: float, dy: float,
 #  GLUE TAP TEST — standalone, independent of all trace tests
 
 def test_glue_tap(hold_s: float = 0.8):
-    """
-    Standalone glue tap test.
-    Z down → hold → Z up. No X/Y movement. No dispenser relay.
-
-    hold_s : how long to hold Z down in seconds (default 0.8)
-    """
     print(f"=== Glue Tap Test — hold {hold_s}s ===")
-    down(tapl)
-    time.sleep(hold_s)
     up(tapl)
+    time.sleep(hold_s)
+    down(tapl)
+    left(100)
+    up(tapl)
+    time.sleep(hold_s)
+    down(tapl)
+
     print("[GlueTap] done.")
 
 
@@ -236,15 +235,57 @@ def line_test_3():
     pos = get_current_position("r")
     print(f"Current position: r={pos:.1f} steps")
 
-def line_test_1():
+# def line_test_1():
     
-    #Successfully created a diagonal
-    update_speed(50)
+#     #Successfully created a diagonal
+#     update_speed(100) # speed change mod 0-150
+#     up(tapl)
+#     nordson_on()
+#     for i in range(1, 800, 1):
+#         front(150)
+#         left(150)
+#     down(tapl)
+
+#     print("Line test 1 complete.")
+
+def line_test_1():
+    """Test trace — linear on, diagonal off."""
+    print("Starting line test 1...")
+    update_speed(30)
+    up(tapl)
+    
+    # front 400 nordson on
     nordson_on()
-    for i in range(1, 1000, 1):
+    time.sleep(delay)
+    front(3000)
+    nordson_off()
+    update_speed(150)
+    # diagonal front+left 800 nordson off
+    for i in range(6):  # 6 steps x 100µm = 600µm
         front(100)
         left(100)
+    
+    update_speed(30)
+    # left 400 nordson on
+    nordson_on()
+    time.sleep(delay)
+    left(1800)
+    nordson_off()
 
+    update_speed(150)
+    # diagonal down+left 800 nordson off
+    for i in range(6):  # 6 steps x 100µm = 600µm
+        back(100)
+        left(100)
+    update_speed(30)
+    # back 400 nordson on
+    nordson_on()
+    time.sleep(delay)
+    back(800)
+    nordson_off()
+    down(tapl)
+    
+    update_speed(50)
     print("Line test 1 complete.")
 
 # OLD TESTS — from early development, not updated for new code structure
@@ -255,7 +296,7 @@ def line_test_4():
      for i in range(1, 8, 1):
          nordson_on()
          time.sleep(delay)
-         update_speed(40) # speed change mod 0-150
+         update_speed(55) # speed change mod 0-150
          front(l)
          nordson_off()
          update_speed(50)
@@ -270,46 +311,28 @@ def line_test_4():
 
 def line_test_2():
     print("Starting line test 1...")
-    down(tapl)
-    for i in range(1, 3, 1):
+    up(tapl)
+    for i in range(1, 4, 1):
         # draw trace
         nordson_on()
         time.sleep(delay) ## If needed you can change the value of the delay variable.
-        update_speed(40) ## Find the best speed change use this line
+        update_speed(150) ## Find the best speed change use this line
         front(l)
         nordson_off()
         update_speed(50)
-        time.sleep(delay)
+        # time.sleep(delay)
 
-        # lift Z safe before return
-        up(tapl)
+        # Z safe before return
+        down(tapl)
 
         # safe return to origin
         return_to_origin()
 
-        # step over 100 * i for next trace
-        left(100 * i)
+        # step over 1000 * i for next trace
+        left(1000 * i)
 
-        # lower Z again for next trace
-        down(tapl)
+        # Z again for next trace
+        up(tapl)
 
     print("Line test 1 complete.")
 
-
-
-#  DEMO TESTS — one per approach
-# def test_approach_A():
-#     print("=== Approach A: Staircase ===")
-#     diagonal_staircase(dx=4000, dy=4000, dispenser='nordson')
-
-# def test_approach_B():
-#     print("=== Approach B: Weighted Stair ===")
-#     diagonal_weighted(dx=6000.0, dy=2000, dispenser='nordson')
-
-def test_approach_C():
-    print("=== Approach C: Dominant Lead ===")
-    diagonal_dominant_lead(dx=1000, dy=1000, block_size=150, dispenser='glue')
-
-# def test_approach_D():
-#     print("=== Approach D: Micro-step Diagonal ===")
-#     diagonal_pulse(dx=5000, dy=5000, seg=SEG)
