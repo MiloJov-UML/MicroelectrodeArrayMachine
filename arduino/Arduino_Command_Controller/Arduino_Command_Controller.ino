@@ -3,6 +3,8 @@
 const int relayPin = 10; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
 const int nordPin = 7;
+const int r_limit = 5;
+const int z_probe = 4;
 
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
@@ -11,6 +13,8 @@ void setup() {
   pinMode(relayPin, OUTPUT);
   pinMode(solPin, OUTPUT);
   pinMode(nordPin, OUTPUT);
+  pinMode(r_limit, INPUT_PULLUP);
+  pinMode(z_probe, INPUT_PULLUP);
   digitalWrite(relayPin, LOW);    // Start with the relay off for safety
   digitalWrite(solPin, LOW);
   digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
@@ -95,5 +99,20 @@ void loop() {
     else {
       Serial.println("Unknown command");
     }
+  }
+
+  // R and Z limit commands
+  if (digitalRead(r_limit) == LOW)
+  {
+    Serial.println("STOP Motor Controller");
+    Serial.println("R limit");
+      
+  }
+
+  if (digitalRead(z_probe) == LOW)
+  {
+    Serial.println("STOP Motor Controller");
+    Serial.println("Z limit");
+      
   }
 }

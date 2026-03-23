@@ -34,7 +34,8 @@ from relay_control import (
 )
 
 from trace_test import (
-    line_test_1
+    line_test_1,
+    glue_drop
 )
 import image_recognition
 from image_recognition import (
@@ -514,38 +515,7 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
-    # Glue dispenser test (NEMA17 via relay_control)
-    tk.Label(root, text="Glue Dispenser Test (NEMA17):").pack(pady=(10, 2))
-
-    glue_steps_var = tk.StringVar(value="100")
-    glue_frame = tk.Frame(root)
-    glue_frame.pack(pady=5)
-
-    tk.Label(glue_frame, text="Steps:").pack(side='left')
-    tk.OptionMenu(glue_frame, glue_steps_var, "50", "100", "200", "500", "1000").pack(side='left', padx=5)
-
-    glue_custom = tk.Entry(glue_frame, width=6)
-    glue_custom.insert(0, "custom")
-    glue_custom.pack(side='left', padx=3)
-
-    def set_glue_custom(event=None):
-        try:
-            int(glue_custom.get())
-            glue_steps_var.set(glue_custom.get())
-        except ValueError:
-            pass
-
-    glue_custom.bind("<Return>", set_glue_custom)
-    tk.Button(glue_frame, text="Set", command=set_glue_custom).pack(side='left')
-
-    glue_btn_frame = tk.Frame(root)
-    glue_btn_frame.pack(pady=5)
-    tk.Button(glue_btn_frame, text="Dispense", width=12,
-              command=lambda: motor_forward(steps=int(glue_steps_var.get()))).pack(side='left', padx=5)
-    tk.Button(glue_btn_frame, text="Retract", width=12,
-              command=lambda: motor_backward(steps=int(glue_steps_var.get()))).pack(side='left', padx=5)
-    tk.Button(glue_btn_frame, text="Release", width=12,
-              command=motor_release).pack(side='left', padx=5)
+    
 
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
@@ -560,6 +530,9 @@ def launch_gui():
 
     # Button: Test Diagonal Move
     tk.Button(root, text="Trace test 1", command=line_test_1).pack(pady=11)
+    
+    # Button: Glue test 
+    tk.Button(root, text="Glue test", command=glue_drop).pack(pady=11)
 
 
     root.mainloop()

@@ -62,11 +62,30 @@ def solenoid_relay_off():
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
+# def nordson_on():
+#     """Turn the Nordson on."""
+#     global relay_ser
+#     if relay_ser:
+#         send_command(relay_ser, "Nordson_On", "Relay Controller")
+#     else:
+#         messagebox.showerror("Error", "Not connected to relay device.")
+
+# def nordson_off():
+#     """Turn the Nordson off."""
+#     global relay_ser
+#     if relay_ser:
+#         send_command(relay_ser, "Nordson_Off", "Relay Controller")
+#     else:
+#         messagebox.showerror("Error", "Not connected to relay device.")
+
+
 def nordson_on():
     """Turn the Nordson on."""
     global relay_ser
     if relay_ser:
         send_command(relay_ser, "Nordson_On", "Relay Controller")
+        relay_ser.write(("Nordson_On\n").encode())
+        print("Nordson ON")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -75,6 +94,8 @@ def nordson_off():
     global relay_ser
     if relay_ser:
         send_command(relay_ser, "Nordson_Off", "Relay Controller")
+        relay_ser.write(("Nordson_Off\n").encode())
+        print("Nordson OFF")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 

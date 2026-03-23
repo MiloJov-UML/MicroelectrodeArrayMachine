@@ -7,6 +7,7 @@ import serial.tools.list_ports
 from threading import Lock
 from tkinter import messagebox
 
+
 # Globals for motor
 motor_ser = None
 serial_lock = Lock()
@@ -20,9 +21,9 @@ command_cooldown = 0.002
 # Hardcoded origin for each axis
 axis_origins = { 
     'X': 94127.500, 
-    'Y': 2566977.500, 
-    'Z': 2605600.500, 
-    'r': 4377.490,  
+    'Y': 2564577.500, 
+    'Z': 2611352.500, 
+    'r': 4383.490, 
     't': 3020520.000, 
     'T': 2611552.500 
 }
@@ -30,6 +31,10 @@ axis_origins = {
 # For manual control
 base_displacement = 75     # degrees for linear axes
 r_displacement = 0.25      # degrees for rotary axis (r)
+
+global R_home
+global rotation_limit_reached
+rotation_limit_reached = False
 
 def find_port(device_description: str):
     """Search through serial ports for one matching 'device_description' in port.description."""
@@ -348,3 +353,20 @@ def return_to_origin():
         print(f"Moving axis {ax} from {current_pos:.3f} to {origin_pos:.3f}...")
         move_linear_stage(ax, direction, displacement, wait_for_stop=True, max_wait=30.0)
     print("--- Finished Moving All Axes ---\n")
+
+def rotation_limit():
+    """Check if the rotary axis is within its safe limits."""
+    
+    move_linear_stage('r', '+', 30, wait_for_stop=True, max_wait=10.0)
+    prt = find_port("Arduino Uno")
+    seri = serial.Serial(prt, 9600, timeout=2)
+    response = seri.readline().decode('utf-8')
+    if response == "R limit":
+        stop_motor_control()
+        print("Rotary axis limit reached. Returning to origin.")
+        R_home = get_current_position('r')
+        rotation_limit_reached = True
+        set_origin_to_current()
+        print(f"Current position: r={R_home:.1f} steps")
+    
+    return True

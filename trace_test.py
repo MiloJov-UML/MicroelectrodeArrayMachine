@@ -8,8 +8,8 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed, get_current_position, return_to_origin
-from relay_control import nordson_on, nordson_off
+from motor_control import move_linear_stage, update_speed, get_current_position, return_to_origin, rotation_limit
+from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release
 
 #parameters for line test
 
@@ -18,7 +18,7 @@ y = 'Y'
 z = 'Z'
 
 l    = 3000.0   # Trace length in steps
-tapl = 3000.0   # Z tap depth 
+tapl = 5000.0   # Z tap depth 
 stp  = 1000.0   # Step-over between parallel lines
 delay = 0.5       # Dispenser settle time
 
@@ -228,12 +228,31 @@ def _dispenser_off(dispenser: str):
     if dispenser == 'nordson':
         nordson_off()
 
+# GLUE DROP & SEQUENCE
+def glue_drop():
+    """Dispense glue for a fixed number of seconds then release."""
+    motor_backward(steps=40)
+    time.sleep(1.0)
+    motor_release()
+
+def glue_sequence():
+    """Glue tap sequence at 1000µm intervals left, up to 8000µm."""
+    print("Starting glue sequence...")
+    update_speed(50)
+    return_to_origin()
+    for i in range(1, 9):  # 1000, 2000 ... 8000
+        left(1000)
+        up(tapl)
+        glue_drop()
+        down(tapl)
+    return_to_origin()
+    print("Glue sequence complete.")
+
 
 #  ORIGINAL TESTS  
 
-def line_test_3():
-    pos = get_current_position("r")
-    print(f"Current position: r={pos:.1f} steps")
+def line_test_00():
+    rotation_limit()  # Ensure we're within safe rotary limits before starting
 
 # def line_test_1():
     
