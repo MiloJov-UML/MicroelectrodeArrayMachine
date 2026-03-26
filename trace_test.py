@@ -8,8 +8,8 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed, get_current_position, return_to_origin, rotation_limit
-from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release
+from motor_control import move_linear_stage, update_speed, return_to_origin, stop_motor_control, get_current_position
+from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release, get_limit_state
 
 #parameters for line test
 
@@ -231,8 +231,11 @@ def _dispenser_off(dispenser: str):
 # GLUE DROP & SEQUENCE
 def glue_drop():
     """Dispense glue for a fixed number of seconds then release."""
-    motor_backward(steps=40)
-    time.sleep(1.0)
+    motor_backward(steps=20)
+    time.sleep(0.5)
+    # motor_forward(steps=5000)
+    # motor_forward(steps=5000)
+    # time.sleep(1.0)
     motor_release()
 
 def glue_sequence():
@@ -251,23 +254,44 @@ def glue_sequence():
 
 #  ORIGINAL TESTS  
 
-def line_test_00():
-    rotation_limit()  # Ensure we're within safe rotary limits before starting
-
-# def line_test_1():
+def line_test_11111():
+    print("Starting line test 1...")
+    update_speed(30)
+    tap()
     
-#     #Successfully created a diagonal
-#     update_speed(100) # speed change mod 0-150
-#     up(tapl)
-#     nordson_on()
-#     for i in range(1, 800, 1):
-#         front(150)
-#         left(150)
-#     down(tapl)
-
-#     print("Line test 1 complete.")
+    # front 400 nordson on
+    update_speed(5)
+    nordson_on()
+    time.sleep(delay)
+    front(1000)
+    update_speed(50)
+    front(1250)
+    update_speed(150)
+    # diagonal front+left 800 nordson off
+    for i in range(20):  # 6 steps x 100µm = 600µm
+        front(100)
+        time.sleep(delay)
+        nordson_on()
+        time.sleep(delay)
+        left(100)
+        nordson_off()
+    
 
 def line_test_1():
+         #Successfully created a diagonal
+    move_linear_stage('r', '+', 90, wait_for_stop=False, max_wait=30.0)
+    state = get_limit_state()
+    if state == "R limit":
+        rot = get_current_position("r")
+        stop_motor_control()
+        print(rot)
+        
+
+
+    if state == "Z limit":
+        print("Z touched")
+
+def line_test_99():
     """Test trace — linear on, diagonal off."""
     print("Starting line test 1...")
     update_speed(30)

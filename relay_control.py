@@ -3,7 +3,7 @@
 import serial
 import time
 from tkinter import messagebox
-from motor_control import serial_lock, send_command, find_port
+from motor_control import serial_lock, send_command, find_port, stop_motor_control
 
 relay_ser = None
 
@@ -84,8 +84,8 @@ def nordson_on():
     global relay_ser
     if relay_ser:
         send_command(relay_ser, "Nordson_On", "Relay Controller")
-        relay_ser.write(("Nordson_On\n").encode())
-        print("Nordson ON")
+        #relay_ser.write(("Nordson_On\n").encode())
+        #print("Nordson ON")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -94,8 +94,8 @@ def nordson_off():
     global relay_ser
     if relay_ser:
         send_command(relay_ser, "Nordson_Off", "Relay Controller")
-        relay_ser.write(("Nordson_Off\n").encode())
-        print("Nordson OFF")
+        #relay_ser.write(("Nordson_Off\n").encode())
+        #print("Nordson OFF")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -192,3 +192,30 @@ def motor_release():
         send_command(relay_ser, "Motor_Release", "Relay Controller")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
+
+
+# Don't modify - Phillipe's edit
+def get_limit_state():
+    #relay_ser.open()
+    while True:
+        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
+        resp = relay_ser.data = relay_ser.read_until(b'R limit').decode("utf-8").strip()
+        print(str(resp))
+        if resp != None:
+            if str(resp) == "R limit":
+                stop_motor_control()
+                print('R limit reached')
+                return resp
+                
+            
+            if str(resp) == "Z limit":
+                print('Z limit reached')
+                
+                return resp
+        
+        
+            
+    
+    
+        
+

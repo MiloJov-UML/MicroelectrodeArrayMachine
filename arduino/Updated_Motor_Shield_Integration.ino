@@ -20,7 +20,7 @@ void setup() {
   }
   
   // Set default stepper speed (RPM)
-  myStepper->setSpeed(5);  // Increased to 40 RPM for smoother motion
+  myStepper->setSpeed(50);  // Increased to 50 RPM for smoother motion
   
   Serial.println("Arduino is ready to receive commands."); // Debugging statements
 }
@@ -49,8 +49,11 @@ void loop() {
         Serial.print("Moving motor forward ");
         Serial.print(steps);
         Serial.println(" steps");
-        myStepper->step(steps, FORWARD, DOUBLE);  // DOUBLE for smoother motion
-        myStepper->release();  // Release motor coils to prevent holding torque pulsing
+        for (int i = 0; i < steps; i++) {
+          myStepper->step(1, FORWARD, SINGLE); // Step one at a time for smoother motion
+        }
+        // myStepper->step(steps, FORWARD, MICROSTEP);  // MICROSTEP for smoother motion
+        // myStepper->release();  // Release motor coils to prevent holding torque pulsing
         Serial.println("Motor forward complete");
       } else {
         Serial.println("Invalid step count (must be 1-10000)");
@@ -62,8 +65,8 @@ void loop() {
         Serial.print("Moving motor backward ");
         Serial.print(steps);
         Serial.println(" steps");
-        myStepper->step(steps, BACKWARD, DOUBLE);  // DOUBLE for smoother motion
-        myStepper->release();  // Release motor coils to prevent holding torque pulsing
+        myStepper->step(steps, BACKWARD, SINGLE);  // SINGLE for smoother motion
+        // myStepper->release();  // Release motor coils to prevent holding torque pulsing
         Serial.println("Motor backward complete");
       } else {
         Serial.println("Invalid step count (must be 1-10000)");

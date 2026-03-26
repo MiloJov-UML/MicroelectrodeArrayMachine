@@ -100,19 +100,21 @@ void loop() {
       Serial.println("Unknown command");
     }
   }
+    if (10 > 0) {
+      // R and Z limit commands
+      if (digitalRead(r_limit) == LOW)
+      {
+        
+        Serial.println("R limit");
+         
+      }
 
-  // R and Z limit commands
-  if (digitalRead(r_limit) == LOW)
-  {
-    Serial.println("STOP Motor Controller");
-    Serial.println("R limit");
+      if (digitalRead(z_probe) == LOW)
+      {
+        Serial.println("Z limit");
+          
+      }
       
   }
-
-  if (digitalRead(z_probe) == LOW)
-  {
-    Serial.println("STOP Motor Controller");
-    Serial.println("Z limit");
-      
-  }
+  
 }
