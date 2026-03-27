@@ -62,23 +62,6 @@ def solenoid_relay_off():
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
-# def nordson_on():
-#     """Turn the Nordson on."""
-#     global relay_ser
-#     if relay_ser:
-#         send_command(relay_ser, "Nordson_On", "Relay Controller")
-#     else:
-#         messagebox.showerror("Error", "Not connected to relay device.")
-
-# def nordson_off():
-#     """Turn the Nordson off."""
-#     global relay_ser
-#     if relay_ser:
-#         send_command(relay_ser, "Nordson_Off", "Relay Controller")
-#     else:
-#         messagebox.showerror("Error", "Not connected to relay device.")
-
-
 def nordson_on():
     """Turn the Nordson on."""
     global relay_ser
@@ -195,7 +178,7 @@ def motor_release():
 
 
 # Don't modify - Phillipe's edit
-def get_limit_state():
+def r_calibrate():
     #relay_ser.open()
     while True:
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
@@ -206,12 +189,19 @@ def get_limit_state():
                 stop_motor_control()
                 print('R limit reached')
                 return resp
-                
             
-            if str(resp) == "Z limit":
+def Z_calibrate():
+    #relay_ser.open()
+    while True:
+        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
+        respo = relay_ser.data = relay_ser.read_until(b'Z limit').decode("utf-8").strip()
+        print(str(respo))
+        if respo != None:
+            if str(respo) == "Z limit":
+                stop_motor_control()
                 print('Z limit reached')
-                
-                return resp
+                return respo
+            
         
         
             

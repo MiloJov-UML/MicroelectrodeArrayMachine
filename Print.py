@@ -8,8 +8,8 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed, return_to_origin, stop_motor_control, get_current_position
-from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release, get_limit_state
+from motor_control import move_linear_stage, update_speed, return_to_origin, stop_motor_control, get_current_position, mm_to_steps, steps_to_mm
+from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release, r_calibrate, Z_calibrate
 
 #parameters for line test
 
@@ -49,9 +49,123 @@ def tap():
     down(tapl)
     up(tapl)
 
+# Trace Dictionay, Don't modify - Phillipe's edit
+# if angle is negative line has negative slope, else positive slope
+# Lengths are in mm, use conversion method
+traces = {
+   1: {"l1": 4.13, "a1": -131.24, "l2": 0.57, "a2": 90.0, "l3": 2.47, "a3": 135.26,"l4": 0.47},
+
+   2: {"l1": 3.22, "a1": -112.95, "l2": 1.47},
+
+   3: {"a1": -80.49, "11": 2.16},
+
+   4: {"a1": -85.11, "11": 2.14}
+}
+
+
+# Don't modify - Phillipe's edit
+def print_trace(trace):
+
+    global dist, angle, length, ang_dir
+
+    for key in traces[trace].keys():
+        
+        if traces[trace].key.find("l") != -1:
+           length  = traces[trace].key.value
+           dist = mm_to_steps(length)
+           
+        if traces[trace].key.find("a") != "a1":
+           angle = traces[trace].key.value
+        if angle.find("-") != -1: 
+           ang_dir = '+'
+        elif angle.find("+") != -1:
+           ang_dir = '-'
+        
+# Don't modify - Phillipe's edit
+def diagonal_line(length, angle,):
+    # Convert angle to radians
+    theta = math.radians(angle)
+
+    # Calculate dx and dy based on the angle
+    dx = length * math.cos(theta)
+    dy = length * math.sin(theta)
+
+    xl = mm_to_steps(dx)
+    yl = mm_to_steps(dy)
+
+    dia = 1 # Diamter of needlde hole or typical printed trace width, used to determine number of segments for diagonal movement
+    div = max(abs(xl), abs(yl)) / dia
+
+    for i in range(div):
+        move_linear_stage(x, '+', xl/div, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage(y, '+', yl/div, wait_for_stop=True, max_wait=30.0)
+
+# Don't modify - Phillipe's edit  
+def Z_probe():
+         #Successfully created a diagonal
+    move_linear_stage('Z', '+', 50000, wait_for_stop=False, max_wait=30.0)
+    state = Z_calibrate()
+    if state == "Z limit":
+        zed = get_current_position("Z")
+        print(zed)
+
+# Don't modify - Phillipe's edit
+def r_limit():
+         #Successfully created a diagonal
+    move_linear_stage('r', '+', 100, wait_for_stop=False, max_wait=30.0)
+    state = r_calibrate()
+    if state == "R limit":
+        rot = get_current_position("r")
+        print(rot)
+
+# Add code into function to test it using the gui "Printing tester" button
+def line_test_1():
+    print("Starting line test 1...")
+    update_speed(30)
+    tap()
+    
+    # front 400 nordson on
+    update_speed(5)
+    nordson_on()
+    time.sleep(delay)
+    front(2500)
+    update_speed(50)
+    front(1250)
+    update_speed(150)
+    # diagonal front+left 800 nordson off
+    for i in range(20):  # 6 steps x 100µm = 600µm
+        front(100)
+        time.sleep(delay)
+        nordson_on()
+        time.sleep(delay)
+        left(100)
+        nordson_off()
+
+
+
+
+# OLD TESTS — from early development, not updated for new code structure
+def lines_test():
+     """Lay down a set of parallel horizontal glue traces."""
+     print("Starting line test 1...")
+     tap()
+     for i in range(1, 8, 1):
+         nordson_on()
+         time.sleep(delay)
+         update_speed(55) # speed change mod 0-150
+         front(l)
+         nordson_off()
+         update_speed(50)
+         time.sleep(delay)
+        
+         down(tapl)
+         back(l)
+         time.sleep(delay)
+         left(stp)
+         up(tapl)
+     print("Line test 1 complete.")
 
 #  APPROACH A — "Staircase"
-
 def diagonal_staircase(dx: float, dy: float,
                        seg: float = SEG,
                        dispenser: str = None):
@@ -81,7 +195,6 @@ def diagonal_staircase(dx: float, dy: float,
         move_linear_stage(y, yd, abs(ys), wait_for_stop=True, max_wait=15.0)
     _dispenser_off(dispenser)
     print("[Staircase] done.")
-
 
 #  APPROACH B — "Weighted Stair"
 #  Visual path (3:1 ratio):
@@ -137,7 +250,6 @@ def diagonal_weighted(dx: float, dy: float,
     _dispenser_off(dispenser)
     print("[WeightedStair] done.")
 
-
 #  APPROACH C — "Dominant Lead"
 #  Visual (dx >> dy):
 #    XXXXXXXXX         full X sweep
@@ -179,9 +291,7 @@ def diagonal_dominant_lead(dx: float, dy: float,
     _dispenser_off(dispenser)
     print("[DominantLead] done.")
 
-
 #  DIAGONAL MOVEMENT APPROACH D — "Micro-step Diagonal"
-#
 def diagonal_pulse(dx: float, dy: float,
                    seg: float = SEG):
    
@@ -202,9 +312,7 @@ def diagonal_pulse(dx: float, dy: float,
 
     print("[MicroStep] done.")
 
-
 #  GLUE TAP TEST — standalone, independent of all trace tests
-
 def test_glue_tap(hold_s: float = 0.8):
     print(f"=== Glue Tap Test — hold {hold_s}s ===")
     up(tapl)
@@ -216,17 +324,6 @@ def test_glue_tap(hold_s: float = 0.8):
     down(tapl)
 
     print("[GlueTap] done.")
-
-
-#  INTERNAL HELPER — dispenser on/off
-
-def _dispenser_on(dispenser: str):
-    if dispenser == 'nordson':
-        nordson_on()
-
-def _dispenser_off(dispenser: str):
-    if dispenser == 'nordson':
-        nordson_off()
 
 # GLUE DROP & SEQUENCE
 def glue_drop():
@@ -251,131 +348,4 @@ def glue_sequence():
     return_to_origin()
     print("Glue sequence complete.")
 
-
-#  ORIGINAL TESTS  
-
-def line_test_11111():
-    print("Starting line test 1...")
-    update_speed(30)
-    tap()
-    
-    # front 400 nordson on
-    update_speed(5)
-    nordson_on()
-    time.sleep(delay)
-    front(1000)
-    update_speed(50)
-    front(1250)
-    update_speed(150)
-    # diagonal front+left 800 nordson off
-    for i in range(20):  # 6 steps x 100µm = 600µm
-        front(100)
-        time.sleep(delay)
-        nordson_on()
-        time.sleep(delay)
-        left(100)
-        nordson_off()
-    
-
-def line_test_1():
-         #Successfully created a diagonal
-    move_linear_stage('r', '+', 90, wait_for_stop=False, max_wait=30.0)
-    state = get_limit_state()
-    if state == "R limit":
-        rot = get_current_position("r")
-        stop_motor_control()
-        print(rot)
-        
-
-
-    if state == "Z limit":
-        print("Z touched")
-
-def line_test_99():
-    """Test trace — linear on, diagonal off."""
-    print("Starting line test 1...")
-    update_speed(30)
-    up(tapl)
-    
-    # front 400 nordson on
-    nordson_on()
-    time.sleep(delay)
-    front(3000)
-    nordson_off()
-    update_speed(150)
-    # diagonal front+left 800 nordson off
-    for i in range(6):  # 6 steps x 100µm = 600µm
-        front(100)
-        left(100)
-    
-    update_speed(30)
-    # left 400 nordson on
-    nordson_on()
-    time.sleep(delay)
-    left(1800)
-    nordson_off()
-
-    update_speed(150)
-    # diagonal down+left 800 nordson off
-    for i in range(6):  # 6 steps x 100µm = 600µm
-        back(100)
-        left(100)
-    update_speed(30)
-    # back 400 nordson on
-    nordson_on()
-    time.sleep(delay)
-    back(800)
-    nordson_off()
-    down(tapl)
-    
-    update_speed(50)
-    print("Line test 1 complete.")
-
-# OLD TESTS — from early development, not updated for new code structure
-def line_test_4():
-     """Lay down a set of parallel horizontal glue traces."""
-     print("Starting line test 1...")
-     tap()
-     for i in range(1, 8, 1):
-         nordson_on()
-         time.sleep(delay)
-         update_speed(55) # speed change mod 0-150
-         front(l)
-         nordson_off()
-         update_speed(50)
-         time.sleep(delay)
-        
-         down(tapl)
-         back(l)
-         time.sleep(delay)
-         left(stp)
-         up(tapl)
-     print("Line test 1 complete.")
-
-def line_test_2():
-    print("Starting line test 1...")
-    up(tapl)
-    for i in range(1, 4, 1):
-        # draw trace
-        nordson_on()
-        time.sleep(delay) ## If needed you can change the value of the delay variable.
-        update_speed(150) ## Find the best speed change use this line
-        front(l)
-        nordson_off()
-        update_speed(50)
-        # time.sleep(delay)
-
-        # Z safe before return
-        down(tapl)
-
-        # safe return to origin
-        return_to_origin()
-
-        # step over 1000 * i for next trace
-        left(1000 * i)
-
-        # Z again for next trace
-        up(tapl)
-
-    print("Line test 1 complete.")
 

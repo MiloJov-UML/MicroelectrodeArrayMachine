@@ -198,6 +198,17 @@ def steps_to_µm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
     µm_per_step = (screw_pitch * 2000) / (steps_per_rev * microstepping)
     return steps * µm_per_step
 
+def mm_to_steps(mm, axis, screw_pitch=2.0, steps_per_rev=200):
+    microstepping = 1 if axis == 't' else 8
+    steps_per_mm = (steps_per_rev * microstepping) / screw_pitch
+    return round(mm * steps_per_mm)
+    
+def steps_to_mm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
+    microstepping = 1 if axis == 't' else 8
+    mm_per_step = (screw_pitch) / (steps_per_rev * microstepping)
+    return steps * mm_per_step
+
+
 def convert_degrees_to_pulses(deg):
     stepper_angle_deg = 1.8
     transmission_ratio = 180

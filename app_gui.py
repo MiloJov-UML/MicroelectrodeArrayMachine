@@ -31,18 +31,23 @@ from relay_control import (
     solenoid_relay_off,
     nordson_on,
     nordson_off
+    
 )
 
-from trace_test import (
+from Print import (
     line_test_1,
-    glue_drop
+    glue_drop,
+    r_limit,
+    Z_probe
 )
+
 import image_recognition
 from image_recognition import (
     open_camera,
     extrude,
     x_align,
-    r_align)
+    r_align
+)
 
 SETTINGS_FILE = "pcb_settings.json"
 
@@ -520,6 +525,13 @@ def launch_gui():
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
+     # Button: Test Diagonal Move
+    tk.Button(root, text="R calibrate", command=r_limit).pack(pady=11)
+    
+     # Button: Test Diagonal Move
+    tk.Button(root, text="Z calibrate", command=Z_probe).pack(pady=11)
+    
+
     from pcb_mapping import print_trace_pattern
     from pcb_mapping import test_diagonal
     # Button: Print Trace Pattern
@@ -529,7 +541,7 @@ def launch_gui():
     tk.Button(root, text="Test Diagonal Move", command=test_diagonal).pack(pady=10)
 
     # Button: Test Diagonal Move
-    tk.Button(root, text="Trace test 1", command=line_test_1).pack(pady=11)
+    tk.Button(root, text="Printing Tester", command=line_test_1).pack(pady=11)
     
     # Button: Glue test 
     tk.Button(root, text="Glue test", command=glue_drop).pack(pady=11)
