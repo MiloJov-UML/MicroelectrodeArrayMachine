@@ -38,7 +38,8 @@ from Print import (
     line_test_1,
     glue_drop,
     r_limit,
-    Z_probe
+    Z_probe,
+    get_coord
 )
 
 import image_recognition
@@ -524,6 +525,9 @@ def launch_gui():
 
     # Full manual loop
     tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
+
+     # Button: Test Diagonal Move
+    tk.Button(root, text="Get Coordinate", command=get_coord).pack(pady=11)
 
      # Button: Test Diagonal Move
     tk.Button(root, text="R calibrate", command=r_limit).pack(pady=11)

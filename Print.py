@@ -24,8 +24,19 @@ delay = 0.5       # Dispenser settle time
 
 SEG = 50.0      # Default segment size for diagonal interpolation (µm)
 
+pcb_dim = (12, 6) # Dimenstions of Kapton PCB
+x_coord, y_coord, z_coord = None, None, None
+probe_z_coord = None
+print_z_coord = None
+wipe_y = 2123.0
+probe_y = 2342.0 #  Fake
+print_gap = 0.1 # Gap in mm from pcb surface
+print_origin = (23.0, 45.0) # X, Y coordinate for tarting point for print process, probe to find Z
+print_z = None # Z coordinate for printing, set after probing based on print_gap
+diagonal_step = 150.0
 
-#  BASIC MOVES  
+# BASIC MOVES  
+# Use for testing
 
 def up(length):
     move_linear_stage(z, '+', length, wait_for_stop=True, max_wait=30.0)
@@ -50,64 +61,141 @@ def tap():
     up(tapl)
 
 # Trace Dictionay, Don't modify - Phillipe's edit
-# if angle is negative line has negative slope, else positive slope
+# If angle is negative line has negative slope, else positive slope
 # Lengths are in mm, use conversion method
 traces = {
-   1: {"l1": 4.13, "a1": -131.24, "l2": 0.57, "a2": 90.0, "l3": 2.47, "a3": 135.26,"l4": 0.47},
 
-   2: {"l1": 3.22, "a1": -112.95, "l2": 1.47},
+   1: {"a1": 0, "l1": 4.17, "a2": -45.0, "l2": 0.5, "a3": +90.0, "l3": 2.47, "a4": +45.0, "l4": 0.5}, # Outermost trace to the right
 
-   3: {"a1": -80.49, "11": 2.16},
+   2: {"a1": 0, "l1": 3.44, "a2": -45.0, "l2": 0.5 , "a3": +90.0, "l3": 1.0},
 
-   4: {"a1": -85.11, "11": 2.14}
+   3: {"a1": 0, "l1": 2.28, "a2": -45.0, "l2": 0.5},
+
+   4: {"a1": 0, "l1": 2.13}
 }
 
+pads = {
+
+    "ccS": {"l": 0.76, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
+
+    "ccL": {"l": 1.02, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
+
+    "cf": {"l": 1.2, "w": 0.7} # Dimensions of electrode pads, mm
+}
 
 # Don't modify - Phillipe's edit
-def print_trace(trace):
-
-    global dist, angle, length, ang_dir
-
-    for key in traces[trace].keys():
+def print_trace(num):
+    
+    dist = None
+    direction = None
+    angle = None
+    
+    for key, t_dict in traces.items():
         
-        if traces[trace].key.find("l") != -1:
-           length  = traces[trace].key.value
-           dist = mm_to_steps(length)
-           
-        if traces[trace].key.find("a") != "a1":
-           angle = traces[trace].key.value
-        if angle.find("-") != -1: 
-           ang_dir = '+'
-        elif angle.find("+") != -1:
-           ang_dir = '-'
+        for t, value in t_dict.items(): 
+            if t.find("a") != -1:
+                angle = value
+                direction = dir_handler(angle)
+                axis = angle_handler(angle)
+            
+            if t.find("l") != -1:
+                length = value
+                dist = mm_to_steps(length, y)
+            
+            if (dist != None) & (direction != None):
+                if axis != 'd':
+                    move_linear_stage(axis, direction, dist, wait_for_stop=True, max_wait=30.0)
+                    dist = None
+                    direction = None
+                else:
+                    diagonal_handler(dist, angle)
+                    dist = None
+                    direction = None
+                    
+
+def print_pad():
+    #use 3 lines for cf pads, and 2 lines for cc pads
+    for key in pads.keys():
+        length = pads[key].l
+        width = pads[key].w
         
+        vertical_step = mm_to_steps(length)
+        pass_num = None
+
+        if key.find("cc") != -1:
+            pass_num = 2
+            horizontal_step = mm_to_steps(width / pass_num, x)
+        elif key.find("cf") != -1:
+            pass_num = 3
+            horizontal_step = mm_to_steps(width / pass_num, x)
+        else:
+            print("Invalid width")
+
+        for i in range(0, width, horizontal_step):
+            move_linear_stage(x, '+', length, wait_for_stop=True, max_wait=30.0)
+            move_linear_stage(y, '+', diagonal_step, wait_for_stop=True, max_wait=30.0)
+            move_linear_stage(x, '-', length, wait_for_stop=True, max_wait=30.0)
+            move_linear_stage(y, '+', diagonal_step, wait_for_stop=True, max_wait=30.0)
+
+# direction only ussable for printing diagonal lines, for straight lines direction is determined by angle and axis of movement
+def dir_handler(angle):
+    angle_dir = None
+    
+    if angle < 0: 
+        angle_dir = '+'
+    elif angle >= 0:
+        angle_dir = '-'
+    else:
+        angle_dir = 'invalid angle'
+    
+    return angle_dir
+
+def angle_handler(angle):
+    axis = None
+    
+    if abs(angle) == 0:
+        axis = y
+    elif abs(angle) == 45:
+        axis = 'd'
+    elif abs(angle) == 90:
+        axis = x
+    else:
+        axis =  'invalid angle'
+
+    return axis
+
 # Don't modify - Phillipe's edit
-def diagonal_line(length, angle,):
+def diagonal_handler(length, angle):
     # Convert angle to radians
-    theta = math.radians(angle)
-
+    theta = abs(angle)
+    direction = dir_handler(angle)
     # Calculate dx and dy based on the angle
     dx = length * math.cos(theta)
     dy = length * math.sin(theta)
 
-    xl = mm_to_steps(dx)
-    yl = mm_to_steps(dy)
+    xl = mm_to_steps(dx, x)
+    yl = mm_to_steps(dy, y)
 
-    dia = 1 # Diamter of needlde hole or typical printed trace width, used to determine number of segments for diagonal movement
-    div = max(abs(xl), abs(yl)) / dia
+    div = max(abs(xl), abs(yl)) / diagonal_step
 
-    for i in range(div):
-        move_linear_stage(x, '+', xl/div, wait_for_stop=True, max_wait=30.0)
-        move_linear_stage(y, '+', yl/div, wait_for_stop=True, max_wait=30.0)
+    update_speed(150)
+    
+    for i in range(int(div)):
+        nordson_on()
+        time.sleep(delay)
+        move_linear_stage(y, '-', float(yl/div), wait_for_stop=True, max_wait=30.0)
+        nordson_off()
+        move_linear_stage(x, direction, float(xl/div), wait_for_stop=True, max_wait=30.0)
+        
 
 # Don't modify - Phillipe's edit  
 def Z_probe():
-         #Successfully created a diagonal
+    global pcb_z_coord
     move_linear_stage('Z', '+', 50000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
     if state == "Z limit":
-        zed = get_current_position("Z")
-        print(zed)
+        pcb_z_coord = get_current_position("Z")
+        print(pcb_z_coord)
 
 # Don't modify - Phillipe's edit
 def r_limit():
@@ -118,8 +206,23 @@ def r_limit():
         rot = get_current_position("r")
         print(rot)
 
+def get_coord():
+    global x_coord, y_coord, z_coord
+
+    x_coord = get_current_position(x)
+    y_coord = get_current_position(y)
+    z_coord = get_current_position(z)
+    r_coord = get_current_position('r')
+
+    print("X location: " + str(x_coord))
+    print("Y_location: " + str(y_coord))
+    print("Z_location: " + str(z_coord))
+    print("r_location: " + str(r_coord))
+
 # Add code into function to test it using the gui "Printing tester" button
 def line_test_1():
+    
+    """
     print("Starting line test 1...")
     update_speed(30)
     tap()
@@ -140,9 +243,10 @@ def line_test_1():
         time.sleep(delay)
         left(100)
         nordson_off()
+    """
 
-
-
+    for i in range(0, 4, 1):
+        print_trace(traces.get(i))
 
 # OLD TESTS — from early development, not updated for new code structure
 def lines_test():

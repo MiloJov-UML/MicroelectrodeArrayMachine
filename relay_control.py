@@ -179,7 +179,7 @@ def motor_release():
 
 # Don't modify - Phillipe's edit
 def r_calibrate():
-    #relay_ser.open()
+    
     while True:
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         resp = relay_ser.data = relay_ser.read_until(b'R limit').decode("utf-8").strip()
@@ -191,7 +191,7 @@ def r_calibrate():
                 return resp
             
 def Z_calibrate():
-    #relay_ser.open()
+    
     while True:
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         respo = relay_ser.data = relay_ser.read_until(b'Z limit').decode("utf-8").strip()
