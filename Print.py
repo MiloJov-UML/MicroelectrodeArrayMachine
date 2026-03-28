@@ -104,7 +104,9 @@ def print_trace(num):
             
             if (dist != None) & (direction != None):
                 if axis != 'd':
+                    nordson_on()
                     move_linear_stage(axis, direction, dist, wait_for_stop=True, max_wait=30.0)
+                    nordson_off()
                     dist = None
                     direction = None
                 else:
