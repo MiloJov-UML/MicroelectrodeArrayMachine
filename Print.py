@@ -8,8 +8,25 @@
 
 import time
 import math
-from motor_control import move_linear_stage, update_speed, return_to_origin, stop_motor_control, get_current_position, mm_to_steps, steps_to_mm
-from relay_control import nordson_on, nordson_off, motor_backward, motor_forward, motor_release, r_calibrate, Z_calibrate
+from motor_control import (
+    move_linear_stage, 
+    update_speed, 
+    return_to_origin, 
+    stop_motor_control, 
+    get_current_position, 
+    mm_to_steps, 
+    steps_to_mm
+)
+
+from relay_control import (
+    nordson_on, 
+    nordson_off, 
+    motor_backward, 
+    motor_forward, 
+    motor_release, 
+    r_calibrate, 
+    Z_calibrate,
+)   
 
 #parameters for line test
 
@@ -113,6 +130,7 @@ def print_trace(num):
                     diagonal_handler(dist, angle)
                     dist = None
                     direction = None
+        move_linear_stage(x, '+', 1000, wait_for_stop=True, max_wait=20.0)
                     
 
 def print_pad():
@@ -193,11 +211,12 @@ def diagonal_handler(length, angle):
 # Don't modify - Phillipe's edit  
 def Z_probe():
     global pcb_z_coord
-    move_linear_stage('Z', '+', 50000, wait_for_stop=False, max_wait=30.0)
+    move_linear_stage('Z', '+', 40000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
     if state == "Z limit":
         pcb_z_coord = get_current_position("Z")
         print(pcb_z_coord)
+        
 
 # Don't modify - Phillipe's edit
 def r_limit():
@@ -207,6 +226,7 @@ def r_limit():
     if state == "R limit":
         rot = get_current_position("r")
         print(rot)
+        
 
 def get_coord():
     global x_coord, y_coord, z_coord

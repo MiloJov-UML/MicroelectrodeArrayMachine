@@ -178,31 +178,66 @@ def motor_release():
 
 
 # Don't modify - Phillipe's edit
+def start_r_poll():
+    """Turn the R limit switch monitor on."""
+    global relay_ser
+    if relay_ser:
+        send_command(relay_ser, "Start_R_Poll", "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+def end_r_poll():
+    """Turn the R limit switch monitor off."""
+    global relay_ser
+    if relay_ser:
+        send_command(relay_ser, "End_R_Poll", "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+# Don't modify - Phillipe's edit
+def start_z_poll():
+    """Turn the Z limit switch monitor on."""
+    global relay_ser
+    if relay_ser:
+        send_command(relay_ser, "Start_Z_Poll", "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+def end_z_poll():
+    """Turn the Z limit switch monitor off."""
+    global relay_ser
+    if relay_ser:
+        send_command(relay_ser, "End_Z_Poll", "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
 def r_calibrate():
-    
+
     while True:
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         resp = relay_ser.data = relay_ser.read_until(b'R limit').decode("utf-8").strip()
         print(str(resp))
-        if resp != None:
+        
+        if str(resp) != None:
             if str(resp) == "R limit":
                 stop_motor_control()
                 print('R limit reached')
                 return resp
-            
+          
 def Z_calibrate():
     
     while True:
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         respo = relay_ser.data = relay_ser.read_until(b'Z limit').decode("utf-8").strip()
         print(str(respo))
-        if respo != None:
+        
+        if str(respo) != None:
             if str(respo) == "Z limit":
                 stop_motor_control()
                 print('Z limit reached')
                 return respo
             
-        
+           
         
             
     

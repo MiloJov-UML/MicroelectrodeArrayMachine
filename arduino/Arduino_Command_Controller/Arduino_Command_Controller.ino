@@ -5,6 +5,8 @@ const int solPin = 11; // Pin connected to relay2
 const int nordPin = 7;
 const int r_limit = 5;
 const int z_probe = 4;
+bool r_lim = false;
+bool z_prb = false;
 
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
@@ -64,9 +66,9 @@ void loop() {
     else if (command.equalsIgnoreCase("Nordson_Off")) {
       digitalWrite(nordPin, LOW);
       Serial.println("Nordson turned OFF");
-    }
+    }  
 
-    else if (command.startsWith("Motor_Forward_")) {
+    if (command.startsWith("Motor_Forward_")) {
       int steps = command.substring(14).toInt();
       if (steps > 0 && steps <= 10000) {
         Serial.print("Moving motor forward ");
@@ -99,22 +101,43 @@ void loop() {
     else {
       Serial.println("Unknown command");
     }
-  }
-    if (10 > 0) {
-      // R and Z limit commands
+  
+    // R limit switch control commands
+    if (command.equalsIgnoreCase("Start_R_Poll")) {
+      r_lim = true;
+      //Serial.println("Starting r axis Poll");
+        
+    }
+    else if (command.equalsIgnoreCase("End_R_Poll")) {
+      r_lim = false;
+      //Serial.println("Ending r axis Poll");
+    }
+
+    /// Z probe control commands
+    if (command.equalsIgnoreCase("Start_Z_Poll")) {
+      z_prb = true;
+      //Serial.println("Starting Z axis Poll");
+
+    }
+    else if (command.equalsIgnoreCase("End_Z_Poll")) {
+      z_prb = false; 
+        //Serial.println("Ending Z axis Poll");
+    }
+  } 
+    if (10>0)
+    {
+      // R limit commands
       if (digitalRead(r_limit) == LOW)
       {
-        
-        Serial.println("R limit");
-         
+        Serial.println("R limit"); 
       }
 
+      // Z limit commands
       if (digitalRead(z_probe) == LOW)
       {
-        Serial.println("Z limit");
-          
+        Serial.println("Z limit"); 
       }
-      
-  }
-  
+
+    }    
+ 
 }
