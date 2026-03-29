@@ -198,15 +198,18 @@ def steps_to_µm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
     µm_per_step = (screw_pitch * 2000) / (steps_per_rev * microstepping)
     return steps * µm_per_step
 
-def mm_to_steps(mm, axis, screw_pitch=2.0, steps_per_rev=200):
-    microstepping = 1 if axis == 't' else 8
-    steps_per_mm = (steps_per_rev * microstepping) / screw_pitch
-    return round(mm * steps_per_mm)
+def mm_to_um(mm_value):
     
-def steps_to_mm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
-    microstepping = 1 if axis == 't' else 8
-    mm_per_step = (screw_pitch) / (steps_per_rev * microstepping)
-    return steps * mm_per_step
+    # Validate input type
+    if not isinstance(mm_value, (int, float)):
+        raise TypeError("Input must be an integer or float representing millimeters.")
+
+    # Check for invalid numeric values
+    if mm_value != mm_value or mm_value in (float("inf"), float("-inf")):
+        raise ValueError("Input must be a finite number.")
+
+    # Conversion: 1 mm = 1000 µm
+    return mm_value * 1000
 
 
 def convert_degrees_to_pulses(deg):

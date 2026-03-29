@@ -14,8 +14,8 @@ from motor_control import (
     return_to_origin, 
     stop_motor_control, 
     get_current_position, 
-    mm_to_steps, 
-    steps_to_mm
+    µm_to_steps, 
+    mm_to_um
 )
 
 from relay_control import (
@@ -48,9 +48,9 @@ print_z_coord = None
 wipe_y = 2123.0
 probe_y = 2342.0 #  Fake
 print_gap = 0.1 # Gap in mm from pcb surface
-print_origin = (23.0, 45.0) # X, Y coordinate for tarting point for print process, probe to find Z
+print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_z = None # Z coordinate for printing, set after probing based on print_gap
-diagonal_step = 150.0
+diagonal_step = 200.0
 
 # BASIC MOVES  
 # Use for testing
@@ -107,8 +107,12 @@ def print_trace(num):
     direction = None
     angle = None
     
+    move_to_coord(print_origin[0], 2540840.0, 2612907.5) 
+
     for key, t_dict in traces.items():
         
+        
+
         for t, value in t_dict.items(): 
             if t.find("a") != -1:
                 angle = value
@@ -117,11 +121,12 @@ def print_trace(num):
             
             if t.find("l") != -1:
                 length = value
-                dist = mm_to_steps(length, y)
+                dist = mm_to_um(length)
             
             if (dist != None) & (direction != None):
                 if axis != 'd':
                     nordson_on()
+                    update_speed(10)
                     move_linear_stage(axis, direction, dist, wait_for_stop=True, max_wait=30.0)
                     nordson_off()
                     dist = None
@@ -130,10 +135,12 @@ def print_trace(num):
                     diagonal_handler(dist, angle)
                     dist = None
                     direction = None
-        move_linear_stage(x, '+', 1000, wait_for_stop=True, max_wait=20.0)
                     
-
-def print_pad():
+                print_origin[0] = print_origin[0] - 1000
+                move_to_coord(print_origin[0], 2540840.0, 0)
+            
+                
+def print_pad(type):
     #use 3 lines for cf pads, and 2 lines for cc pads
     for key in pads.keys():
         length = pads[key].l
@@ -193,19 +200,19 @@ def diagonal_handler(length, angle):
     dx = length * math.cos(theta)
     dy = length * math.sin(theta)
 
-    xl = mm_to_steps(dx, x)
-    yl = mm_to_steps(dy, y)
+    xl = mm_to_um(length)
+    yl = mm_to_um(length)
 
-    div = max(abs(xl), abs(yl)) / diagonal_step
+    div = max(abs(xl), abs(yl)) /  mm_to_um(diagonal_step)
 
     update_speed(150)
     
-    for i in range(int(div)):
+    for i in range(int(round(div))):
         nordson_on()
         time.sleep(delay)
-        move_linear_stage(y, '-', float(yl/div), wait_for_stop=True, max_wait=30.0)
+        move_linear_stage(y, '-', round(yl/div), wait_for_stop=True, max_wait=30.0)
         nordson_off()
-        move_linear_stage(x, direction, float(xl/div), wait_for_stop=True, max_wait=30.0)
+        move_linear_stage(x, direction, round(xl/div), wait_for_stop=True, max_wait=30.0)
         
 
 # Don't modify - Phillipe's edit  
@@ -240,6 +247,38 @@ def get_coord():
     print("Y_location: " + str(y_coord))
     print("Z_location: " + str(z_coord))
     print("r_location: " + str(r_coord))
+
+def move_to_coord(xx,yy,zz):
+    
+    x_now = get_current_position(x)
+    y_now = get_current_position(y)
+    z_now = get_current_position(z)
+
+    down(5000)
+    if x_now != xx:
+        if x_now < xx:
+            delta_x = xx - x_now
+            move_linear_stage(x, '+', delta_x, wait_for_stop=True, max_wait=30.0)
+        if x_now > xx:
+            delta_x = x_now - xx
+            move_linear_stage(x, '-', delta_x, wait_for_stop=True, max_wait=30.0)
+   
+    if y_now != yy:
+        if y_now < yy:
+            delta_y = yy - y_now
+            move_linear_stage(y, '+', delta_y, wait_for_stop=True, max_wait=30.0)
+        if y_now > yy:
+            delta_y = y_now - yy
+            move_linear_stage(y, '-', delta_y, wait_for_stop=True, max_wait=30.0)
+    up(5000)
+    if z_now != zz:
+        if (z_now < zz) & (z != 0):
+            delta_z = zz - z_now
+            move_linear_stage(z, '+', delta_z, wait_for_stop=True, max_wait=30.0)
+        
+        if (z_now > zz) & (z != 0):
+            delta_z = z_now - zz
+            move_linear_stage(z, '-', delta_z, wait_for_stop=True, max_wait=30.0)
 
 # Add code into function to test it using the gui "Printing tester" button
 def line_test_1():
