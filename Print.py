@@ -34,28 +34,21 @@ x = 'X'
 y = 'Y'
 z = 'Z'
 
-l    = 3000.0   # Trace length in steps
 tapl = 5000.0   # Z tap depth 
 stp  = 1000.0   # Step-over between parallel lines
 delay = 0.5       # Dispenser settle time
 
-SEG = 50.0      # Default segment size for diagonal interpolation (µm)
+x_coord, y_coord, z_coord = None, None, None # Current coordinates
+angle_dir, angle_axis, t_len = None, None, None# Angle-based direction and axis
+x_disp, y_disp = 0, 0 # Cumulative displacement for next feature calculation
+counter = 0 # Feature counter for next feature calculation
 
-pcb_dim = (12, 6) # Dimenstions of Kapton PCB
-x_coord, y_coord, z_coord = None, None, None
-x_now, y_now, z_now = None, None, None
-
-x_disp = 0
-y_disp = 0
-
-probe_z_coord = None
-print_z_coord = None
-wipe_y = 2123.0
-probe_y = 2342.0 #  Fake
-print_gap = 0.1 # Gap in mm from pcb surface
+#print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
+wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
+probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_z = None # Z coordinate for printing, set after probing based on print_gap
-counter = 0
+
 
 # BASIC MOVES  
 # Use for testing
@@ -87,13 +80,22 @@ def tap():
 # Lengths are in mm, use conversion method
 traces = {
 
-   1: {"a1": 0, "l1": 4.17, "a2": -45.0, "l2": 0.5, "a3": -90.0, "l3": 2.47, "a4": +45.0, "l4": 0.5}, # Outermost trace to the right
+   1: {"a1": 90.0, "l1": 4.17, "a2": 135, "l2": 0.5, "a3": 180, "l3": 2.47, "a4": 225, "l4": 0.5}, # Outermost trace to the right
 
-   2: {"a1": 0, "l1": 3.44, "a2": -45.0, "l2": 0.5 , "a3": -90.0, "l3": 1.0},
+   2: {"a1": 90.0, "l1": 3.44, "a2": 135, "l2": 0.5 , "a3": 180, "l3": 1.0},
 
-   3: {"a1": 0, "l1": 2.28, "a2": -45.0, "l2": 0.5},
+   3: {"a1": 90.0, "l1": 2.28, "a2": 135, "l2": 0.5},
 
-   4: {"a1": 0, "l1": 2.13}
+   4: {"a1": 90.0, "l1": 2.13},
+   
+   5: {"a1": 90.0, "l1": 2.13},
+
+   6: {"a1": 90.0, "l1": 2.28, "a2": 45, "l2": 0.5},
+
+   7: {"a1": 90.0, "l1": 3.44, "a2": 45, "l2": 0.5 , "a3": 0, "l3": 1.0},
+
+   8: {"a1": 90.0, "l1": 4.17, "a2": 45, "l2": 0.5, "a3": 0, "l3": 2.47, "a4": 315, "l4": 0.5}
+
 }
 
 pads = {
@@ -106,47 +108,48 @@ pads = {
 }
 
 # Don't modify - Phillipe's edit
-def print_trace(traces):
-    global counter
+def print_traces(traces_dict):
+    global counter, x_disp, y_disp, angle_dir, angle_axis, t_len, x_coord, y_coord, z_coord
     dist = None
     direction = None
     angle = None
     
-    #move_to_coord(print_origin[0], 2540840.0, 2612907.5) 
+    x_coord, y_coord, z_coord = get_current_position(x), get_current_position(y), get_current_position(z)
 
-    for key, t_dict in traces.items():
-        
-        for t, value in t_dict.items(): 
-            if t.find("a") != -1:
-                angle = value
-                direction = dir_handler(angle)
-                axis = axis_handler(angle)
-            
-            if t.find("l") != -1:
-                l = value
-                dist = mm_to_um(l)
-            
-            if (dist != None) & (direction != None):
-                if axis != 'd':
-                    nordson_on()
-                    update_speed(10)
-                    #print(f"Moving {axis} {direction} for {dist}µm at angle {angle}°")
-                    move_linear_stage(axis, direction, dist, wait_for_stop=True, max_wait=30.0)
-                    time.sleep(0.75)
-                    nordson_off()
-                    disp_handler(axis, dist, angle)
-                    dist = None
-                    direction = None
-                    time.sleep(0.5)
-                elif axis == 'd':
-                    diagonal_handler(dist, angle)
-                    dist = None
-                    direction = None
-                    time.sleep(0.5)
+    for i in range(1, len(traces_dict) + 1, 1):
+        print_trace(traces_dict, i)
         counter += 1
-        next_feature(counter, x_disp, y_disp)
-                         
-def print_pad(pad_type):
+        next_feature(counter, x_coord, y_coord, z_coord)
+             
+def print_trace(trace_dict, index):
+    global counter, x_disp, y_disp, angle_dir, angle_axis, t_len               
+    
+    for key, value in (trace_dict.get(index)).items():
+        if key.find("a") != -1:
+                angle = value
+                angle_handler(angle)
+
+        if key.find("l") != -1:
+            t_len = mm_to_um(value)
+            
+        if (t_len != None) & (angle_dir != None):
+            if angle_axis.find('d') == -1:
+                
+                nordson_on()
+                update_speed(20)
+                move_linear_stage(angle_axis, angle_dir, t_len, wait_for_stop=True, max_wait=30.0)
+                disp_handler(angle_axis, t_len, angle_dir)
+                
+                angle_dir, angle_axis, t_len = None, None, None
+
+            elif angle_axis.find('d') != -1:
+                
+                diagonal_handler(angle, t_len, 3)
+                
+                angle_dir, angle_axis, t_len = None, None, None
+
+
+def print_pads(pad_type):
     #use 3 lines for cf pads, and 2 lines for cc pads
     for key in pads.keys():
         length = pads[key].l
@@ -168,79 +171,138 @@ def print_pad(pad_type):
         for i in range(pass_num):
             move_linear_stage(x, '+', length, wait_for_stop=True, max_wait=30.0)
             move_linear_stage(y, '-', length, wait_for_stop=True, max_wait=30.0)
-            
-# direction only ussable for printing diagonal lines, for straight lines direction is determined by angle and axis of movement
-def dir_handler(angle):
+
+def angle_handler(angle):
+    global angle_axis, angle_dir
+
+    angle_axis = None
     angle_dir = None
     
-    if angle == 0: 
+    if angle == 0:
+        angle_axis = x
         angle_dir = '-'
-    elif angle == +45.0:
+    elif 0 < angle < 90:
+        # Q1
+        angle_axis = 'd(+x,+y)'
+        angle_dir = ('-', '-')
+    elif angle == 90:
+        angle_axis = y
+        angle_dir = '-'
+    elif 90 < angle < 180:
+        # Q2
+        angle_axis = 'd(-x,+y)'
+        angle_dir = ('+', '-')  
+    elif angle == 180:
+        angle_axis = x
         angle_dir = '+'
-    elif angle == -45.0:
+    elif 180 < angle < 270:
+        # Q3
+        angle_axis = 'd(-x,-y)'
+        angle_dir = ('+', '+')
+    elif angle == 270:
+        angle_axis = y
+        angle_dir = '+'
+    elif 270 < angle < 360:
+        # Q4
+        angle_axis = 'd(+x,-y)'
+        angle_dir = ('-', '+')
+    elif angle == 360:
+        angle_axis = x
         angle_dir = '-'
-    elif angle == +90.0:
-        angle_dir = '-'
-    elif angle == -90.0:
-        angle_dir = '+'    
-    else:
-        angle_dir = 'invalid angle'
-    
-    return angle_dir
-
-def axis_handler(angle):
-    axis = None
-    
-    if abs(angle) == 0:
-        axis = y
-    elif abs(angle) == 45:
-        axis = 'd'
-    elif abs(angle) == 90:
-        axis = x
-    else:
-        axis =  'invalid angle'
-
-    return axis
-
+     
 # Don't modify - Phillipe's edit
-def diagonal_handler(size, angle):
+def diagonal_handler(angle, t_len, div):
     # Convert angle to radians
-    theta = math.radians(abs(angle))
-    direction = dir_handler(angle)
-    # Calculate dx and dy based on the angle
-    dx = size * math.cos(theta)
-    dy = size * math.sin(theta)
     
-    
-    div = dx / 118
+    nordson_off()
 
-    xstp = round(dx / int(round(div)))
-    ystp = round(dy / int(round(div)))
+    theta = math.radians(abs(angle))
+
+    # Calculate dx and dy based on the angle
+    dx = t_len * math.cos(theta)
+    dy = t_len * math.sin(theta)
+
+    xstp = round(abs(dx / div))
+    ystp = round(abs(dy / div))
     update_speed(200)
     
-    for i in range(int(round(div))):
+    if (angle_dir[0] != None) & (angle_dir[1] != None):
         
-        nordson_on()
-        move_linear_stage(y, direction, ystp, wait_for_stop=True, max_wait=30.0)
-        disp_handler(y, ystp, angle)
-        nordson_off()
-        move_linear_stage(x, '+', xstp, wait_for_stop=True, max_wait=30.0)
-        disp_handler(x, xstp, angle)
-        
+        for i in range(div):
+            
+            move_linear_stage(x, angle_dir[0], xstp, wait_for_stop=True, max_wait=30.0)
+            disp_handler(x, xstp, angle_dir[0])
+            
+            move_linear_stage(y, angle_dir[1], ystp, wait_for_stop=True, max_wait=30.0)
+            disp_handler(y, ystp, angle_dir[1])
 
-        
-
-        #print(f"Moving diagonal at angle {angle}° for segment {i+1}/{int(round(div))} with dx={xstp}µm and dy={ystp}µm")
-
-def disp_handler(disp_axis, distance, angle):
+def disp_handler(disp_axis, distance, angle_dir):
     global x_disp, y_disp
     if disp_axis == x:
-        x_disp += distance
+        if angle_dir == '-':
+            x_disp += distance
+        elif angle_dir == '+':
+            x_disp -= distance
     elif disp_axis == y:
-        if dir_handler(angle) == '-':
+        if angle_dir == '-':
             y_disp += distance
-        elif dir_handler(angle) == '+':
+        elif angle_dir == '+':
             y_disp -= distance
+
+def next_feature0(num, dispx, dispy):
+        
+    global x_disp, y_disp
+    
+    update_speed(50)
+    
+    down(1000)
+    back(abs(dispy))
+    left(abs(dispx))
+
+    x_disp = 0
+    y_disp = 0
+
+    print(f"Moving to next feature {num}")
+    move = num * 1000
+    right(move)
+    x_disp += move
+    
+    up(1000)
+    stop_motor_control()
+
+def next_feature(num, xx, yy, zz):
+        
+    global x_disp, y_disp
+    
+    update_speed(50)
+    
+    down(1000)
+    
+    xdisp = xx - get_current_position(x)
+    ydisp = yy - get_current_position(y)
+    back(abs(ydisp))
+    left(abs(xdisp))    
+
+    print(f"Moving to next feature {num}")
+    move = num * 1000
+    right(move)
+    x_disp += move
+    
+    up(1000)
+    stop_motor_control() 
+        
+def get_coord():
+    global x_coord, y_coord, z_coord
+
+    x_coord = get_current_position(x)
+    y_coord = get_current_position(y)
+    z_coord = get_current_position(z)
+    r_coord = get_current_position('r')
+
+    print("X location: " + str(x_coord))
+    print("Y_location: " + str(y_coord))
+    print("Z_location: " + str(z_coord))
+    print("r_location: " + str(r_coord))
 
 # Don't modify - Phillipe's edit  
 def Z_probe():
@@ -259,69 +321,12 @@ def r_limit():
     if state == "R limit":
         rot = get_current_position("r")
         print(rot)
-        
-def get_coord():
-    global x_coord, y_coord, z_coord
-
-    x_coord = get_current_position(x)
-    y_coord = get_current_position(y)
-    z_coord = get_current_position(z)
-    r_coord = get_current_position('r')
-
-    print("X location: " + str(x_coord))
-    print("Y_location: " + str(y_coord))
-    print("Z_location: " + str(z_coord))
-    print("r_location: " + str(r_coord))
-
-def next_feature(num, dispx, dispy):
-        
-    global x_disp, y_disp
-    
-    update_speed(50)
-    
-    down(1000)
-    back(dispy)
-    left(dispx)
-
-    x_disp = 0
-    y_disp = 0
-
-    print(f"Moving to next feature {num}")
-    move = num * 1000
-    right(move)
-    x_disp += move
-    
-    up(1000)
-    stop_motor_control() 
 
 # Add code into function to test it using the gui "Printing tester" button
 def line_test_1():
     
-    """
-    print("Starting line test 1...")
-    update_speed(30)
-    tap()
-    
-    # front 400 nordson on
-    update_speed(5)
-    nordson_on()
-    time.sleep(delay)
-    front(2500)
-    update_speed(50)
-    front(1250)
-    update_speed(150)
-    # diagonal front+left 800 nordson off
-    for i in range(20):  # 6 steps x 100µm = 600µm
-        front(100)
-        time.sleep(delay)
-        nordson_on()
-        time.sleep(delay)
-        left(100)
-        nordson_off()
-    """
-
-    
-    print_trace(traces)
+    #print_trace(traces, 8)
+    print_traces(traces)
 
 # OLD TESTS — from early development, not updated for new code structure
 def lines_test():
@@ -360,7 +365,7 @@ def test_glue_tap(hold_s: float = 0.8):
 # GLUE DROP & SEQUENCE
 def glue_drop():
     """Dispense glue for a fixed number of seconds then release."""
-    motor_backward(steps=20)
+    motor_backward(steps=10)
     time.sleep(0.5)
     # motor_forward(steps=5000)
     # motor_forward(steps=5000)
