@@ -148,7 +148,6 @@ def print_trace(trace_dict, index):
                 
                 angle_dir, angle_axis, t_len = None, None, None
 
-
 def print_pads(pad_type):
     #use 3 lines for cf pads, and 2 lines for cc pads
     for key in pads.keys():
@@ -248,27 +247,6 @@ def disp_handler(disp_axis, distance, angle_dir):
             y_disp += distance
         elif angle_dir == '+':
             y_disp -= distance
-
-def next_feature0(num, dispx, dispy):
-        
-    global x_disp, y_disp
-    
-    update_speed(50)
-    
-    down(1000)
-    back(abs(dispy))
-    left(abs(dispx))
-
-    x_disp = 0
-    y_disp = 0
-
-    print(f"Moving to next feature {num}")
-    move = num * 1000
-    right(move)
-    x_disp += move
-    
-    up(1000)
-    stop_motor_control()
 
 def next_feature(num, xx, yy, zz):
         
