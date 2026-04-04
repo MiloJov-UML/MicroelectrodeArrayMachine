@@ -1,11 +1,3 @@
-# trace_test.py
-#
-#   Approach A — "Staircase"       : pure alternating X/Y step
-#   Approach B — "Weighted Stair"  : axis-ratio steps for any angle
-#   Approach C — "Dominant Lead"   : longer axis drives, shorter fills gaps
-#   Approach D — "Pulse Diagonal"  : fixed micro-steps with glue pulse per segment
-
-
 import time
 import math
 from motor_control import (
@@ -44,6 +36,7 @@ counter = 0 # Feature counter for next feature calculation
 temp_location = None
 temp_l = None
 temp_w = None
+
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
 wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
@@ -106,11 +99,7 @@ pad_types = {
     "cl": {"l": 1.02, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
 
     "me": {"l": 1.2, "w": 0.7}    # Dimensions of electrode pads, mm
-}
-
-pad_positions = {
-
-    1: ('-', )
+    
 }
 
 pads = {
@@ -241,9 +230,6 @@ def print_pad(pad_dict, pad_type, position):
     pad_motion_handler(position, temp_l, temp_w)
     nordson_off()
 
-    
-
-
 def pad_position_handler(dict, type, position):
     
     global temp_location, temp_l, temp_w
@@ -256,7 +242,7 @@ def pad_position_handler(dict, type, position):
     winc = round(width / 5)
     temp_w = winc
     update_speed(10)
-    
+
     if position == 1:
         right(winc)
         front(linc)
@@ -377,7 +363,6 @@ def get_coord():
     print("Y_location: " + str(y_coord))
     print("Z_location: " + str(z_coord))
     print("r_location: " + str(r_coord))
-
 
 # Don't modify - Phillipe's edit  
 def Z_probe():
