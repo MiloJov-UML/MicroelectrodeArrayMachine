@@ -39,10 +39,11 @@ stp  = 1000.0   # Step-over between parallel lines
 delay = 0.5       # Dispenser settle time
 
 x_coord, y_coord, z_coord = None, None, None # Current coordinates
-angle_dir, angle_axis, t_len = None, None, None# Angle-based direction and axis
-x_disp, y_disp = 0, 0 # Cumulative displacement for next feature calculation
+angle_dir, angle_axis, t_len = None, None, None# Angle based direction and axis, trace length
 counter = 0 # Feature counter for next feature calculation
-
+temp_location = None
+temp_l = None
+temp_w = None
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
 wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
@@ -98,31 +99,53 @@ traces = {
 
 }
 
+pad_types = {
+
+    "cs": {"l": 0.76, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
+
+    "cl": {"l": 1.02, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
+
+    "me": {"l": 1.2, "w": 0.7}    # Dimensions of electrode pads, mm
+}
+
+pad_positions = {
+
+    1: ('-', )
+}
+
 pads = {
+    
+    1: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 4, "e": 4}}, 
+    
+    2: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 2, "e": 2}},
+    
+    3: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cl", "s": 2, "e": 2}},
+    
+    4: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cl", "s": 1, "e": 1}},
+    
+    5: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cl", "s": 7, "e": 7}},
+    
+    6: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cl", "s": 6, "e": 6}},
+    
+    7: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 6, "e": 6}},
+    
+    8: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 7, "e": 7}}
 
-    "ccS": {"l": 0.76, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
-
-    "ccL": {"l": 1.02, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
-
-    "cf": {"l": 1.2, "w": 0.7} # Dimensions of electrode pads, mm
 }
 
 # Don't modify - Phillipe's edit
 def print_traces(traces_dict):
-    global counter, x_disp, y_disp, angle_dir, angle_axis, t_len, x_coord, y_coord, z_coord
-    dist = None
-    direction = None
-    angle = None
-    
+    global counter, angle_dir, angle_axis, t_len, x_coord, y_coord, z_coord
+
     x_coord, y_coord, z_coord = get_current_position(x), get_current_position(y), get_current_position(z)
 
     for i in range(1, len(traces_dict) + 1, 1):
         print_trace(traces_dict, i)
         counter += 1
-        next_feature(counter, x_coord, y_coord, z_coord)
+        next_feature(counter, x_coord, y_coord, 1000)
              
 def print_trace(trace_dict, index):
-    global counter, x_disp, y_disp, angle_dir, angle_axis, t_len               
+    global counter,angle_dir, angle_axis, t_len               
     
     for key, value in (trace_dict.get(index)).items():
         if key.find("a") != -1:
@@ -133,43 +156,18 @@ def print_trace(trace_dict, index):
             t_len = mm_to_um(value)
             
         if (t_len != None) & (angle_dir != None):
+            
             if angle_axis.find('d') == -1:
-                
                 nordson_on()
                 update_speed(20)
                 move_linear_stage(angle_axis, angle_dir, t_len, wait_for_stop=True, max_wait=30.0)
-                disp_handler(angle_axis, t_len, angle_dir)
                 
                 angle_dir, angle_axis, t_len = None, None, None
 
-            elif angle_axis.find('d') != -1:
-                
+            elif angle_axis.find('d') != -1:             
                 diagonal_handler(angle, t_len, 3)
                 
-                angle_dir, angle_axis, t_len = None, None, None
-
-def print_pads(pad_type):
-    #use 3 lines for cf pads, and 2 lines for cc pads
-    for key in pads.keys():
-        length = pads[key].l
-        width = pads[key].w
-        
-        vertical_step = mm_to_um(length)
-        pass_num = None
-
-        if key.find(pad_type) != -1:
-            pass_num = 2
-            horizontal_step = mm_to_um(width / pass_num)
-            
-        elif key.find(pad_type) != -1:
-            pass_num = 3
-            horizontal_step = mm_to_um(width / pass_num)
-        else:
-            print("Invalid width")
-
-        for i in range(pass_num):
-            move_linear_stage(x, '+', length, wait_for_stop=True, max_wait=30.0)
-            move_linear_stage(y, '-', length, wait_for_stop=True, max_wait=30.0)
+                angle_dir, angle_axis, t_len = None, None, None       
 
 def angle_handler(angle):
     global angle_axis, angle_dir
@@ -230,42 +228,140 @@ def diagonal_handler(angle, t_len, div):
         for i in range(div):
             
             move_linear_stage(x, angle_dir[0], xstp, wait_for_stop=True, max_wait=30.0)
-            disp_handler(x, xstp, angle_dir[0])
+            
             
             move_linear_stage(y, angle_dir[1], ystp, wait_for_stop=True, max_wait=30.0)
-            disp_handler(y, ystp, angle_dir[1])
+            
+def print_pad(pad_dict, pad_type, position):
+    
+    global temp_l, temp_w
 
-def disp_handler(disp_axis, distance, angle_dir):
-    global x_disp, y_disp
-    if disp_axis == x:
-        if angle_dir == '-':
-            x_disp += distance
-        elif angle_dir == '+':
-            x_disp -= distance
-    elif disp_axis == y:
-        if angle_dir == '-':
-            y_disp += distance
-        elif angle_dir == '+':
-            y_disp -= distance
+    nordson_on()
+    pad_position_handler(pad_dict, pad_type, position)
+    pad_motion_handler(position, temp_l, temp_w)
+    nordson_off()
 
-def next_feature(num, xx, yy, zz):
-        
-    global x_disp, y_disp
+    
+
+
+def pad_position_handler(dict, type, position):
+    
+    global temp_location, temp_l, temp_w
+
+    length = mm_to_um(dict.get(type).get("l"))
+    linc = round(length / 5)
+    temp_l = linc
+
+    width = mm_to_um(dict.get(type).get("w"))
+    winc = round(width / 5)
+    temp_w = winc
+    update_speed(10)
+    
+    if position == 1:
+        right(winc)
+        front(linc)
+    elif position == 2:
+        right(winc)
+    elif position == 3:
+        right(winc)
+        back(linc)
+    elif position == 4:
+        back(linc)
+    elif position == 5:
+        left(winc)
+        back(linc)
+    elif position == 6:
+        left(winc)
+    elif position == 7:
+        left(winc)
+        front(linc)
+    elif position == 8:
+        front(winc)
+    else:
+        print("invalid position")
+
+    temp_location = (get_current_position(x), get_current_position(y))
+
+def pad_motion_handler(position, length, width):
+    
+    update_speed(10)
+    if position == 1:
+        front(length*2)
+        right(width*2)
+        back(length*2)
+        left(length*2)
+        front(length*2)
+
+        left(width)
+        back(length)
+    elif position == 2:
+        front(length*1)
+        right(width*2)
+        back(length*2)
+        left(length*2)
+        front(length*2)
+
+        left(width)
+    elif position == 3:
+        right(width*2)
+        back(length*2)
+        left(width*3)
+        front(length*3)
+
+        left(width)
+        front(length)
+    elif position == 4:
+        right(width*1)
+        back(length*2)
+        left(width*2)
+        front(length*2)
+
+        front(length)
+    elif position == 5:
+        back(length*2)
+        left(width*2)
+        front(length*2)
+        right(width*2)
+
+        right(width)
+        front(length)
+    elif position == 6:
+        back(length*1)
+        left(width*2)
+        front(length*2)
+        right(width*2)
+
+        right(width)
+    elif position == 7:
+        left(width*2)
+        front(length*2)
+        right(width*2)
+        back(length*2)
+
+        right(width)
+        back(length)
+    elif position == 8:
+        left(width*1)
+        front(length*2)
+        right(width*2)
+        back(length*2)
+
+        back(width)
+    else:
+        print("invalid position")
+
+def next_feature(num, xx, yy, spacing):
     
     update_speed(50)
-    
     down(1000)
-    
     xdisp = xx - get_current_position(x)
     ydisp = yy - get_current_position(y)
     back(abs(ydisp))
     left(abs(xdisp))    
 
     print(f"Moving to next feature {num}")
-    move = num * 1000
+    move = num * spacing
     right(move)
-    x_disp += move
-    
     up(1000)
     stop_motor_control() 
         
@@ -281,6 +377,7 @@ def get_coord():
     print("Y_location: " + str(y_coord))
     print("Z_location: " + str(z_coord))
     print("r_location: " + str(r_coord))
+
 
 # Don't modify - Phillipe's edit  
 def Z_probe():
@@ -304,28 +401,11 @@ def r_limit():
 def line_test_1():
     
     #print_trace(traces, 8)
-    print_traces(traces)
+    #print_traces(traces)
 
-# OLD TESTS — from early development, not updated for new code structure
-def lines_test():
-     """Lay down a set of parallel horizontal glue traces."""
-     print("Starting line test 1...")
-     tap()
-     for i in range(1, 8, 1):
-         nordson_on()
-         time.sleep(delay)
-         update_speed(55) # speed change mod 0-150
-         front(l)
-         nordson_off()
-         update_speed(50)
-         time.sleep(delay)
-        
-         down(tapl)
-         back(l)
-         time.sleep(delay)
-         left(stp)
-         up(tapl)
-     print("Line test 1 complete.")
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 1)
+    print_pad(pad_types, "cs", 4)
 
 #  GLUE TAP TEST — standalone, independent of all trace tests
 def test_glue_tap(hold_s: float = 0.8):
