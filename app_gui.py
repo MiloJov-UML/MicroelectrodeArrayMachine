@@ -35,6 +35,7 @@ from relay_control import (
 )
 
 from Print import (
+    glue_sequence,
     line_test_1,
     glue_drop,
     r_limit,
@@ -548,7 +549,7 @@ def launch_gui():
     tk.Button(root, text="Printing Tester", command=line_test_1).pack(pady=11)
     
     # Button: Glue test 
-    tk.Button(root, text="Glue test", command=glue_drop).pack(pady=11)
+    tk.Button(root, text="Glue test", command= glue_sequence).pack(pady=11)
 
 
     root.mainloop()

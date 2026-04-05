@@ -148,7 +148,7 @@ def print_trace(trace_dict, index):
             
             if angle_axis.find('d') == -1:
                 nordson_on()
-                update_speed(20)
+                update_speed(15) #ORIGINAL WAS 20, adjust for better print quality/speed tradeoff
                 move_linear_stage(angle_axis, angle_dir, t_len, wait_for_stop=True, max_wait=30.0)
                 
                 angle_dir, angle_axis, t_len = None, None, None
@@ -200,7 +200,7 @@ def angle_handler(angle):
 def diagonal_handler(angle, t_len, div):
     # Convert angle to radians
     
-    nordson_off()
+    nordson_off() # Originally was off
 
     theta = math.radians(abs(angle))
 
@@ -241,7 +241,7 @@ def pad_position_handler(dict, type, position):
     width = mm_to_um(dict.get(type).get("w"))
     winc = round(width / 5)
     temp_w = winc
-    update_speed(10)
+    update_speed(7) # Adjust for better print quality, original was 10
 
     if position == 1:
         right(winc)
@@ -270,7 +270,7 @@ def pad_position_handler(dict, type, position):
 
 def pad_motion_handler(position, length, width):
     
-    update_speed(10)
+    update_speed(7) # Adjust for better print quality, original was 10
     if position == 1:
         front(length*2)
         right(width*2)
@@ -392,40 +392,27 @@ def line_test_1():
     print_trace(traces, 1)
     print_pad(pad_types, "cs", 4)
 
-#  GLUE TAP TEST — standalone, independent of all trace tests
-def test_glue_tap(hold_s: float = 0.8):
-    print(f"=== Glue Tap Test — hold {hold_s}s ===")
-    up(tapl)
-    time.sleep(hold_s)
-    down(tapl)
-    left(100)
-    up(tapl)
-    time.sleep(hold_s)
-    down(tapl)
-
-    print("[GlueTap] done.")
 
 # GLUE DROP & SEQUENCE
 def glue_drop():
-    """Dispense glue for a fixed number of seconds then release."""
-    motor_backward(steps=10)
-    time.sleep(0.5)
-    # motor_forward(steps=5000)
-    # motor_forward(steps=5000)
-    # time.sleep(1.0)
+    """Dispense glue then retract slightly to stop drip."""
+    motor_backward(steps=7.3)  # Dispense glue, adjust steps as needed for desired drop size
+    time.sleep(5.0)  # Wait for glue to dispense
+    motor_forward(steps=7.0)  # Retract to prevent dripping
+    print("Glue drop complete.")
     motor_release()
 
 def glue_sequence():
-    """Glue tap sequence at 1000µm intervals left, up to 8000µm."""
+    """Glue drop sequence at 1000µm intervals left up to 8000µm."""
     print("Starting glue sequence...")
     update_speed(50)
-    return_to_origin()
-    for i in range(1, 9):  # 1000, 2000 ... 8000
-        left(1000)
-        up(tapl)
+    
+    for i in range(8):  # 0, 1000, 2000 ... 7000
+        if i > 0:
+            right(1000)
+        up(3000)
         glue_drop()
-        down(tapl)
-    return_to_origin()
+        down(3000)
+    
+    # return_to_origin()
     print("Glue sequence complete.")
-
-
