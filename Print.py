@@ -102,6 +102,8 @@ pad_types = {
     
 }
 
+pad_positions = [0,1,2,3,4,5,6,7] # Positions of pads around the center of the print area, starting from top right and going clockwise
+
 pads = {
     
     1: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 4, "e": 4}}, 
@@ -217,8 +219,7 @@ def diagonal_handler(angle, t_len, div):
         for i in range(div):
             
             move_linear_stage(x, angle_dir[0], xstp, wait_for_stop=True, max_wait=30.0)
-            
-            
+        
             move_linear_stage(y, angle_dir[1], ystp, wait_for_stop=True, max_wait=30.0)
             
 def print_pad(pad_dict, pad_type, position):
@@ -272,14 +273,14 @@ def pad_motion_handler(position, length, width):
     
     update_speed(7) # Adjust for better print quality, original was 10
     if position == 1:
-        front(length*2)
         right(width*2)
-        back(length*2)
-        left(length*2)
         front(length*2)
-
+        left(length*2)
+        back(length*2)
+        
         left(width)
         back(length)
+        
     elif position == 2:
         front(length*1)
         right(width*2)
@@ -291,8 +292,8 @@ def pad_motion_handler(position, length, width):
     elif position == 3:
         right(width*2)
         back(length*2)
-        left(width*3)
-        front(length*3)
+        left(width*2)
+        front(length*2)
 
         left(width)
         front(length)
@@ -326,7 +327,7 @@ def pad_motion_handler(position, length, width):
 
         right(width)
         back(length)
-    elif position == 8:
+    elif position == 0:
         left(width*1)
         front(length*2)
         right(width*2)
@@ -350,7 +351,65 @@ def next_feature(num, xx, yy, spacing):
     right(move)
     up(1000)
     stop_motor_control() 
-        
+
+def print_pcb():
+    global x_coord, y_coord, counter
+
+    x_coord, y_coord = get_current_position(x), get_current_position(y)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 1)
+    print_pad(pad_types, "cs", 4)
+    
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 2)
+    print_pad(pad_types, "cs", 2)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 3)
+    print_pad(pad_types, "cl", 2)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 4)
+    print_pad(pad_types, "cl", 1)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 5)
+    print_pad(pad_types, "cl", 7)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 6)
+    print_pad(pad_types, "cl", 6)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 7)
+    print_pad(pad_types, "cs", 6)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 8)
+    print_pad(pad_types, "cs", 4)
+
 def get_coord():
     global x_coord, y_coord, z_coord
 
@@ -387,11 +446,7 @@ def line_test_1():
     
     #print_trace(traces, 8)
     #print_traces(traces)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 1)
-    print_pad(pad_types, "cs", 4)
-
+    print_pcb()
 
 # GLUE DROP & SEQUENCE
 def glue_drop():
