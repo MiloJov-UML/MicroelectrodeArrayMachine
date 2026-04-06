@@ -34,9 +34,9 @@ from relay_control import (
     
 )
 
-from Print import (
+from print import (
     glue_sequence,
-    line_test_1,
+    print_tester,
     glue_drop,
     r_limit,
     Z_probe,
@@ -546,7 +546,7 @@ def launch_gui():
     tk.Button(root, text="Test Diagonal Move", command=test_diagonal).pack(pady=10)
 
     # Button: Test Diagonal Move
-    tk.Button(root, text="Printing Tester", command=line_test_1).pack(pady=11)
+    tk.Button(root, text="Print Tester", command= print_tester).pack(pady=11)
     
     # Button: Glue test 
     tk.Button(root, text="Glue test", command= glue_sequence).pack(pady=11)

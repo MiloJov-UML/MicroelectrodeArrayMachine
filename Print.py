@@ -441,8 +441,8 @@ def r_limit():
         rot = get_current_position("r")
         print(rot)
 
-# Add code into function to test it using the gui "Printing tester" button
-def line_test_1():
+# Add code into function to test it using the gui "Print tester" button
+def print_tester():
     
     #print_trace(traces, 8)
     #print_traces(traces)
