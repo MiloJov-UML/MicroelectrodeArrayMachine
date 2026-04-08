@@ -7,7 +7,7 @@ int val;        // Variable to read the value from serial input
 
 void setup() {
   Serial.begin(9600); // Start serial communication at 9600 baud
-  myservo.attach(10); // Attaches the servo on pin 10 to the servo object (or pin 9)
+  myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
   myservo.write(pos); // Set initial position
   Serial.println("Servo control ready. Press 'u' to move up, 'd' to move down.");
 }

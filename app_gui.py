@@ -37,7 +37,6 @@ from relay_control import (
 from print import (
     glue_sequence,
     print_tester,
-    glue_drop,
     r_limit,
     Z_probe,
     get_coord
@@ -179,7 +178,7 @@ def run_full_manual_loop():
         motor_release()
         
         # Move everything to origin before we begin
-        """return_to_origin()
+        return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
             print(f"Automated Alignment on Pad #{pad_num}")
@@ -198,13 +197,23 @@ def run_full_manual_loop():
             laser_cut()
             
             # Return to origin after finishing this pad
-            return_to_origin()"""
+            return_to_origin()
 
         print("--- Automated Routine Completed ---")
 
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
+
+def run_full_assembly():
+
+    r_limit()
+
+    # find x and y limits, add them to 
+    # Move to probe position
+    # Move to 
+
+
 
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
@@ -535,17 +544,7 @@ def launch_gui():
     
      # Button: Test Diagonal Move
     tk.Button(root, text="Z calibrate", command=Z_probe).pack(pady=11)
-    
-
-    from pcb_mapping import print_trace_pattern
-    from pcb_mapping import test_diagonal
-    # Button: Print Trace Pattern
-    tk.Button(root, text="Print Trace Pattern", command=print_trace_pattern).pack(pady=10)
-
-    # Button: Test Diagonal Move
-    tk.Button(root, text="Test Diagonal Move", command=test_diagonal).pack(pady=10)
-
-    # Button: Test Diagonal Move
+  
     tk.Button(root, text="Print Tester", command= print_tester).pack(pady=11)
     
     # Button: Glue test 

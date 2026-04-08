@@ -231,6 +231,25 @@ def print_pad(pad_dict, pad_type, position):
     pad_motion_handler(position, temp_l, temp_w)
     nordson_off()
 
+def pad_handler(l, w, position):
+    
+    if position == 0:
+        front(1111)
+    elif position == 1:
+        front(1111)
+    elif position == 2:
+        front(1111)
+    elif position == 3:
+        front(1111)
+    elif position == 4:
+        front(1111)
+    elif position == 5:
+        front(1111)
+    elif position == 6:
+        front(1111)
+    elif position == 7:
+        front(1111)
+
 def pad_position_handler(dict, type, position):
     
     global temp_location, temp_l, temp_w
