@@ -94,11 +94,11 @@ traces = {
 
 pad_types = {
 
-    "cs": {"l": 0.76, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
+    "cs": {"l": 0.75, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
 
-    "cl": {"l": 1.02, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
+    "cl": {"l": 1, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
 
-    "me": {"l": 1.2, "w": 0.7}    # Dimensions of electrode pads, mm
+    "me": {"l": 1.2, "w": 0.55}    # Dimensions of electrode pads, mm
     
 }
 
@@ -123,6 +123,67 @@ pads = {
     8: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 7, "e": 7}}
 
 }
+
+def print_pcb():
+    global x_coord, y_coord, counter
+
+    x_coord, y_coord = get_current_position(x), get_current_position(y)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 1)
+    print_pad(pad_types, "cs", 4)
+    
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 2)
+    print_pad(pad_types, "cs", 2)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 3)
+    print_pad(pad_types, "cl", 2)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 4)
+    print_pad(pad_types, "cl", 1)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 5)
+    print_pad(pad_types, "cl", 7)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 6)
+    print_pad(pad_types, "cl", 6)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 7)
+    print_pad(pad_types, "cs", 6)
+
+    counter += 1
+    next_feature(counter, x_coord, y_coord, 1000)
+
+    print_pad(pad_types, "me", 4)
+    print_trace(traces, 8)
+    print_pad(pad_types, "cs", 4)
+
+    update_speed(50)
+    down(10000)
 
 # Don't modify - Phillipe's edit
 def print_traces(traces_dict):
@@ -197,7 +258,7 @@ def angle_handler(angle):
     elif angle == 360:
         angle_axis = x
         angle_dir = '-'
-     
+  
 # Don't modify - Phillipe's edit
 def diagonal_handler(angle, t_len, div):
     # Convert angle to radians
@@ -224,137 +285,74 @@ def diagonal_handler(angle, t_len, div):
             
 def print_pad(pad_dict, pad_type, position):
     
-    global temp_l, temp_w
+    global x_coord, y_coord, counter
 
     nordson_on()
-    pad_position_handler(pad_dict, pad_type, position)
-    pad_motion_handler(position, temp_l, temp_w)
+    pad_handler(pad_dict, pad_type, position)
     nordson_off()
-
-def pad_handler(l, w, position):
     
-    if position == 0:
-        front(1111)
-    elif position == 1:
-        front(1111)
-    elif position == 2:
-        front(1111)
-    elif position == 3:
-        front(1111)
-    elif position == 4:
-        front(1111)
-    elif position == 5:
-        front(1111)
-    elif position == 6:
-        front(1111)
-    elif position == 7:
-        front(1111)
 
-def pad_position_handler(dict, type, position):
+def pad_handler(pad_dict, pad_type, position):
     
     global temp_location, temp_l, temp_w
 
-    length = mm_to_um(dict.get(type).get("l"))
-    linc = round(length / 5)
-    temp_l = linc
-
-    width = mm_to_um(dict.get(type).get("w"))
-    winc = round(width / 5)
-    temp_w = winc
-    update_speed(7) # Adjust for better print quality, original was 10
-
-    if position == 1:
-        right(winc)
-        front(linc)
-    elif position == 2:
-        right(winc)
-    elif position == 3:
-        right(winc)
-        back(linc)
-    elif position == 4:
-        back(linc)
-    elif position == 5:
-        left(winc)
-        back(linc)
-    elif position == 6:
-        left(winc)
-    elif position == 7:
-        left(winc)
-        front(linc)
-    elif position == 8:
-        front(winc)
-    else:
-        print("invalid position")
-
-    temp_location = (get_current_position(x), get_current_position(y))
-
-def pad_motion_handler(position, length, width):
+    length = mm_to_um(pad_dict.get(pad_type).get("l"))
+    width = mm_to_um(pad_dict.get(pad_type).get("w"))
     
-    update_speed(7) # Adjust for better print quality, original was 10
-    if position == 1:
-        right(width*2)
-        front(length*2)
-        left(length*2)
-        back(length*2)
+    update_speed(7)
+
+    if position == 0:
         
+        right(width/2)
+        front(length)
         left(width)
         back(length)
-        
+        right(width/2)
+
+    elif position == 1:
+        front(length)
+        right(width)
+        back(length)
+        left(width)
+
     elif position == 2:
-        front(length*1)
-        right(width*2)
-        back(length*2)
-        left(length*2)
-        front(length*2)
-
-        left(width)
-    elif position == 3:
-        right(width*2)
-        back(length*2)
-        left(width*2)
-        front(length*2)
-
-        left(width)
-        front(length)
-    elif position == 4:
-        right(width*1)
-        back(length*2)
-        left(width*2)
-        front(length*2)
-
-        front(length)
-    elif position == 5:
-        back(length*2)
-        left(width*2)
-        front(length*2)
-        right(width*2)
-
-        right(width)
-        front(length)
-    elif position == 6:
-        back(length*1)
-        left(width*2)
-        front(length*2)
-        right(width*2)
-
-        right(width)
-    elif position == 7:
-        left(width*2)
-        front(length*2)
-        right(width*2)
-        back(length*2)
-
+        front(length/2)
         right(width)
         back(length)
-    elif position == 0:
-        left(width*1)
-        front(length*2)
-        right(width*2)
-        back(length*2)
+        left(width)
+        front(length/2)
 
-        back(width)
-    else:
-        print("invalid position")
+    elif position == 3:
+        right(width)
+        back(length)
+        left(width)
+        front(length)
+
+    elif position == 4:
+        left(width/2)
+        back(length)
+        right(width)
+        front(length)
+        left(width/2)
+
+    elif position == 5:
+        back(length)
+        left(width)
+        front(length)
+        right(width)    
+
+    elif position == 6:
+        back(length/2)
+        left(width)
+        front(length)
+        right(width)
+        back(length/2)
+
+    elif position == 7:
+        left(width)
+        front(length)
+        right(width)
+        back(length)
 
 def next_feature(num, xx, yy, spacing):
     
@@ -370,64 +368,6 @@ def next_feature(num, xx, yy, spacing):
     right(move)
     up(1000)
     stop_motor_control() 
-
-def print_pcb():
-    global x_coord, y_coord, counter
-
-    x_coord, y_coord = get_current_position(x), get_current_position(y)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 1)
-    print_pad(pad_types, "cs", 4)
-    
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 2)
-    print_pad(pad_types, "cs", 2)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 3)
-    print_pad(pad_types, "cl", 2)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 4)
-    print_pad(pad_types, "cl", 1)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 5)
-    print_pad(pad_types, "cl", 7)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 6)
-    print_pad(pad_types, "cl", 6)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 7)
-    print_pad(pad_types, "cs", 6)
-
-    counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 4)
-    print_trace(traces, 8)
-    print_pad(pad_types, "cs", 4)
 
 def get_coord():
     global x_coord, y_coord, z_coord
