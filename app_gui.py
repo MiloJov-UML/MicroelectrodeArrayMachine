@@ -205,16 +205,6 @@ def run_full_manual_loop():
         messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
         print(f"Exception in run_full_manual_loop: {e}")
 
-def run_full_assembly():
-
-    r_limit()
-
-    # find x and y limits, add them to 
-    # Move to probe position
-    # Move to 
-
-
-
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")

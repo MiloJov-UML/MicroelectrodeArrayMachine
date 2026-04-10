@@ -5,7 +5,8 @@ from motor_control import (
     update_speed, 
     return_to_origin, 
     stop_motor_control, 
-    get_current_position, 
+    get_current_position,
+    wait_for_axis_stop,
     µm_to_steps, 
     mm_to_um
 )
@@ -40,6 +41,7 @@ temp_w = None
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
 wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
+print_home = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_z = None # Z coordinate for printing, set after probing based on print_gap
 
@@ -127,6 +129,7 @@ pads = {
 def print_pcb():
     global x_coord, y_coord, counter
 
+    print_origin()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
     print_pad(pad_types, "me", 4)
@@ -273,7 +276,7 @@ def diagonal_handler(angle, t_len, div):
 
     xstp = round(abs(dx / div))
     ystp = round(abs(dy / div))
-    update_speed(200)
+    update_speed(150)
     
     if (angle_dir[0] != None) & (angle_dir[1] != None):
         
@@ -330,7 +333,8 @@ def pad_handler(pad_dict, pad_type, position):
 
     elif position == 4:
         left(width/2)
-        back(length)
+        time.sleep(1.0)
+        move_linear_stage(y, '+', length, wait_for_stop=True, max_wait=30.0)
         right(width)
         front(length)
         left(width/2)
@@ -400,13 +404,59 @@ def r_limit():
         rot = get_current_position("r")
         print(rot)
 
+def x_home():
+    global print_home
+
+    update_speed(100)
+    move_linear_stage(x, '+', 60000, wait_for_stop=False, max_wait=30.0)
+
+    if wait_for_axis_stop(x) != True:
+        print_home[0] = get_current_position(x)
+        print(f"X home position set at {print_home[0]}") 
+
+def y_home():
+    global print_home
+
+    update_speed(100)
+    move_linear_stage(y, '+', 60000, wait_for_stop=False, max_wait=30.0)
+
+    if wait_for_axis_stop(y) != True:
+        print_home[1] = get_current_position(y)
+        print(f"Y home position set at {print_home[1]}")
+    
+def z_home():
+    global print_home
+
+    update_speed(100)
+    move_linear_stage(z, '-', 60000, wait_for_stop=False, max_wait=30.0)
+
+    if wait_for_axis_stop(z) != True:
+        print_home[2] = get_current_position(z)
+        print(f"Z home position set at {print_home[2]}")    
+    
+def print_origin():
+    z_home()
+    y_home()
+    x_home()
+    
+
+    time.sleep(1.0)
+    move_linear_stage(y, '-', 23790, wait_for_stop=True, max_wait=30.0)
+    
+    time.sleep(1.0)
+    move_linear_stage(x, '-', 29650, wait_for_stop=True, max_wait=30.0)
+
+    time.sleep(1.0)
+    move_linear_stage(z, '+', 22360.5, wait_for_stop=True, max_wait=30.0)
+    # To be replaced with Z probe
+
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
     
     #print_trace(traces, 8)
     #print_traces(traces)
     print_pcb()
-
+    
 # GLUE DROP & SEQUENCE
 def glue_drop():
     """Dispense glue then retract slightly to stop drip."""
