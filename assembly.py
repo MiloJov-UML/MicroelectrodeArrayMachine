@@ -46,6 +46,7 @@ from image_recognition import (
 
 print_sequence = ("print", False)
 placement_sequence = ("placement", False)
+cut_sequence = ("cut", False)
 fill_sequence = ("fill", False)
 glue_sequence = ("glue", False)
 pnp_sequence = ("pnp", False)

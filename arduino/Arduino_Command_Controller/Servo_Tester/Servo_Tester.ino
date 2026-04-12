@@ -8,7 +8,7 @@ int val;        // Variable to read the value from serial input
 void setup() {
   Serial.begin(9600); // Start serial communication at 9600 baud
   myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
-  myservo.write(pos); // Set initial position
+  myservo.write(pos);
   Serial.println("Servo control ready. Press 'u' to move up, 'd' to move down.");
 }
 
@@ -17,9 +17,9 @@ void loop() {
     val = Serial.read();    // Read the incoming byte
 
     if (val == 'u') {
-      pos += 10; // Increase position by 5 degrees
+      pos += 5; // Increase position by 5 degrees
     } else if (val == 'd') {
-      pos -= 10; // Decrease position by 5 degrees
+      pos -= 5; // Decrease position by 5 degrees
     }
 
     // Constrain the position to typical servo limits (0-180 degrees)

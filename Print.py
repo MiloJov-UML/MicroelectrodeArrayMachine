@@ -43,8 +43,7 @@ wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, use
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
 print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
-print_z = None # Z coordinate for printing, set after probing based on print_gap
-
+pcb_z_coord = 0 # Z coordinate for printing, set after probing
 
 # BASIC MOVES  
 # Use for testing
@@ -104,8 +103,6 @@ pad_types = {
     
 }
 
-pad_positions = [0,1,2,3,4,5,6,7] # Positions of pads around the center of the print area, starting from top right and going clockwise
-
 pads = {
     
     1: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 4, "e": 4}}, 
@@ -129,7 +126,6 @@ pads = {
 def print_pcb():
     global x_coord, y_coord, counter
 
-    print_origin()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
     print_pad(pad_types, "me", 4)
@@ -388,7 +384,8 @@ def get_coord():
 # Don't modify - Phillipe's edit  
 def Z_probe():
     global pcb_z_coord
-    move_linear_stage('Z', '+', 40000, wait_for_stop=False, max_wait=30.0)
+    update_speed(50)
+    move_linear_stage('Z', '+', 60000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
     if state == "Z limit":
         pcb_z_coord = get_current_position("Z")
@@ -396,12 +393,18 @@ def Z_probe():
         
 # Don't modify - Phillipe's edit
 def r_limit():
-         #Successfully created a diagonal
+    update_speed(50)
+    down(5000)
     move_linear_stage('r', '+', 100, wait_for_stop=False, max_wait=30.0)
     state = r_calibrate()
     if state == "R limit":
         rot = get_current_position("r")
         print(rot)
+
+def r_corrector():  
+    r_limit()
+    time.sleep(1)
+    move_linear_stage('r', '-', 4, wait_for_stop=False, max_wait=30.0)
 
 def x_home():
     global print_home
@@ -438,30 +441,56 @@ def print_origin():
     y_home()
     x_home()
     
+    global pcb_z_coord
 
     time.sleep(1.0)
-    move_linear_stage(y, '-', 23790, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 27350.5, wait_for_stop=True, max_wait=30.0)
+
+    time.sleep(1.0)
+    move_linear_stage(y, '-', 25750, wait_for_stop=True, max_wait=30.0)
+
+    time.sleep(1.0)
+    dz = abs(pcb_z_coord - get_current_position(z)) - 50
+    move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
+    # To be replaced with Z probe
+
+def probe_origin():
+    z_home()
+    y_home()
+    x_home()
+
+    time.sleep(1.0)
+    move_linear_stage(x, '-', 33817.5, wait_for_stop=True, max_wait=30.0)
+
+    time.sleep(1.0)
+    move_linear_stage(y, '-', 24500, wait_for_stop=True, max_wait=30.0)
     
     time.sleep(1.0)
-    move_linear_stage(x, '-', 29650, wait_for_stop=True, max_wait=30.0)
+    Z_probe()
 
+    down(1000)
+
+def calibrate():
+    r_corrector()
+    probe_origin()
     time.sleep(1.0)
-    move_linear_stage(z, '+', 22360.5, wait_for_stop=True, max_wait=30.0)
-    # To be replaced with Z probe
+    print_origin()
 
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
     
     #print_trace(traces, 8)
     #print_traces(traces)
+    #print_pcb()
+    calibrate()
     print_pcb()
-    
+       
 # GLUE DROP & SEQUENCE
 def glue_drop():
     """Dispense glue then retract slightly to stop drip."""
-    motor_backward(steps=7.3)  # Dispense glue, adjust steps as needed for desired drop size
-    time.sleep(5.0)  # Wait for glue to dispense
-    motor_forward(steps=7.0)  # Retract to prevent dripping
+    motor_backward(steps=5.3)  # Dispense glue, adjust steps as needed for desired drop size
+    time.sleep(4.0)  # Wait for glue to dispense
+    motor_forward(steps=5.0)  # Retract to prevent dripping
     print("Glue drop complete.")
     motor_release()
 
@@ -479,3 +508,4 @@ def glue_sequence():
     
     # return_to_origin()
     print("Glue sequence complete.")
+

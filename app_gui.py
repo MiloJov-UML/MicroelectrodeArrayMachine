@@ -38,6 +38,7 @@ from print import (
     glue_sequence,
     print_tester,
     r_limit,
+    r_corrector,
     Z_probe,
     get_coord
 )
@@ -530,7 +531,7 @@ def launch_gui():
     tk.Button(root, text="Get Coordinate", command=get_coord).pack(pady=11)
 
      # Button: Test Diagonal Move
-    tk.Button(root, text="R calibrate", command=r_limit).pack(pady=11)
+    tk.Button(root, text="R calibrate", command=r_corrector).pack(pady=11)
     
      # Button: Test Diagonal Move
     tk.Button(root, text="Z calibrate", command=Z_probe).pack(pady=11)

@@ -1,4 +1,9 @@
 #include <Adafruit_MotorShield.h>
+#include <Servo.h>   // Include the standard Servo library
+
+Servo myservo;  // Create servo object to control a servo
+int pos = 90;   // Variable to store the servo position, start at 90 degrees
+int val;        // Variable to read the value from serial input
 
 const int relayPin = 10; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
@@ -21,6 +26,9 @@ void setup() {
   digitalWrite(solPin, LOW);
   digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
   Serial.begin(9600);
+  
+  myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
+  myservo.write(pos);
   
   if (!AFMS.begin()) {
     Serial.println("Could not find Motor Shield. Check wiring.");
