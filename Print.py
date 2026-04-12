@@ -41,7 +41,7 @@ temp_w = None
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
 wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
-print_home = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
+print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_z = None # Z coordinate for printing, set after probing based on print_gap
 
@@ -294,7 +294,6 @@ def print_pad(pad_dict, pad_type, position):
     pad_handler(pad_dict, pad_type, position)
     nordson_off()
     
-
 def pad_handler(pad_dict, pad_type, position):
     
     global temp_location, temp_l, temp_w
