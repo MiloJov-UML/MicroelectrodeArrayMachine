@@ -1,68 +1,136 @@
-import time
-import math
+# # # assembly.py
 
-from motor_control import (
-    auto_connect_motor,
-    retrieve_motor_speed,
-    get_current_speed,
-    update_speed,
-    query_all_axes_positions,
-    return_to_origin,
-    stop_motor_control,
-    move_linear_stage,
-    set_origin_to_current,
-)
+# # import time
+# # from motor_control import (
+# #     update_speed,
+# #     return_to_origin,
+# #     stop_motor_control,
+# #     move_linear_stage,
+# # )
+# # from relay_control import (
+# #     laser_relay_on,
+# #     laser_relay_off,
+# # )
+# # from print import (
+# #     glue_sequence,
+# #     print_pcb,
+# #     print_pad,
+# #     pad_types,
+# # )
+# # from image_recognition import (
+# #     extrude,
+# #     x_align,
+# #     r_align
+# # )
 
-from relay_control import (
-    auto_connect_relay,
-    motor_forward,
-    motor_backward,
-    motor_release,
-    laser_relay_on,
-    laser_relay_off,
-    solenoid_relay_on,
-    solenoid_relay_off,
-    nordson_on,
-    nordson_off
-    
-)
+# # # Sequence flags — set to True to enable in full assembly run
+# # print_traces_seq =  ("print",      False)  # print traces + connector pads
+# # rotate_neg_seq =    ("rotate_neg", False)  # rotate -90 to placement station
+# # placement_seq =     ("placement",  False)  # extrude + align + place microwires
+# # rotate_pos_seq =    ("rotate_pos", False)  # rotate +90 back to print station
+# # fill_pads_seq =     ("fill",       False)  # fill electrode pads with metal ink
 
-from print import (
-    glue_sequence,
-    print_tester,
-    r_limit,
-    Z_probe,
-    get_coord,
-    print_pcb
-)
+# # sequences = (print_traces_seq, rotate_neg_seq, placement_seq, rotate_pos_seq, fill_pads_seq)
 
-import image_recognition
-from image_recognition import (
-    open_camera,
-    extrude,
-    x_align,
-    r_align
-)
+# # def fill_electrode_pads():
+# #     """Fill all 8 electrode pads with metal ink after wire placement."""
+# #     # to be implemented — print only electrode pads
+# #     pass
 
-print_sequence = ("print", False)
-placement_sequence = ("placement", False)
-cut_sequence = ("cut", False)
-fill_sequence = ("fill", False)
-glue_sequence = ("glue", False)
-pnp_sequence = ("pnp", False)
+# # def sequence_handler(seq):
+# #     name = seq[0]
+# #     if name == "print":
+# #         print_pcb()
+# #     elif name == "rotate_neg":
+# #         # rotate -90 to placement station
+# #         update_speed(50)
+# #         move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
+# #     elif name == "placement":
+# #         # extrude + align + place — to be implemented
+# #         pass
+# #     elif name == "rotate_pos":
+# #         # rotate +90 back to print station
+# #         update_speed(50)
+# #         move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
+# #     elif name == "fill":
+# #         fill_electrode_pads()
 
-sequences = (print_sequence, placement_sequence, cut_sequence, fill_sequence, glue_sequence, pnp_sequence)
-def run_full_assembly(sequence):
+# # def run_full_assembly():
+# #     for seq in sequences:
+# #         if seq[1] == True:
+# #             print(f"Running sequence: {seq[0]}")
+# #             sequence_handler(seq)
+# #     print("Full assembly complete.")
 
-    for i in range(len(sequence)+1):
-        if sequence[i] == True:
-            start_sequence
+# # assembly.py
 
-def start_sequence():
-    # To start a sequence type, to start set sequence variable to True
+# # assembly.py
 
-def end_sequence():
-    # To end a sequence type, to end set sequence variable to False
+# import time
+# from motor_control import (
+#     update_speed,
+#     move_linear_stage,
+# )
+# from print import (
+#     print_pcb,
+#     fill_electrode_pads,
+#     calibrate,
+#     x_home,
+#     y_home,
+#     z_home,
+#     x, y, z,
+# )
 
-def sequence_handler(seq):
-    if seq[0] == 
+# def run_full_assembly():
+#     """
+#     Full assembly sequence:
+#     1. Calibrate and print traces
+#     2. Return to home
+#     3. Rotate -90 to placement station
+#     4. Wait 20 seconds (test value)
+#     5. Adjust axes slightly
+#     6. Rotate +90 back
+#     7. Calibrate and print again
+#     8. Fill electrode pads
+#     """
+#     print("Starting full assembly...")
+
+#     # Step 1 — calibrate and print traces
+#     calibrate()
+#     print_pcb()
+
+#     # Step 2 — return to home
+#     update_speed(100)
+#     z_home()
+#     y_home()
+#     x_home()
+
+#     # Step 3 — rotate -90 to placement station
+#     update_speed(50)
+#     move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
+
+#     # Step 4 — wait 20 seconds for testing
+#     print("Waiting 20 seconds...")
+#     time.sleep(20)
+
+#     # Step 5 — adjust axes slightly (test values)
+#     move_linear_stage(x, '-', 5000, wait_for_stop=True, max_wait=30.0)
+#     move_linear_stage(y, '-', 5000, wait_for_stop=True, max_wait=30.0)
+#     move_linear_stage(z, '+', 5000, wait_for_stop=True, max_wait=30.0)
+
+#     # Step 6 — rotate +90 back to print station
+#     move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
+
+#     # Step 7 — calibrate and print again
+#     calibrate()
+#     print_pcb()
+
+#     # Step 8 — fill electrode pads
+#     fill_electrode_pads()
+
+#     print("Full assembly complete.")
+
+from print import full_sequence
+
+def run_full_assembly():
+    full_sequence()

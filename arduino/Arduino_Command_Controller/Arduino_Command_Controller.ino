@@ -5,7 +5,7 @@ Servo myservo;  // Create servo object to control a servo
 int pos = 90;   // Variable to store the servo position, start at 90 degrees
 int val;        // Variable to read the value from serial input
 
-const int relayPin = 10; // Pin connected to relay
+const int relayPin = 8; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
 const int nordPin = 7;
 const int r_limit = 5;

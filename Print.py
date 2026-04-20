@@ -444,13 +444,13 @@ def print_origin():
     global pcb_z_coord
 
     time.sleep(1.0)
-    move_linear_stage(x, '-', 27350.5, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 34617, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    move_linear_stage(y, '-', 25750, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    dz = abs(pcb_z_coord - get_current_position(z)) - 50
+    dz = abs(pcb_z_coord - get_current_position(z)) - 76
     move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
     # To be replaced with Z probe
 
@@ -460,10 +460,10 @@ def probe_origin():
     x_home()
 
     time.sleep(1.0)
-    move_linear_stage(x, '-', 33817.5, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 34617, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    move_linear_stage(y, '-', 24500, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
     
     time.sleep(1.0)
     Z_probe()
@@ -471,7 +471,7 @@ def probe_origin():
     down(1000)
 
 def calibrate():
-    r_corrector()
+    # r_corrector()
     probe_origin()
     time.sleep(1.0)
     print_origin()
@@ -509,3 +509,62 @@ def glue_sequence():
     # return_to_origin()
     print("Glue sequence complete.")
 
+# Fill electrode pads with metal ink after wire placement
+def fill_electrode_pads():
+    """Raster fill electrode pads — 8 passes 1000µm apart."""
+    update_speed(10)
+
+    for i in range(8):
+        nordson_on()
+        if i % 2 == 0:
+            back(1000)
+        else:
+            front(1000)
+        nordson_off()
+        down(2000)
+        right(1000)
+        up(2000)
+
+# Full assembly sequence
+def full_sequence():
+    """Print traces, wait for wire placement, fill electrode pads."""
+    print("Starting full sequence...")
+
+    # Step 1 — calibrate and print traces
+    print_tester()
+
+    # Step 2 — return to home X Y Z
+    z_home()
+    y_home()
+    x_home()
+
+    # Step 3 — rotate -90 to placement station
+    update_speed(50)
+    move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
+
+
+    # Step 4 — adjust axes
+    move_linear_stage(x, '-', 23000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '-', 19600, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(z, '+', 13500, wait_for_stop=True, max_wait=30.0)
+
+     # Step 5 — wait 20 seconds for testing
+    print("Waiting 20 seconds for wire placement...")
+    time.sleep(20)
+
+    # Step 6 — rotate +90 back to print station
+    move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
+
+    # Step 7 — go back to print origin (same starting point as traces)
+    print_origin()
+
+    # Step 8 — fill electrode pads
+    fill_electrode_pads()
+
+    # Step 9 — return to home and park
+    z_home()
+    y_home()
+    x_home()
+    move_linear_stage('r', '-', 30, wait_for_stop=True, max_wait=30.0)
+
+    print("Full sequence complete.")
