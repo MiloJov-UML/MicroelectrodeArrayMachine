@@ -445,7 +445,7 @@ def print_origin():
     global pcb_z_coord
 
     time.sleep(1.0)
-    move_linear_stage(x, '-', 34617, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 29817, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
     move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
@@ -472,7 +472,7 @@ def probe_origin():
     down(1000)
 
 def calibrate():
-    # r_corrector()
+    r_corrector()
     probe_origin()
     time.sleep(1.0)
     print_origin()
@@ -480,20 +480,21 @@ def calibrate():
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
     
-    #print_trace(traces, 8)
-    #print_traces(traces)
-    #print_pcb()
-    #alibrate()
-    #rint_pcb()
-    servo_to(0)
-    time.sleep(2.0)
-    servo_to(40)
-    time.sleep(2.0)
-    servo_to(105)
-    time.sleep(2.0)
-    servo_to(0)
-    time.sleep(2.0)
-    servo_to(40)
+    # print_trace(traces, 8)
+    # print_traces(traces)
+    # print_pcb()
+    calibrate()
+
+    print_pcb()
+    # servo_to(0)
+    # time.sleep(2.0)
+    # servo_to(40)
+    # time.sleep(2.0)
+    # servo_to(105)
+    # time.sleep(2.0)
+    # servo_to(0)
+    # time.sleep(2.0)
+    # servo_to(40)
     
        
 # GLUE DROP & SEQUENCE
@@ -561,7 +562,11 @@ def full_sequence():
 
      # Step 5 — wait 20 seconds for testing
     print("Waiting 20 seconds for wire placement...")
-    time.sleep(20)
+    time.sleep(15)
+
+    move_linear_stage(x, '+', 20000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '+', 15600, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(z, '-', 10500, wait_for_stop=True, max_wait=30.0)
 
     # Step 6 — rotate +90 back to print station
     move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
