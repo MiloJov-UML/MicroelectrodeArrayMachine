@@ -2,7 +2,7 @@
 #include <Servo.h>   // Include the standard Servo library
 
 Servo myservo;  // Create servo object to control a servo
-int pos = 90;   // Variable to store the servo position, start at 90 degrees
+int pos = 40;   // Variable to store the servo position, start at 0 degrees
 int val;        // Variable to read the value from serial input
 
 const int relayPin = 8; // Pin connected to relay
@@ -27,6 +27,7 @@ void setup() {
   digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
   Serial.begin(9600);
   
+  Serial.begin(9600); // Start serial communication at 9600 baud
   myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
   myservo.write(pos);
   
@@ -74,8 +75,22 @@ void loop() {
     else if (command.equalsIgnoreCase("Nordson_Off")) {
       digitalWrite(nordPin, LOW);
       Serial.println("Nordson turned OFF");
-    }  
+    }
 
+    // Servo control Command  
+    if (command.startsWith("Servo_To_")) {
+      int angle = command.substring(9).toInt();
+      if (angle >= 0 && angle <= 270) {
+        Serial.print("Moving Servo to Angle ");
+        Serial.println(angle);
+
+        myservo.write(angle); // Tell servo to go to the new position
+        Serial.println("Motion complete");
+      } else {
+        Serial.println("Invalid angle (must be 0-270)");
+      }
+    }
+    
     if (command.startsWith("Motor_Forward_")) {
       int steps = command.substring(14).toInt();
       if (steps > 0 && steps <= 10000) {

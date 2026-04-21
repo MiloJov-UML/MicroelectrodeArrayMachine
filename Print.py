@@ -13,7 +13,8 @@ from motor_control import (
 
 from relay_control import (
     nordson_on, 
-    nordson_off, 
+    nordson_off,
+    servo_to,
     motor_backward, 
     motor_forward, 
     motor_release, 
@@ -404,7 +405,7 @@ def r_limit():
 def r_corrector():  
     r_limit()
     time.sleep(1)
-    move_linear_stage('r', '-', 4, wait_for_stop=False, max_wait=30.0)
+    move_linear_stage('r', '-', 5, wait_for_stop=False, max_wait=30.0)
 
 def x_home():
     global print_home
@@ -482,8 +483,18 @@ def print_tester():
     #print_trace(traces, 8)
     #print_traces(traces)
     #print_pcb()
-    calibrate()
-    print_pcb()
+    #alibrate()
+    #rint_pcb()
+    servo_to(0)
+    time.sleep(2.0)
+    servo_to(40)
+    time.sleep(2.0)
+    servo_to(105)
+    time.sleep(2.0)
+    servo_to(0)
+    time.sleep(2.0)
+    servo_to(40)
+    
        
 # GLUE DROP & SEQUENCE
 def glue_drop():

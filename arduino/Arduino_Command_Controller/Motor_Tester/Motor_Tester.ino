@@ -1,17 +1,18 @@
 #include <Wire.h>
+#include <Servo.h>
 #include <Adafruit_MotorShield.h>
 
 // Create the motor shield object with the default I2C address (0x60)
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 
 // Select the port where your DC motor is connected (M1, M2, M3, or M4)
-Adafruit_DCMotor *motor = AFMS.getMotor(2); // Motor on M1
+Adafruit_DCMotor *motor = AFMS.getMotor(3); // Motor on M1
 
 Servo myservo1;
 const int servo1Pin = 9; 
 
 // Motor speed (0–255)
-const uint8_t MOTOR_SPEED = 50;
+const uint8_t MOTOR_SPEED = 100;
 
 // Delay time in milliseconds for each direction
 const unsigned long MOVE_TIME = 500;

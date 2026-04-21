@@ -82,6 +82,15 @@ def nordson_off():
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
+def servo_to(angle: int):
+    """Move the servo to the specified angle (0-180 degrees)."""
+    global relay_ser
+    if relay_ser:
+        command = f"Servo_To_{angle}"
+        send_command(relay_ser, command, "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+        
 def motor_forward(steps=100, wait_for_completion=True, timeout=30):
     """Move the stepper motor forward by the specified number of steps.
     
