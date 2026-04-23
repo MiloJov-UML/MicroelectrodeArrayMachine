@@ -94,7 +94,38 @@ traces = {
 
 }
 
+traces_1 = {
+
+   1: {"a1": 90.0, "l1": 4.17, "a2": 135, "l2": 0.5, "a3": 180, "l3": 2.47, "a4": 225, "l4": 0.5}, # Outermost trace to the right
+
+   2: {"a1": 90.0, "l1": 3.44, "a2": 135, "l2": 0.5 , "a3": 180, "l3": 1.0},
+
+   3: {"a1": 90.0, "l1": 2.28, "a2": 135, "l2": 0.5},
+
+   4: {"a1": 90.0, "l1": 2.13},
+   
+   5: {"a1": 90.0, "l1": 2.13},
+
+   6: {"a1": 90.0, "l1": 2.28, "a2": 45, "l2": 0.5},
+
+   7: {"a1": 90.0, "l1": 3.44, "a2": 45, "l2": 0.5 , "a3": 0, "l3": 1.0},
+
+   8: {"a1": 90.0, "l1": 4.17, "a2": 45, "l2": 0.5, "a3": 0, "l3": 2.47, "a4": 315, "l4": 0.5}
+
+}
+
+
 pad_types = {
+
+    "cs": {"l": 0.75, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
+
+    "cl": {"l": 1, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
+
+    "me": {"l": 1.2, "w": 0.55}    # Dimensions of electrode pads, mm
+    
+}
+
+pad_types_1 = {
 
     "cs": {"l": 0.75, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
 
@@ -445,13 +476,13 @@ def print_origin():
     global pcb_z_coord
 
     time.sleep(1.0)
-    move_linear_stage(x, '-', 29817, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 36217, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
     move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    dz = abs(pcb_z_coord - get_current_position(z)) - 76
+    dz = abs(pcb_z_coord - get_current_position(z)) - 7
     move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
     # To be replaced with Z probe
 
@@ -461,10 +492,10 @@ def probe_origin():
     x_home()
 
     time.sleep(1.0)
-    move_linear_stage(x, '-', 34617, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '-', 39000, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '-', 11500, wait_for_stop=True, max_wait=30.0)
     
     time.sleep(1.0)
     Z_probe()
@@ -484,7 +515,6 @@ def print_tester():
     # print_traces(traces)
     # print_pcb()
     calibrate()
-
     print_pcb()
     # servo_to(0)
     # time.sleep(2.0)
@@ -495,6 +525,11 @@ def print_tester():
     # servo_to(0)
     # time.sleep(2.0)
     # servo_to(40)
+    # update_speed(1)
+    # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
+    # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
+    # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
+    # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
     
        
 # GLUE DROP & SEQUENCE
@@ -555,7 +590,7 @@ def full_sequence():
     move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
 
 
-    # Step 4 — adjust axes
+    # Step 4 — adjust axes for the start of image recognition and wire placement - does need to be adjusted based on actual placement station since it changed due to the use of the r limiter.
     move_linear_stage(x, '-', 23000, wait_for_stop=True, max_wait=30.0)
     move_linear_stage(y, '-', 19600, wait_for_stop=True, max_wait=30.0)
     move_linear_stage(z, '+', 13500, wait_for_stop=True, max_wait=30.0)
