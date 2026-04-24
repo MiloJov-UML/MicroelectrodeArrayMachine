@@ -20,6 +20,10 @@ from relay_control import (
     motor_release, 
     r_calibrate, 
     Z_calibrate,
+    pnp_forward,
+    pnp_backward,
+    pnp_release,
+    mag_detector
 )   
 
 #parameters for line test
@@ -514,17 +518,35 @@ def print_tester():
     # print_trace(traces, 8)
     # print_traces(traces)
     # print_pcb()
-    calibrate()
-    print_pcb()
-    # servo_to(0)
-    # time.sleep(2.0)
-    # servo_to(40)
-    # time.sleep(2.0)
-    # servo_to(105)
-    # time.sleep(2.0)
-    # servo_to(0)
-    # time.sleep(2.0)
-    # servo_to(40)
+    #calibrate()
+    #print_pcb()
+    servo_to(0)
+    time.sleep(2.0)
+    servo_to(45)
+    time.sleep(2.0)
+    servo_to(85)
+    time.sleep(2.0)
+    servo_to(0)
+    time.sleep(2.0)
+    servo_to(85)
+    time.sleep(2.0)
+    
+    pnp_forward(speed=50)
+    time.sleep(2.0)
+    mag_detector()
+
+    pnp_forward(speed=50)
+    time.sleep(2.0)
+    mag_detector()
+
+    pnp_backward(speed=50)
+    time.sleep(2.0)
+    mag_detector()
+
+    pnp_backward(speed=50)
+    time.sleep(2.0)
+    mag_detector()
+
     # update_speed(1)
     # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
     # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)

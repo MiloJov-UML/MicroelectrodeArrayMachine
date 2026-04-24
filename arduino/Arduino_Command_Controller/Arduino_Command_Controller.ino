@@ -1,9 +1,15 @@
 #include <Adafruit_MotorShield.h>
+#include <Wire.h>
 #include <Servo.h>   // Include the standard Servo library
 
 Servo myservo;  // Create servo object to control a servo
 int pos = 40;   // Variable to store the servo position, start at 0 degrees
 int val;        // Variable to read the value from serial input
+
+
+const int hallPin = 2; // Pin connected to sensor Signal
+const int ledPin = 13; // Built-in LED
+int sensorValue;
 
 const int relayPin = 8; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
@@ -15,6 +21,7 @@ bool z_prb = false;
 
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
+Adafruit_DCMotor *motor = AFMS.getMotor(3); // Motor on M1
 
 void setup() {
   pinMode(relayPin, OUTPUT);
@@ -22,15 +29,19 @@ void setup() {
   pinMode(nordPin, OUTPUT);
   pinMode(r_limit, INPUT_PULLUP);
   pinMode(z_probe, INPUT_PULLUP);
+
+  pinMode(hallPin, INPUT_PULLUP);
+  pinMode(ledPin, OUTPUT);
+
   digitalWrite(relayPin, LOW);    // Start with the relay off for safety
   digitalWrite(solPin, LOW);
   digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
-  Serial.begin(9600);
   
   Serial.begin(9600); // Start serial communication at 9600 baud
   myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
   myservo.write(pos);
   
+
   if (!AFMS.begin()) {
     Serial.println("Could not find Motor Shield. Check wiring.");
     while (1);
@@ -91,6 +102,45 @@ void loop() {
       }
     }
     
+    // Motor Control Commands
+    if (command.startsWith("PNP_Forward_")) {
+      int speed = command.substring(12).toInt();
+      if (speed > 0 && speed <= 255) {
+        Serial.print("Moving motor forward, ");
+        Serial.print("Speed: ");
+        Serial.println(speed);
+        
+        motor->setSpeed(speed);  // MICROSTEP for more torque
+        motor->run(BACKWARD);
+
+      } else {
+        Serial.println("Invalid speed count (must be 0-255)");
+      }
+    }
+    else if (command.startsWith("PNP_Backward_")) {
+      int speed = command.substring(13).toInt();
+      if (speed > 0 && speed <= 255) {
+        Serial.print("Moving motor backward, ");
+        Serial.print("Speed: ");
+        Serial.println(speed);
+        
+        motor->setSpeed(speed);  
+        motor->run(FORWARD);
+        delay(500);
+
+      } else {
+        Serial.println("Invalid speed count (must be 0-255)");
+      }
+    }
+    else if (command.equalsIgnoreCase("PNP_Release")) {
+      motor->run(RELEASE);
+      Serial.println("Motor released");
+    }
+    else {
+      Serial.println("Unknown command");
+    }
+
+    // Stepper Motor Control Commands
     if (command.startsWith("Motor_Forward_")) {
       int steps = command.substring(14).toInt();
       if (steps > 0 && steps <= 10000) {
@@ -161,6 +211,13 @@ void loop() {
         Serial.println("Z limit"); 
       }
 
-    }    
+      // Hall Pin
+      if (digitalRead(sensorValue) == LOW)
+      {
+        Serial.println("Magnet Detected");
+      }
+    }
+    
+        
  
 }

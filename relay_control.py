@@ -90,7 +90,34 @@ def servo_to(angle: int):
         send_command(relay_ser, command, "Relay Controller")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
-        
+
+def pnp_forward(speed: int):
+    """Move the pick-and-place mechanism forward at the specified speed (0-100)."""
+    global relay_ser
+    if relay_ser:
+        command = f"PNP_Forward_{speed}"
+        send_command(relay_ser, command, "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+def pnp_backward(speed: int):
+    """Move the pick-and-place mechanism backward at the specified speed (0-100)."""
+    global relay_ser
+    if relay_ser:
+        command = f"PNP_Backward_{speed}"
+        send_command(relay_ser, command, "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+def pnp_release():
+    """Release the pick-and-place mechanism."""
+    global relay_ser
+    if relay_ser:
+        send_command(relay_ser, "PNP_Release", "Relay Controller")
+    else:
+        messagebox.showerror("Error", "Not connected to relay device.")
+
+
 def motor_forward(steps=100, wait_for_completion=True, timeout=30):
     """Move the stepper motor forward by the specified number of steps.
     
@@ -245,7 +272,19 @@ def Z_calibrate():
                 stop_motor_control()
                 print('Z limit reached')
                 return respo
-            
+
+def mag_detector():
+
+    while True:
+        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
+        resp = relay_ser.data = relay_ser.read_until(b'Magnet Detected').decode("utf-8").strip()
+        print(str(resp))
+        
+        if str(resp) != None:
+            if str(resp) == "Magnet Detected":
+                pnp_release()
+                print('Connector Available')
+                return resp           
            
         
             

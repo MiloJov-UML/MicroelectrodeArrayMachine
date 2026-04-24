@@ -30,7 +30,10 @@ from relay_control import (
     solenoid_relay_on,
     solenoid_relay_off,
     nordson_on,
-    nordson_off
+    nordson_off,
+    pnp_forward,
+    pnp_backward,
+    pnp_release
     
 )
 
