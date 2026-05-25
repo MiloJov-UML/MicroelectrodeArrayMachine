@@ -483,10 +483,10 @@ def print_origin():
     move_linear_stage(x, '-', 36217, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '-', 9000, wait_for_stop=True, max_wait=30.0)
 
     time.sleep(1.0)
-    dz = abs(pcb_z_coord - get_current_position(z)) - 7
+    dz = abs(pcb_z_coord - get_current_position(z)) +100
     move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
     # To be replaced with Z probe
 
@@ -522,38 +522,50 @@ def print_tester():
     #print_pcb()
     servo_to(0)
     time.sleep(2.0)
-    servo_to(45)
+    # servo_to(45)
+    # time.sleep(2.0)
+    # servo_to(85)
+    # time.sleep(2.0)
+    # servo_to(0)
+    # time.sleep(2.0)
+    servo_to(55)
     time.sleep(2.0)
-    servo_to(85)
+
+    pnp_forward(speed=25)
     time.sleep(2.0)
-    servo_to(0)
-    time.sleep(2.0)
-    servo_to(85)
+
+    servo_to(71)
     time.sleep(2.0)
     
-    pnp_forward(speed=50)
+    servo_to(55)
     time.sleep(2.0)
-    mag_detector()
 
-    pnp_forward(speed=50)
+    pnp_backward(speed=25)
     time.sleep(2.0)
-    mag_detector()
+    
+    servo_to(0)
+    time.sleep(2.0)
+    # time.sleep(2.0)
+    # mag_detector()
 
-    pnp_backward(speed=50)
-    time.sleep(2.0)
-    mag_detector()
+    # pnp_forward(speed=50)
+    # time.sleep(2.0)
+    # mag_detector()
 
-    pnp_backward(speed=50)
-    time.sleep(2.0)
-    mag_detector()
+    # pnp_backward(speed=50)
+    # time.sleep(2.0)
+    # mag_detector()
+
+    # pnp_backward(speed=50)
+    # time.sleep(2.0)
+    # mag_detector()
 
     # update_speed(1)
     # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
     # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
     # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
     # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
-    
-       
+          
 # GLUE DROP & SEQUENCE
 def glue_drop():
     """Dispense glue then retract slightly to stop drip."""
@@ -596,48 +608,49 @@ def fill_electrode_pads():
 
 # Full assembly sequence
 def full_sequence():
-    """Print traces, wait for wire placement, fill electrode pads."""
-    print("Starting full sequence...")
+    # """Print traces, wait for wire placement, fill electrode pads."""
+    # print("Starting full sequence...")
 
-    # Step 1 — calibrate and print traces
-    print_tester()
+    # # Step 1 — calibrate and print traces
+    # print_tester()
 
-    # Step 2 — return to home X Y Z
-    z_home()
-    y_home()
-    x_home()
+    # # Step 2 — return to home X Y Z
+    # z_home()
+    # y_home()
+    # x_home()
 
-    # Step 3 — rotate -90 to placement station
-    update_speed(50)
-    move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
+    # # Step 3 — rotate -90 to placement station
+    # update_speed(50)
+    # move_linear_stage('r', '-', 90, wait_for_stop=True, max_wait=30.0)
 
 
-    # Step 4 — adjust axes for the start of image recognition and wire placement - does need to be adjusted based on actual placement station since it changed due to the use of the r limiter.
-    move_linear_stage(x, '-', 23000, wait_for_stop=True, max_wait=30.0)
-    move_linear_stage(y, '-', 19600, wait_for_stop=True, max_wait=30.0)
-    move_linear_stage(z, '+', 13500, wait_for_stop=True, max_wait=30.0)
+    # # Step 4 — adjust axes for the start of image recognition and wire placement - does need to be adjusted based on actual placement station since it changed due to the use of the r limiter.
+    # move_linear_stage(x, '-', 23000, wait_for_stop=True, max_wait=30.0)
+    # move_linear_stage(y, '-', 19600, wait_for_stop=True, max_wait=30.0)
+    # move_linear_stage(z, '+', 13500, wait_for_stop=True, max_wait=30.0)
 
-     # Step 5 — wait 20 seconds for testing
-    print("Waiting 20 seconds for wire placement...")
-    time.sleep(15)
+    #  # Step 5 — wait 20 seconds for testing
+    # print("Waiting 20 seconds for wire placement...")
+    # time.sleep(15)
 
-    move_linear_stage(x, '+', 20000, wait_for_stop=True, max_wait=30.0)
-    move_linear_stage(y, '+', 15600, wait_for_stop=True, max_wait=30.0)
-    move_linear_stage(z, '-', 10500, wait_for_stop=True, max_wait=30.0)
+    # move_linear_stage(x, '+', 20000, wait_for_stop=True, max_wait=30.0)
+    # move_linear_stage(y, '+', 15600, wait_for_stop=True, max_wait=30.0)
+    # move_linear_stage(z, '-', 10500, wait_for_stop=True, max_wait=30.0)
 
-    # Step 6 — rotate +90 back to print station
-    move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
+    # # Step 6 — rotate +90 back to print station
+    # move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
 
     # Step 7 — go back to print origin (same starting point as traces)
+    probe_origin()
     print_origin()
 
     # Step 8 — fill electrode pads
     fill_electrode_pads()
 
-    # Step 9 — return to home and park
-    z_home()
-    y_home()
-    x_home()
-    move_linear_stage('r', '-', 30, wait_for_stop=True, max_wait=30.0)
+    # # Step 9 — return to home and park
+    # z_home()
+    # y_home()
+    # x_home()
+    # move_linear_stage('r', '-', 30, wait_for_stop=True, max_wait=30.0)
 
-    print("Full sequence complete.")
+    # print("Full sequence complete.")

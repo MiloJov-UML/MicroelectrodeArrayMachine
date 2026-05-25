@@ -3,13 +3,13 @@
 #include <Servo.h>   // Include the standard Servo library
 
 Servo myservo;  // Create servo object to control a servo
-int pos = 40;   // Variable to store the servo position, start at 0 degrees
+int pos = 0;   // Variable to store the servo position, start at 0 degrees
 int val;        // Variable to read the value from serial input
-
+bool poll = false;
 
 const int hallPin = 2; // Pin connected to sensor Signal
 const int ledPin = 13; // Built-in LED
-int sensorValue;
+int sensorValue = 1;
 
 const int relayPin = 8; // Pin connected to relay
 const int solPin = 11; // Pin connected to relay2
@@ -112,7 +112,26 @@ void loop() {
         
         motor->setSpeed(speed);  // MICROSTEP for more torque
         motor->run(BACKWARD);
+        delay(1000);
+        poll = true;
 
+
+        /*
+        if (sensorValue == 0)
+        {
+          motor->run(RELEASE);
+          Serial.println("Connector Available");
+        }
+
+        ///*
+        else
+        {
+          delay(1000);
+          motor->run(RELEASE);
+          Serial.println("Connector Not Available");
+        }
+        */
+        
       } else {
         Serial.println("Invalid speed count (must be 0-255)");
       }
@@ -126,7 +145,24 @@ void loop() {
         
         motor->setSpeed(speed);  
         motor->run(FORWARD);
-        delay(500);
+        delay(1000);
+        poll = true;
+        
+        /*
+        if (sensorValue == 0)
+        {
+          motor->run(RELEASE);
+          Serial.println("Connector Available");
+        }
+        
+        ///*
+        else
+        {
+          delay(1000);
+          motor->run(RELEASE);
+          Serial.println("Connector Not Available");
+        }
+        */
 
       } else {
         Serial.println("Invalid speed count (must be 0-255)");
@@ -210,12 +246,16 @@ void loop() {
       {
         Serial.println("Z limit"); 
       }
-
+      
       // Hall Pin
-      if (digitalRead(sensorValue) == LOW)
+      if ((digitalRead(sensorValue) == LOW) && poll)
       {
         Serial.println("Magnet Detected");
+        delay(250);
+        motor->run(RELEASE);
+        poll = false;
       }
+      
     }
     
         
