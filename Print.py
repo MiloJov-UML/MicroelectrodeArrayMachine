@@ -8,7 +8,8 @@ from motor_control import (
     get_current_position,
     wait_for_axis_stop,
     µm_to_steps, 
-    mm_to_um
+    mm_to_um,
+    base_displacement
 )
 
 from relay_control import (
@@ -303,20 +304,28 @@ def diagonal_handler(angle, t_len, div):
     theta = math.radians(abs(angle))
 
     # Calculate dx and dy based on the angle
-    dx = t_len * math.cos(theta)
-    dy = t_len * math.sin(theta)
+    dx = abs(t_len * math.cos(theta))
+    dy = abs(t_len * math.sin(theta))
 
-    xstp = round(abs(dx / div))
-    ystp = round(abs(dy / div))
+    # Use same small-pulse approach as keyboard control so X and Y move
+    # in rapid alternation instead of fully completing one axis before the other.
+    # Number of steps is driven by the longer axis so the ratio is preserved.
+    steps = max(1, round(max(dx, dy) / base_displacement))
+    x_pulse = dx / steps
+    y_pulse = dy / steps
+
     update_speed(150)
     
-    if (angle_dir[0] != None) & (angle_dir[1] != None):
+    if angle_dir[0] is not None and angle_dir[1] is not None:
         
-        for i in range(div):
-            
-            move_linear_stage(x, angle_dir[0], xstp, wait_for_stop=True, max_wait=30.0)
-        
-            move_linear_stage(y, angle_dir[1], ystp, wait_for_stop=True, max_wait=30.0)
+        for _ in range(steps):
+            move_linear_stage(x, angle_dir[0], x_pulse, wait_for_stop=False)
+            move_linear_stage(y, angle_dir[1], y_pulse, wait_for_stop=False)
+            time.sleep(0.001)
+
+        # Let both axes settle before the next move
+        wait_for_axis_stop(x, max_wait=10.0)
+        wait_for_axis_stop(y, max_wait=10.0)
             
 def print_pad(pad_dict, pad_type, position):
     
@@ -420,7 +429,7 @@ def get_coord():
 # Don't modify - Phillipe's edit  
 def Z_probe():
     global pcb_z_coord
-    update_speed(50)
+    update_speed(1)
     move_linear_stage('Z', '+', 60000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
     if state == "Z limit":
@@ -429,8 +438,7 @@ def Z_probe():
         
 # Don't modify - Phillipe's edit
 def r_limit():
-    update_speed(50)
-    down(5000)
+    update_speed(3)
     move_linear_stage('r', '+', 100, wait_for_stop=False, max_wait=30.0)
     state = r_calibrate()
     if state == "R limit":

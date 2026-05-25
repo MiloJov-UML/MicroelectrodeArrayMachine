@@ -18,6 +18,10 @@ from motor_control import (
     stop_motor_control,
     move_linear_stage,
     set_origin_to_current,
+    base_displacement,
+    r_displacement,
+    keyboard_pause,
+    flush_serial,
 )
 
 from relay_control import (
@@ -65,10 +69,10 @@ speed_display_label = None
 keyboard_control_enabled = False
 
 axis_controls = {
-    'w': ('X', '-'),
-    's': ('X', '+'),
-    'a': ('Y', '+'),
-    'd': ('Y', '-'),
+    'w': ('Y', '-'),
+    's': ('Y', '+'),
+    'a': ('X', '+'),
+    'd': ('X', '-'),
     'shift': ('Z', '+'),
     'ctrl': ('Z', '-'),
     'e': ('r', '+'),
@@ -114,21 +118,30 @@ def save_settings(pad_count, pad_spacing, offset, fixture_offset):
 def continuous_motor_control():
     global keyboard_control_enabled
     while True:
-        if keyboard_control_enabled:
+        if keyboard_control_enabled and not keyboard_pause.is_set():
             try:
                 for key, (axis, direction) in axis_controls.items():
                     if keyboard.is_pressed(key):
-                        step_size = 1
+                        step_size = r_displacement if axis == 'r' else base_displacement
+                        if keyboard.is_pressed("space"):
+                            step_size /= 2
                         move_linear_stage(axis, direction, step_size, wait_for_stop=False)
             except Exception as e:
                 print(f"Exception in keyboard control: {e}")
-        time.sleep(0.01)
+        time.sleep(0.02)
 
 def toggle_keyboard_control():
     global keyboard_control_enabled
     keyboard_control_enabled = not keyboard_control_enabled
     status = "enabled" if keyboard_control_enabled else "disabled"
     print(f"Keyboard motor control {status}.")
+    if keyboard_control_enabled:
+        update_speed(150)
+        if speed_display_label:
+            speed_display_label.config(text=f"Current Speed: {get_current_speed()}")
+    else:
+        # Flush stale keyboard-pulse bytes so the next GUI command gets a clean port.
+        flush_serial()
 
 def wait_for_extrude_done(poll_interval=0.1):
     """
@@ -537,31 +550,17 @@ def launch_gui():
 
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
-
-    
-
-    # Full manual loop
-    tk.Button(root, text="Start Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
-
-     # Button: Test Diagonal Move
-    tk.Button(root, text="Get Coordinate", command=get_coord).pack(pady=11)
-
-     # Button: Test Diagonal Move
-    tk.Button(root, text="R calibrate", command=r_corrector).pack(pady=11)
-    
-     # Button: Test Diagonal Move
-    tk.Button(root, text="Z calibrate", command=Z_probe).pack(pady=11)
   
-    tk.Button(root, text="Print Tester", command=print_tester).pack(pady=11)
+    tk.Button(root, text="PNP Tester", command=print_tester).pack(pady=11)
     
     # Button: Glue test 
-    tk.Button(root, text="Glue test", command=glue_sequence).pack(pady=11)
+    tk.Button(root, text="Dispense Glue", command=glue_sequence).pack(pady=11)
 
     # Button: Full Assembly
-    tk.Button(root, text="Full Assembly", command=run_full_assembly).pack(pady=11)
+    tk.Button(root, text="Print Metal Ink Traces/Pads", command=run_full_assembly).pack(pady=11)
 
-    # Button: Test Extrude & Align
-    tk.Button(root, text="Test Extrude & Align", command=test_extrude_align).pack(pady=5)
+    # Full manual loop
+    tk.Button(root, text="Start Wire/Laser Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
 
     root.mainloop()
 
