@@ -475,7 +475,7 @@ def launch_gui():
         threading.Thread(target=move_thread).start()
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
-    tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
+    tk.Button(root, text="Stop Motors", command=stop_motor_control, bg="red", fg="black", font=(15)).pack(pady=10)
 
     # Keyboard control
     kb_var = tk.IntVar(value=0)
