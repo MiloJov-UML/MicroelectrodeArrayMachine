@@ -9,7 +9,9 @@ from motor_control import (
     wait_for_axis_stop,
     µm_to_steps, 
     mm_to_um,
-    base_displacement
+    base_displacement,
+    clear_emergency_stop,
+    is_emergency_stop_requested,
 )
 
 from relay_control import (
@@ -49,7 +51,19 @@ wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, use
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
 print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
-pcb_z_coord = 0 # Z coordinate for printing, set after probing
+pcb_z_coord = None # Z coordinate for printing, set after probing
+
+def _abort_if_emergency_stop():
+    if is_emergency_stop_requested():
+        raise RuntimeError("Emergency stop requested.")
+
+def _sleep_with_abort(seconds, step=0.05):
+    elapsed = 0.0
+    while elapsed < seconds:
+        _abort_if_emergency_stop()
+        dt = min(step, seconds - elapsed)
+        time.sleep(dt)
+        elapsed += dt
 
 # BASIC MOVES  
 # Use for testing
@@ -163,6 +177,7 @@ pads = {
 def print_pcb():
     global x_coord, y_coord, counter
 
+    _abort_if_emergency_stop()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
     print_pad(pad_types, "me", 4)
@@ -225,9 +240,11 @@ def print_pcb():
 def print_traces(traces_dict):
     global counter, angle_dir, angle_axis, t_len, x_coord, y_coord, z_coord
 
+    _abort_if_emergency_stop()
     x_coord, y_coord, z_coord = get_current_position(x), get_current_position(y), get_current_position(z)
 
     for i in range(1, len(traces_dict) + 1, 1):
+        _abort_if_emergency_stop()
         print_trace(traces_dict, i)
         counter += 1
         next_feature(counter, x_coord, y_coord, 1000)
@@ -236,6 +253,7 @@ def print_trace(trace_dict, index):
     global counter,angle_dir, angle_axis, t_len               
     
     for key, value in (trace_dict.get(index)).items():
+        _abort_if_emergency_stop()
         if key.find("a") != -1:
                 angle = value
                 angle_handler(angle)
@@ -319,6 +337,7 @@ def diagonal_handler(angle, t_len, div):
     if angle_dir[0] is not None and angle_dir[1] is not None:
         
         for _ in range(steps):
+            _abort_if_emergency_stop()
             move_linear_stage(x, angle_dir[0], x_pulse, wait_for_stop=False)
             move_linear_stage(y, angle_dir[1], y_pulse, wait_for_stop=False)
             time.sleep(0.001)
@@ -429,12 +448,33 @@ def get_coord():
 # Don't modify - Phillipe's edit  
 def Z_probe():
     global pcb_z_coord
-    update_speed(1)
-    move_linear_stage('Z', '+', 60000, wait_for_stop=False, max_wait=30.0)
+    _abort_if_emergency_stop()
+    update_speed(100)
+    move_linear_stage('Z', '+', 21000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
+
+    if state is None:
+        if is_emergency_stop_requested():
+            raise RuntimeError("Emergency stop requested.")
+        print("Warning: Z calibration did not return a limit state.")
+        return False
+
+    z_pos = get_current_position("Z")
+    if z_pos is None:
+        _sleep_with_abort(0.2)
+        z_pos = get_current_position("Z")
+
+    if z_pos is None:
+        print("Warning: Could not read Z position after Z_probe; keeping previous pcb_z_coord.")
+        return False
+
+    pcb_z_coord = z_pos
     if state == "Z limit":
-        pcb_z_coord = get_current_position("Z")
         print(pcb_z_coord)
+    else:
+        print(f"Warning: Z calibration returned {state!r}; using current Z position {pcb_z_coord} as pcb_z_coord.")
+
+    return True
         
 # Don't modify - Phillipe's edit
 def r_limit():
@@ -446,8 +486,9 @@ def r_limit():
         print(rot)
 
 def r_corrector():  
+    _abort_if_emergency_stop()
     r_limit()
-    time.sleep(1)
+    _sleep_with_abort(1.0)
     move_linear_stage('r', '-', 5, wait_for_stop=False, max_wait=30.0)
 
 def x_home():
@@ -480,45 +521,75 @@ def z_home():
         print_home[2] = get_current_position(z)
         print(f"Z home position set at {print_home[2]}")    
     
-def print_origin():
-    z_home()
-    y_home()
-    x_home()
+def print_origin(skip_home=False):
+    if not skip_home:
+        _abort_if_emergency_stop()
+        z_home()
+        _abort_if_emergency_stop()
+        y_home()
+        _abort_if_emergency_stop()
+        x_home()
     
     global pcb_z_coord
 
-    time.sleep(1.0)
+    if pcb_z_coord is None:
+        print("Warning: pcb_z_coord is unset before print origin; probing Z now.")
+        Z_probe()
+
+    if pcb_z_coord is None:
+        raise RuntimeError("pcb_z_coord is still unset after Z probing.")
+
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
     move_linear_stage(x, '-', 36217, wait_for_stop=True, max_wait=30.0)
 
-    time.sleep(1.0)
-    move_linear_stage(y, '-', 9000, wait_for_stop=True, max_wait=30.0)
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
 
-    time.sleep(1.0)
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
     dz = abs(pcb_z_coord - get_current_position(z)) +100
     move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
     # To be replaced with Z probe
 
 def probe_origin():
+    global pcb_z_coord
+
+    _abort_if_emergency_stop()
+    update_speed(100)
     z_home()
+    _abort_if_emergency_stop()
     y_home()
+    _abort_if_emergency_stop()
     x_home()
 
-    time.sleep(1.0)
-    move_linear_stage(x, '-', 39000, wait_for_stop=True, max_wait=30.0)
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    move_linear_stage(x, '-', 29000, wait_for_stop=True, max_wait=30.0)
 
-    time.sleep(1.0)
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
     move_linear_stage(y, '-', 11500, wait_for_stop=True, max_wait=30.0)
     
-    time.sleep(1.0)
-    Z_probe()
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    pcb_z_coord = None
+    if not Z_probe():
+        raise RuntimeError("Z probing failed: unable to read Z position.")
 
+    _abort_if_emergency_stop()
+    update_speed(100)
     down(1000)
 
 def calibrate():
+    _abort_if_emergency_stop()
     r_corrector()
+    _abort_if_emergency_stop()
     probe_origin()
-    time.sleep(1.0)
-    print_origin()
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    # print_origin(skip_home=True)
 
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
@@ -589,6 +660,7 @@ def glue_sequence():
     update_speed(50)
     
     for i in range(8):  # 0, 1000, 2000 ... 7000
+        _abort_if_emergency_stop()
         if i > 0:
             right(1000)
         up(3000)
@@ -604,6 +676,7 @@ def fill_electrode_pads():
     update_speed(10)
 
     for i in range(8):
+        _abort_if_emergency_stop()
         nordson_on()
         if i % 2 == 0:
             back(1000)
@@ -648,11 +721,16 @@ def full_sequence():
     # # Step 6 — rotate +90 back to print station
     # move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
 
+    clear_emergency_stop()
+
     # Step 7 — go back to print origin (same starting point as traces)
+    _abort_if_emergency_stop()
     probe_origin()
-    print_origin()
+    _abort_if_emergency_stop()
+    print_origin(skip_home=True)
 
     # Step 8 — fill electrode pads
+    _abort_if_emergency_stop()
     fill_electrode_pads()
 
     # # Step 9 — return to home and park

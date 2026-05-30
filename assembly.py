@@ -133,4 +133,10 @@
 from print import full_sequence
 
 def run_full_assembly():
-    full_sequence()
+    try:
+        full_sequence()
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("Metal ink routine stopped by emergency stop.")
+        else:
+            raise

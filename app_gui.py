@@ -22,6 +22,9 @@ from motor_control import (
     r_displacement,
     keyboard_pause,
     flush_serial,
+    emergency_stop_motors,
+    clear_emergency_stop,
+    is_emergency_stop_requested,
 )
 
 from relay_control import (
@@ -44,6 +47,7 @@ from relay_control import (
 from print import (
     glue_sequence,
     print_tester,
+    calibrate,
     r_limit,
     r_corrector,
     Z_probe,
@@ -67,6 +71,7 @@ PAD_SPACING = 0.0
 FIRST_PAD_OFFSET = 0.0
 speed_display_label = None
 keyboard_control_enabled = False
+routine_thread = None
 
 axis_controls = {
     'w': ('Y', '-'),
@@ -149,31 +154,77 @@ def wait_for_extrude_done(poll_interval=0.1):
     poll_interval is how often (in seconds) we check the flag.
     """
     while not image_recognition.extrude_done:
+        if is_emergency_stop_requested():
+            print("Emergency stop requested during extrude wait.")
+            return False
         time.sleep(poll_interval)
+    return True
 
 def wait_for_r_align_done(poll_interval=0.1):
     """
     Blocks until image_recognition.r_align_done == True.
     """
     while not image_recognition.r_align_done:
+        if is_emergency_stop_requested():
+            print("Emergency stop requested during rotational alignment wait.")
+            return False
         time.sleep(poll_interval)
+    return True
 
 def wait_for_x_align_done(poll_interval=0.1):
     """
     Blocks until image_recognition.x_align_done == True.
     """
     while not image_recognition.x_align_done:
+        if is_emergency_stop_requested():
+            print("Emergency stop requested during X alignment wait.")
+            return False
         time.sleep(poll_interval)
+    return True
+
+def _abort_if_emergency_stop():
+    if is_emergency_stop_requested():
+        raise RuntimeError("Emergency stop requested.")
+
+def _sleep_with_abort(seconds, step=0.05):
+    elapsed = 0.0
+    while elapsed < seconds:
+        _abort_if_emergency_stop()
+        dt = min(step, seconds - elapsed)
+        time.sleep(dt)
+        elapsed += dt
+
+def on_stop_motors():
+    emergency_stop_motors()
+
+def start_routine_thread(target, routine_name):
+    global routine_thread
+
+    if routine_thread and routine_thread.is_alive():
+        print("Another routine is already running. Stop it before starting a new one.")
+        return
+
+    def runner():
+        try:
+            target()
+        except Exception as e:
+            print(f"Exception in {routine_name}: {e}")
+
+    routine_thread = threading.Thread(target=runner, daemon=True)
+    routine_thread.start()
 
 # Test extrude and alignment for one pad only — no laser cut
 def test_extrude_align():
     threading.Thread(target=_test_extrude_align_thread).start()
 
 def _test_extrude_align_thread():
+    clear_emergency_stop()
     extrude(1)
-    wait_for_extrude_done()
+    if not wait_for_extrude_done():
+        return
     r_align()
-    wait_for_r_align_done()
+    if not wait_for_r_align_done():
+        return
     print("Extrude and align test complete.")
 
 def laser_cut():
@@ -199,41 +250,58 @@ def run_full_manual_loop():
     global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
 
     try:
+        clear_emergency_stop()
         print("--- Starting Automated Routine ---")
 
+        _abort_if_emergency_stop()
         motor_forward(20, timeout=30)
-        time.sleep(2)  # Wait for motor to move
+        _sleep_with_abort(2.0)
+        _abort_if_emergency_stop()
         motor_backward(20, timeout=30)
-        time.sleep(2)  # Wait for motor to move
+        _sleep_with_abort(2.0)
         motor_release()
         
         # Move everything to origin before we begin
+        _abort_if_emergency_stop()
         return_to_origin()
 
         for pad_num in range(1, PAD_COUNT+1):
+            _abort_if_emergency_stop()
             print(f"Automated Alignment on Pad #{pad_num}")
             set_origin_to_current
             update_speed(30)
             move_linear_stage("Z", "-", 1220, wait_for_stop=True, max_wait=30.0)
+            _abort_if_emergency_stop()
             extrude(pad_num)
-            wait_for_extrude_done()
+            if not wait_for_extrude_done():
+                raise RuntimeError("Emergency stop requested.")
+            _abort_if_emergency_stop()
             r_align()
-            wait_for_r_align_done()
+            if not wait_for_r_align_done():
+                raise RuntimeError("Emergency stop requested.")
+            _abort_if_emergency_stop()
             x_align(pad_num)
-            wait_for_x_align_done()
+            if not wait_for_x_align_done():
+                raise RuntimeError("Emergency stop requested.")
+            _abort_if_emergency_stop()
             update_speed(1)
             move_linear_stage("Z", "+", 1220, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_num}")
+            _abort_if_emergency_stop()
             laser_cut()
             
             # Return to origin after finishing this pad
+            _abort_if_emergency_stop()
             return_to_origin()
 
         print("--- Automated Routine Completed ---")
 
     except Exception as e:
-        messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
-        print(f"Exception in run_full_manual_loop: {e}")
+        if str(e) == "Emergency stop requested.":
+            print("Wire/laser automation stopped by emergency stop.")
+        else:
+            messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
+            print(f"Exception in run_full_manual_loop: {e}")
 
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
@@ -451,6 +519,7 @@ def launch_gui():
         #New code to fix the stop issue  edit:11/05/2025
         import threading
         try:
+            clear_emergency_stop()
             axis = axis_entry.get().strip()
             
             raw = displacement_entry.get().strip()
@@ -475,7 +544,7 @@ def launch_gui():
         threading.Thread(target=move_thread).start()
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
-    tk.Button(root, text="Stop Motors", command=stop_motor_control, bg="red", fg="black", font=(15)).pack(pady=10)
+    tk.Button(root, text="Stop Motors", command=on_stop_motors, bg="red", fg="black", font=(15)).pack(pady=10)
 
     # Keyboard control
     kb_var = tk.IntVar(value=0)
@@ -550,17 +619,20 @@ def launch_gui():
 
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
+
+    tk.Button(root, text="Calibrate", command=lambda: start_routine_thread(calibrate, "calibrate")).pack(pady=5)
+    tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
   
     tk.Button(root, text="PNP Tester", command=print_tester).pack(pady=11)
     
     # Button: Glue test 
-    tk.Button(root, text="Dispense Glue", command=glue_sequence).pack(pady=11)
+    tk.Button(root, text="Dispense Glue", command=lambda: start_routine_thread(glue_sequence, "glue_sequence")).pack(pady=11)
 
     # Button: Full Assembly
-    tk.Button(root, text="Print Metal Ink Traces/Pads", command=run_full_assembly).pack(pady=11)
+    tk.Button(root, text="Print Metal Ink Traces/Pads", command=lambda: start_routine_thread(run_full_assembly, "run_full_assembly")).pack(pady=11)
 
     # Full manual loop
-    tk.Button(root, text="Start Wire/Laser Automation Routine", command=run_full_manual_loop).pack(side='bottom', pady=15)
+    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=15)
 
     root.mainloop()
 

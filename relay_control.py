@@ -3,7 +3,13 @@
 import serial
 import time
 from tkinter import messagebox
-from motor_control import serial_lock, send_command, find_port, stop_motor_control
+from motor_control import (
+    serial_lock,
+    send_command,
+    find_port,
+    stop_motor_control,
+    is_emergency_stop_requested,
+)
 
 relay_ser = None
 
@@ -250,6 +256,10 @@ def end_z_poll():
 def r_calibrate():
 
     while True:
+        if is_emergency_stop_requested():
+            print("R calibration cancelled by emergency stop.")
+            return None
+
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         resp = relay_ser.data = relay_ser.read_until(b'R limit').decode("utf-8").strip()
         print(str(resp))
@@ -263,6 +273,10 @@ def r_calibrate():
 def Z_calibrate():
     
     while True:
+        if is_emergency_stop_requested():
+            print("Z calibration cancelled by emergency stop.")
+            return None
+
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         respo = relay_ser.data = relay_ser.read_until(b'Z limit').decode("utf-8").strip()
         print(str(respo))
@@ -276,6 +290,10 @@ def Z_calibrate():
 def mag_detector():
 
     while True:
+        if is_emergency_stop_requested():
+            print("Magnet detection cancelled by emergency stop.")
+            return None
+
         relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
         resp = relay_ser.data = relay_ser.read_until(b'Magnet Detected').decode("utf-8").strip()
         print(str(resp))

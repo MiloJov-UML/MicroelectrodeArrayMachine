@@ -11,6 +11,7 @@ from tkinter import messagebox
 motor_ser = None
 serial_lock = Lock()
 keyboard_pause = Event()  # set while a blocking GUI command is running; keyboard control suspends
+emergency_stop_event = Event()  # latched when GUI emergency stop is requested
 
 # Speed-related
 current_speed = 30  # default speed
@@ -104,6 +105,10 @@ def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retrie
     # axes can fire in the same keyboard loop iteration without blocking each other.
     cmd_key = command[0] if command else 'general'
 
+    if emergency_stop_event.is_set() and command.strip() != "S":
+        print(f"Emergency stop active. Skipping command: {command.strip()}")
+        return None
+
     with serial_lock:
         now = time.time()
         if now - last_command_time.get(cmd_key, 0) < command_cooldown:
@@ -152,6 +157,10 @@ def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retrie
 
     # Polling loop — 1 s between checks, up to 100 s total
     for attempt in range(retries):
+        if emergency_stop_event.is_set() and command.strip() != "S":
+            print(f"Emergency stop active. Aborting wait for '{command.strip()}'.")
+            return None
+
         if ser.in_waiting > 0:
             response = ser.read(ser.in_waiting).decode('utf-8', errors='replace').strip()
             print(f"{device_name} response: {response}")
@@ -279,6 +288,9 @@ def get_current_position(axis):
         return steps_to_µm(steps, axis)
 
 def wait_for_axis_stop(axis, max_wait=None):
+    if max_wait is None:
+        max_wait = 30.0
+
     start_time = time.time()
     old_pos = get_current_position(axis)
     if old_pos is None:
@@ -286,6 +298,10 @@ def wait_for_axis_stop(axis, max_wait=None):
 
     time.sleep(0.01)
     while time.time() - start_time < max_wait:
+        if emergency_stop_event.is_set():
+            print(f"Emergency stop active while waiting for axis {axis} to stop.")
+            return False
+
         new_pos = get_current_position(axis)
         if new_pos is None:
             return False
@@ -298,13 +314,18 @@ def wait_for_axis_stop(axis, max_wait=None):
 def move_linear_stage(axis, direction, displacement_µm,
                       wait_for_stop=False, max_wait=15.0):
     global motor_ser
+
+    if emergency_stop_event.is_set():
+        print(f"Emergency stop active. Ignoring move request {axis}{direction}{displacement_µm}.")
+        return False
+
     if not motor_ser:
         messagebox.showerror("Error", "Not connected to motor control device.")
-        return
+        return False
 
     if axis not in ['X','Y','Z','r','t','T'] or direction not in ['+','-']:
         messagebox.showerror("Error", f"Invalid axis '{axis}' or direction '{direction}'.")
-        return
+        return False
 
     try:
         if axis == 'r':
@@ -329,9 +350,11 @@ def move_linear_stage(axis, direction, displacement_µm,
                 print(f"Warning: axis {axis} may still be moving after {max_wait}s.")
             else:
                 print(f"Axis {axis} move complete.")
+        return True
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
         print(f"Exception: {e}")
+        return False
     finally:
         # Always clear the pause flag, even if an exception occurred.
         if wait_for_stop:
@@ -358,6 +381,21 @@ def stop_motor_control():
         print("Motor control stopped.")
     else:
         messagebox.showerror("Error", "Not connected to motor control device.")
+
+def emergency_stop_motors():
+    """Latch emergency stop state and send immediate stop to motor controller."""
+    emergency_stop_event.set()
+    stop_motor_control()
+    print("Emergency stop latched.")
+
+def clear_emergency_stop():
+    """Clear latched emergency stop state so routines can run again."""
+    if emergency_stop_event.is_set():
+        emergency_stop_event.clear()
+        print("Emergency stop cleared.")
+
+def is_emergency_stop_requested():
+    return emergency_stop_event.is_set()
 
 def query_all_axes_positions():
     axes_list = ['X','Y','Z','r','t','T']
