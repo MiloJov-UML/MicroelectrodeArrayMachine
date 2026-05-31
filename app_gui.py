@@ -41,7 +41,6 @@ from relay_control import (
     pnp_forward,
     pnp_backward,
     pnp_release
-    
 )
 
 from print import (
@@ -620,19 +619,13 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
-    tk.Button(root, text="Calibrate", command=lambda: start_routine_thread(calibrate, "calibrate")).pack(pady=5)
     tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
-  
-    tk.Button(root, text="PNP Tester", command=print_tester).pack(pady=11)
-    
-    # Button: Glue test 
-    tk.Button(root, text="Dispense Glue", command=lambda: start_routine_thread(glue_sequence, "glue_sequence")).pack(pady=11)
 
     # Button: Full Assembly
-    tk.Button(root, text="Print Metal Ink Traces/Pads", command=lambda: start_routine_thread(run_full_assembly, "run_full_assembly")).pack(pady=11)
+    tk.Button(root, text="Print Metal Ink Traces/Pads", command=lambda: start_routine_thread(run_full_assembly, "run_full_assembly")).pack(pady=5)
 
     # Full manual loop
-    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=15)
+    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)
 
     root.mainloop()
 

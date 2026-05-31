@@ -3,6 +3,7 @@ import math
 from motor_control import (
     move_linear_stage, 
     update_speed, 
+    get_current_speed,
     return_to_origin, 
     stop_motor_control, 
     get_current_position,
@@ -49,7 +50,7 @@ temp_w = None
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
 wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
-print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
+print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for starting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 pcb_z_coord = None # Z coordinate for printing, set after probing
 
@@ -113,7 +114,7 @@ traces = {
 
 }
 
-traces_1 = {
+"""traces_1 = {
 
    1: {"a1": 90.0, "l1": 4.17, "a2": 135, "l2": 0.5, "a3": 180, "l3": 2.47, "a4": 225, "l4": 0.5}, # Outermost trace to the right
 
@@ -131,30 +132,30 @@ traces_1 = {
 
    8: {"a1": 90.0, "l1": 4.17, "a2": 45, "l2": 0.5, "a3": 0, "l3": 2.47, "a4": 315, "l4": 0.5}
 
-}
+}"""
 
 
 pad_types = {
 
+    "cs": {"l": 0.6, "w": 0.25}, # Dimensions of cable conncetor short pads, mm
+
+    "cl": {"l": 0.75, "w": 0.25}, # Dimensions of cable conncetor long pads, mm
+
+    "me": {"l": 1.2, "w": 0.5}    # Dimensions of electrode pads, mm
+    
+}
+
+"""pad_types_1 = {
+
     "cs": {"l": 0.75, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
 
     "cl": {"l": 1, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
 
     "me": {"l": 1.2, "w": 0.55}    # Dimensions of electrode pads, mm
     
-}
+}"""
 
-pad_types_1 = {
-
-    "cs": {"l": 0.75, "w": 0.38}, # Dimensions of cable conncetor short pads, mm
-
-    "cl": {"l": 1, "w": 0.38}, # Dimensions of cable conncetor long pads, mm
-
-    "me": {"l": 1.2, "w": 0.55}    # Dimensions of electrode pads, mm
-    
-}
-
-pads = {
+"""pads = {
     
     1: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 4, "e": 4}}, 
     
@@ -172,7 +173,7 @@ pads = {
     
     8: {"start": {"t": "me", "s": 1, "e": 4}, "end": {"t": "cs", "s": 7, "e": 7}}
 
-}
+}"""
 
 def print_pcb():
     global x_coord, y_coord, counter
@@ -322,8 +323,8 @@ def diagonal_handler(angle, t_len, div):
     theta = math.radians(abs(angle))
 
     # Calculate dx and dy based on the angle
-    dx = abs(t_len * math.cos(theta))
-    dy = abs(t_len * math.sin(theta))
+    dx = 3*abs(t_len * math.cos(theta))
+    dy = 3*abs(t_len * math.sin(theta))
 
     # Use same small-pulse approach as keyboard control so X and Y move
     # in rapid alternation instead of fully completing one axis before the other.
@@ -448,12 +449,19 @@ def get_coord():
 # Don't modify - Phillipe's edit  
 def Z_probe():
     global pcb_z_coord
+    prev_speed = get_current_speed()
     _abort_if_emergency_stop()
     update_speed(100)
-    move_linear_stage('Z', '+', 21000, wait_for_stop=False, max_wait=30.0)
+    move_linear_stage('Z', '+', 20000, wait_for_stop=True, max_wait=30.0)
+    _abort_if_emergency_stop()
+    time.sleep(0.5)  # Wait for any vibrations to settle before probing
+    update_speed(1)
+    # Run the fine approach asynchronously so Z_calibrate() can stop on contact.
+    move_linear_stage('Z', '+', 2000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
 
     if state is None:
+        update_speed(prev_speed)
         if is_emergency_stop_requested():
             raise RuntimeError("Emergency stop requested.")
         print("Warning: Z calibration did not return a limit state.")
@@ -465,6 +473,7 @@ def Z_probe():
         z_pos = get_current_position("Z")
 
     if z_pos is None:
+        update_speed(prev_speed)
         print("Warning: Could not read Z position after Z_probe; keeping previous pcb_z_coord.")
         return False
 
@@ -473,6 +482,8 @@ def Z_probe():
         print(pcb_z_coord)
     else:
         print(f"Warning: Z calibration returned {state!r}; using current Z position {pcb_z_coord} as pcb_z_coord.")
+
+    update_speed(prev_speed)
 
     return True
         
@@ -489,6 +500,7 @@ def r_corrector():
     _abort_if_emergency_stop()
     r_limit()
     _sleep_with_abort(1.0)
+    update_speed(30)
     move_linear_stage('r', '-', 5, wait_for_stop=False, max_wait=30.0)
 
 def x_home():
@@ -522,38 +534,20 @@ def z_home():
         print(f"Z home position set at {print_home[2]}")    
     
 def print_origin(skip_home=False):
-    if not skip_home:
-        _abort_if_emergency_stop()
-        z_home()
-        _abort_if_emergency_stop()
-        y_home()
-        _abort_if_emergency_stop()
-        x_home()
-    
-    global pcb_z_coord
-
-    if pcb_z_coord is None:
-        print("Warning: pcb_z_coord is unset before print origin; probing Z now.")
-        Z_probe()
-
-    if pcb_z_coord is None:
-        raise RuntimeError("pcb_z_coord is still unset after Z probing.")
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    move_linear_stage(x, '+', 1700, wait_for_stop=True, max_wait=30.0)
 
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    move_linear_stage(x, '-', 36217, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(y, '+', 100, wait_for_stop=True, max_wait=30.0)
 
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    move_linear_stage(y, '-', 10000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(z, '+', 1200, wait_for_stop=True, max_wait=30.0)
+    get_coord()
 
-    _sleep_with_abort(1.0)
-    _abort_if_emergency_stop()
-    dz = abs(pcb_z_coord - get_current_position(z)) +100
-    move_linear_stage(z, '+', dz, wait_for_stop=True, max_wait=30.0)
-    # To be replaced with Z probe
-
-def probe_origin():
+"""def probe_origin():
     global pcb_z_coord
 
     _abort_if_emergency_stop()
@@ -580,16 +574,40 @@ def probe_origin():
 
     _abort_if_emergency_stop()
     update_speed(100)
-    down(1000)
+    down(1000)"""
 
 def calibrate():
+    global pcb_z_coord
+
     _abort_if_emergency_stop()
-    r_corrector()
+    update_speed(100)
+    z_home()
     _abort_if_emergency_stop()
-    probe_origin()
+    y_home()
+    _abort_if_emergency_stop()
+    x_home()
+
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    # print_origin(skip_home=True)
+    move_linear_stage(x, '-', 29000, wait_for_stop=True, max_wait=30.0)
+
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    move_linear_stage(y, '-', 11500, wait_for_stop=True, max_wait=30.0)
+
+    _abort_if_emergency_stop()
+    r_corrector()
+    
+    update_speed(100)
+    _sleep_with_abort(1.0)
+    _abort_if_emergency_stop()
+    pcb_z_coord = None
+    if not Z_probe():
+        raise RuntimeError("Z probing failed: unable to read Z position.")
+
+    _abort_if_emergency_stop()
+    update_speed(100)
+    down(1000)
 
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
@@ -689,6 +707,16 @@ def fill_electrode_pads():
 
 # Full assembly sequence
 def full_sequence():
+    clear_emergency_stop()
+    _abort_if_emergency_stop()
+    calibrate()
+    _abort_if_emergency_stop()
+    print_origin()
+    print_pcb()
+    _abort_if_emergency_stop()
+    #fill_electrode_pads()
+    _abort_if_emergency_stop()
+
     # """Print traces, wait for wire placement, fill electrode pads."""
     # print("Starting full sequence...")
 
@@ -721,17 +749,9 @@ def full_sequence():
     # # Step 6 — rotate +90 back to print station
     # move_linear_stage('r', '+', 90, wait_for_stop=True, max_wait=30.0)
 
-    clear_emergency_stop()
-
     # Step 7 — go back to print origin (same starting point as traces)
-    _abort_if_emergency_stop()
-    probe_origin()
-    _abort_if_emergency_stop()
-    print_origin(skip_home=True)
 
     # Step 8 — fill electrode pads
-    _abort_if_emergency_stop()
-    fill_electrode_pads()
 
     # # Step 9 — return to home and park
     # z_home()
