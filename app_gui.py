@@ -50,7 +50,9 @@ from print import (
     r_limit,
     r_corrector,
     Z_probe,
-    get_coord
+    get_coord,
+    confirm_manual_origin_set,
+    register_manual_origin_prompt_callback,
 )
 
 from assembly import run_full_assembly
@@ -71,6 +73,8 @@ FIRST_PAD_OFFSET = 0.0
 speed_display_label = None
 keyboard_control_enabled = False
 routine_thread = None
+laser_state_var = None
+nord_state_var = None
 
 axis_controls = {
     'w': ('Y', '-'),
@@ -194,7 +198,26 @@ def _sleep_with_abort(seconds, step=0.05):
         elapsed += dt
 
 def on_stop_motors():
+    global laser_state_var, nord_state_var
+
+    # Latch emergency immediately to abort active routines and stop motion.
     emergency_stop_motors()
+
+    # Force outputs off (allowed during emergency by command whitelist).
+
+    try:
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+    except Exception as e:
+        print(f"Warning: could not turn laser off during stop: {e}")
+
+    try:
+        nordson_off()
+        if nord_state_var is not None:
+            nord_state_var.set('Off')
+    except Exception as e:
+        print(f"Warning: could not turn Nordson off during stop: {e}")
 
 def start_routine_thread(target, routine_name):
     global routine_thread
@@ -250,6 +273,12 @@ def run_full_manual_loop():
 
     try:
         clear_emergency_stop()
+        laser_relay_off()
+        nordson_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        if nord_state_var is not None:
+            nord_state_var.set('Off')
         print("--- Starting Automated Routine ---")
 
         _abort_if_emergency_stop()
@@ -301,6 +330,16 @@ def run_full_manual_loop():
         else:
             messagebox.showerror("Error", f"An error occurred during run_full_manual_loop: {e}")
             print(f"Exception in run_full_manual_loop: {e}")
+    finally:
+        try:
+            laser_relay_off()
+            nordson_off()
+            if laser_state_var is not None:
+                laser_state_var.set('Off')
+            if nord_state_var is not None:
+                nord_state_var.set('Off')
+        except Exception as e:
+            print(f"Warning: failed to force outputs off after run_full_manual_loop: {e}")
 
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
@@ -553,9 +592,10 @@ def launch_gui():
     ).pack(pady=5)
 
     # Laser radio
-    laser_state = tk.StringVar(value='Off')
+    global laser_state_var
+    laser_state_var = tk.StringVar(value='Off')
     def set_laser():
-        if laser_state.get() == 'On':
+        if laser_state_var.get() == 'On':
             laser_relay_on()
         else:
             laser_relay_off()
@@ -563,39 +603,54 @@ def launch_gui():
     laser_frame = tk.Frame(root)
     laser_frame.pack(pady=5)
     tk.Label(laser_frame, text="Laser: ").pack(side='left')
-    tk.Radiobutton(laser_frame, text="On", variable=laser_state, value='On', command=set_laser).pack(side='left')
-    tk.Radiobutton(laser_frame, text="Off", variable=laser_state, value='Off', command=set_laser).pack(side='left')
+    tk.Radiobutton(laser_frame, text="On", variable=laser_state_var, value='On', command=set_laser).pack(side='left')
+    tk.Radiobutton(laser_frame, text="Off", variable=laser_state_var, value='Off', command=set_laser).pack(side='left')
 
     # Solenoid radio Phill's edit
-    solenoid_state = tk.StringVar(value='Off')
+    global solenoid_state_var
+    solenoid_state_var = tk.StringVar(value='Off')
     def set_solenoid():
-        if solenoid_state.get() == 'On':
+        if solenoid_state_var.get() == 'On':
             solenoid_relay_on()
         else:
             solenoid_relay_off()
 
     solenoid_frame = tk.Frame(root)
     solenoid_frame.pack(pady=8)
-    tk.Label(solenoid_frame, text="Solenoid: ").pack(side='left')
-    tk.Radiobutton(solenoid_frame, text="On", variable=solenoid_state, value='On', command=set_solenoid).pack(side='left')
-    tk.Radiobutton(solenoid_frame, text="Off", variable=solenoid_state, value='Off', command=set_solenoid).pack(side='left')
+    tk.Label(solenoid_frame, text="PNP Vacuum: ").pack(side='left')
+    tk.Radiobutton(solenoid_frame, text="On", variable=solenoid_state_var, value='On', command=set_solenoid).pack(side='left')
+    tk.Radiobutton(solenoid_frame, text="Off", variable=solenoid_state_var, value='Off', command=set_solenoid).pack(side='left')
 
     # Nordson radio
-    nord_state = tk.StringVar(value='Off')
+    global nord_state_var
+    nord_state_var = tk.StringVar(value='Off')
     def set_nord():
-        if nord_state.get() == 'On':
+        if nord_state_var.get() == 'On':
             nordson_on()
         else:
             nordson_off()
 
     nord_frame = tk.Frame(root)
     nord_frame.pack(pady=10)
-    tk.Label(nord_frame, text="Nordson: ").pack(side='left')
-    tk.Radiobutton(nord_frame, text="On", variable=nord_state, value='On', command=set_nord).pack(side='left')
-    tk.Radiobutton(nord_frame, text="Off", variable=nord_state, value='Off', command=set_nord).pack(side='left')
+    tk.Label(nord_frame, text="Pressurized Air: ").pack(side='left')
+    tk.Radiobutton(nord_frame, text="On", variable=nord_state_var, value='On', command=set_nord).pack(side='left')
+    tk.Radiobutton(nord_frame, text="Off", variable=nord_state_var, value='Off', command=set_nord).pack(side='left')
 
     # Query & origin
-    tk.Button(root, text="Set Origin", command=set_origin_to_current).pack(pady=5)
+    def show_manual_origin_prompt():
+        root.after(0, lambda: messagebox.showinfo(
+            "Manual Origin Adjustment",
+            "Fine-tune the stage position with the GUI controls.\n"
+            "When placement looks correct, click Set Origin to continue."
+        ))
+
+    register_manual_origin_prompt_callback(show_manual_origin_prompt)
+
+    def on_set_origin_clicked():
+        set_origin_to_current()
+        confirm_manual_origin_set()
+
+    tk.Button(root, text="Set Origin", command=on_set_origin_clicked).pack(pady=5)
     tk.Button(root, text="Return to Origin", command=return_to_origin).pack(pady=5)
 
     # BOUNDING BOX radio

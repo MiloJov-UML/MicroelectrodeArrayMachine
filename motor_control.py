@@ -105,8 +105,20 @@ def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retrie
     # axes can fire in the same keyboard loop iteration without blocking each other.
     cmd_key = command[0] if command else 'general'
 
-    if emergency_stop_event.is_set() and command.strip() != "S":
-        print(f"Emergency stop active. Skipping command: {command.strip()}")
+    # Relay controller Arduino uses readStringUntil('\n') — each command must end
+    # with '\n' so the Arduino processes it immediately instead of waiting for a
+    # 1-second timeout.  Without this, rapid commands (e.g. stop turning off nordson
+    # right after a routine turned it on) arrive inside the same readStringUntil
+    # window and get concatenated into a garbage string that matches nothing.
+    if device_name == "Relay Controller" and not command.endswith('\n'):
+        command = command + '\n'
+
+    # During emergency stop, block all motor movement commands.
+    # Relay commands (laser, nordson, solenoid) are never blocked — routines abort
+    # via _abort_if_emergency_stop() and clean up in finally blocks; blocking relay
+    # commands here would break GUI toggles because the GUI runs in a non-main thread.
+    if emergency_stop_event.is_set() and device_name == "Motor Controller" and command.strip() != "S":
+        print(f"Emergency stop active. Skipping motor command: {command.strip()}")
         return None
 
     with serial_lock:

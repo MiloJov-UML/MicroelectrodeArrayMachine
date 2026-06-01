@@ -20,9 +20,22 @@ record_camera0 = False
 record_camera1 = False
 record_camera2 = False
 
-record_dir0 = r"D:\camera0_pcb2_CFmicrowire_2025-04-01"
-record_dir1 = r"D:\camera1_pcb2_CFmicrowire_2025-04-01"
-record_dir2 = r"D:\camera2_pcb2_CFmicrowire_2025-04-01"
+def _create_unique_daily_record_dir(root_dir, folder_prefix):
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    base_name = f"{folder_prefix}_{date_str}"
+    candidate = os.path.join(root_dir, base_name)
+
+    suffix = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(root_dir, f"{base_name}_{suffix}")
+        suffix += 1
+
+    os.makedirs(candidate, exist_ok=False)
+    return candidate
+
+record_dir0 = _create_unique_daily_record_dir("D:\\", "camera0_pcb2_CFmicrowire")
+record_dir1 = _create_unique_daily_record_dir("D:\\", "camera1_pcb2_CFmicrowire")
+record_dir2 = _create_unique_daily_record_dir("D:\\", "camera2_pcb2_CFmicrowire")
 
 video_writers = {0: None, 1: None, 2: None}  
 run_timestamps = {0: None, 1: None, 2: None}

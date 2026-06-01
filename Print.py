@@ -1,5 +1,6 @@
 import time
 import math
+import threading
 from motor_control import (
     move_linear_stage, 
     update_speed, 
@@ -16,6 +17,7 @@ from motor_control import (
 )
 
 from relay_control import (
+    laser_relay_off,
     nordson_on, 
     nordson_off,
     servo_to,
@@ -53,6 +55,8 @@ probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
 print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for starting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 pcb_z_coord = None # Z coordinate for printing, set after probing
+_manual_origin_event = threading.Event()
+_manual_origin_prompt_callback = None
 
 def _abort_if_emergency_stop():
     if is_emergency_stop_requested():
@@ -65,6 +69,26 @@ def _sleep_with_abort(seconds, step=0.05):
         dt = min(step, seconds - elapsed)
         time.sleep(dt)
         elapsed += dt
+
+def register_manual_origin_prompt_callback(callback):
+    global _manual_origin_prompt_callback
+    _manual_origin_prompt_callback = callback
+
+def confirm_manual_origin_set():
+    _manual_origin_event.set()
+
+def _wait_for_manual_origin_set():
+    _manual_origin_event.clear()
+    print("Manual origin fine-tune requested. Use GUI movement controls, then click Set Origin to continue.")
+
+    if _manual_origin_prompt_callback is not None:
+        try:
+            _manual_origin_prompt_callback()
+        except Exception as e:
+            print(f"Warning: failed to show manual-origin prompt: {e}")
+
+    while not _manual_origin_event.wait(0.1):
+        _abort_if_emergency_stop()
 
 # BASIC MOVES  
 # Use for testing
@@ -178,6 +202,8 @@ pad_types = {
 def print_pcb():
     global x_coord, y_coord, counter
 
+    update_speed(1)
+
     _abort_if_emergency_stop()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
@@ -266,7 +292,7 @@ def print_trace(trace_dict, index):
             
             if angle_axis.find('d') == -1:
                 nordson_on()
-                update_speed(15) #ORIGINAL WAS 20, adjust for better print quality/speed tradeoff
+                update_speed(1) #ORIGINAL WAS 20, adjust for better print quality/speed tradeoff
                 move_linear_stage(angle_axis, angle_dir, t_len, wait_for_stop=True, max_wait=30.0)
                 
                 angle_dir, angle_axis, t_len = None, None, None
@@ -318,13 +344,13 @@ def angle_handler(angle):
 def diagonal_handler(angle, t_len, div):
     # Convert angle to radians
     
-    nordson_off() # Originally was off
+    nordson_on() # Originally was off
 
     theta = math.radians(abs(angle))
 
     # Calculate dx and dy based on the angle
-    dx = 3*abs(t_len * math.cos(theta))
-    dy = 3*abs(t_len * math.sin(theta))
+    dx = 2*abs(t_len * math.cos(theta))
+    dy = 2*abs(t_len * math.sin(theta))
 
     # Use same small-pulse approach as keyboard control so X and Y move
     # in rapid alternation instead of fully completing one axis before the other.
@@ -353,7 +379,7 @@ def print_pad(pad_dict, pad_type, position):
 
     nordson_on()
     pad_handler(pad_dict, pad_type, position)
-    nordson_off()
+    #nordson_off()
     
 def pad_handler(pad_dict, pad_type, position):
     
@@ -362,7 +388,7 @@ def pad_handler(pad_dict, pad_type, position):
     length = mm_to_um(pad_dict.get(pad_type).get("l"))
     width = mm_to_um(pad_dict.get(pad_type).get("w"))
     
-    update_speed(7)
+    update_speed(1)
 
     if position == 0:
         
@@ -393,7 +419,7 @@ def pad_handler(pad_dict, pad_type, position):
 
     elif position == 4:
         left(width/2)
-        time.sleep(1.0)
+        time.sleep(0.1)
         move_linear_stage(y, '+', length, wait_for_stop=True, max_wait=30.0)
         right(width)
         front(length)
@@ -419,6 +445,8 @@ def pad_handler(pad_dict, pad_type, position):
         back(length)
 
 def next_feature(num, xx, yy, spacing):
+
+    nordson_off()
     
     update_speed(50)
     down(1000)
@@ -533,7 +561,7 @@ def z_home():
         print_home[2] = get_current_position(z)
         print(f"Z home position set at {print_home[2]}")    
     
-def print_origin(skip_home=False):
+def print_origin():
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
     move_linear_stage(x, '+', 1700, wait_for_stop=True, max_wait=30.0)
@@ -545,6 +573,7 @@ def print_origin(skip_home=False):
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
     move_linear_stage(z, '+', 1200, wait_for_stop=True, max_wait=30.0)
+    _wait_for_manual_origin_set()
     get_coord()
 
 """def probe_origin():
@@ -708,14 +737,24 @@ def fill_electrode_pads():
 # Full assembly sequence
 def full_sequence():
     clear_emergency_stop()
-    _abort_if_emergency_stop()
-    calibrate()
-    _abort_if_emergency_stop()
-    print_origin()
-    print_pcb()
-    _abort_if_emergency_stop()
-    #fill_electrode_pads()
-    _abort_if_emergency_stop()
+    laser_relay_off()
+    nordson_off()
+
+    try:
+        _abort_if_emergency_stop()
+        calibrate()
+        _abort_if_emergency_stop()
+        print_origin()
+        print_pcb()
+        _abort_if_emergency_stop()
+        #fill_electrode_pads()
+        _abort_if_emergency_stop()
+    finally:
+        try:
+            laser_relay_off()
+            nordson_off()
+        except Exception as e:
+            print(f"Warning: failed to force outputs off after full_sequence: {e}")
 
     # """Print traces, wait for wire placement, fill electrode pads."""
     # print("Starting full sequence...")

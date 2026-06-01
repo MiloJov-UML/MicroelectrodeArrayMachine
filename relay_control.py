@@ -39,7 +39,7 @@ def laser_relay_on():
     """Turn the laser on."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Laser_Relay_On", "Relay Controller")
+        send_command(relay_ser, "Laser_Relay_On", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -47,7 +47,7 @@ def laser_relay_off():
     """Turn the laser off."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Laser_Relay_Off", "Relay Controller")
+        send_command(relay_ser, "Laser_Relay_Off", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -56,7 +56,7 @@ def solenoid_relay_on():
     """Turn the solenoid on."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Solenoid_Relay_On", "Relay Controller")
+        send_command(relay_ser, "Solenoid_Relay_On", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -64,7 +64,7 @@ def solenoid_relay_off():
     """Turn the solenoid off."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Solenoid_Relay_Off", "Relay Controller")
+        send_command(relay_ser, "Solenoid_Relay_Off", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -72,9 +72,7 @@ def nordson_on():
     """Turn the Nordson on."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Nordson_On", "Relay Controller")
-        #relay_ser.write(("Nordson_On\n").encode())
-        #print("Nordson ON")
+        send_command(relay_ser, "Nordson_On", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -82,9 +80,7 @@ def nordson_off():
     """Turn the Nordson off."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "Nordson_Off", "Relay Controller")
-        #relay_ser.write(("Nordson_Off\n").encode())
-        #print("Nordson OFF")
+        send_command(relay_ser, "Nordson_Off", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
