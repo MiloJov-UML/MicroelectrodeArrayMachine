@@ -55,6 +55,7 @@ probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
 print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for starting point for print process, probe to find Z
 print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
 pcb_z_coord = None # Z coordinate for printing, set after probing
+_has_calibrated = False  # Set True after first successful calibrate(); skipped on reruns
 _manual_origin_event = threading.Event()
 _manual_origin_prompt_callback = None
 
@@ -161,9 +162,9 @@ traces = {
 
 pad_types = {
 
-    "cs": {"l": 0.6, "w": 0.25}, # Dimensions of cable conncetor short pads, mm
+    "cs": {"l": 0.7, "w": 0.2}, # Dimensions of cable conncetor short pads, mm
 
-    "cl": {"l": 0.75, "w": 0.25}, # Dimensions of cable conncetor long pads, mm
+    "cl": {"l": 0.7, "w": 0.2}, # Dimensions of cable conncetor long pads, mm
 
     "me": {"l": 1.2, "w": 0.5}    # Dimensions of electrode pads, mm
     
@@ -212,49 +213,49 @@ def print_pcb():
     print_pad(pad_types, "cs", 4)
     
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 2)
     print_pad(pad_types, "cs", 2)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 3)
     print_pad(pad_types, "cl", 2)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 4)
     print_pad(pad_types, "cl", 1)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 5)
     print_pad(pad_types, "cl", 7)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 6)
     print_pad(pad_types, "cl", 6)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 7)
     print_pad(pad_types, "cs", 6)
 
     counter += 1
-    next_feature(counter, x_coord, y_coord, 1000)
+    advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
     print_pad(pad_types, "me", 4)
     print_trace(traces, 8)
@@ -341,7 +342,7 @@ def angle_handler(angle):
         angle_dir = '-'
   
 # Don't modify - Phillipe's edit
-def diagonal_handler(angle, t_len, div):
+"""def diagonal_handler(angle, t_len, div):
     # Convert angle to radians
     
     nordson_on() # Originally was off
@@ -371,7 +372,30 @@ def diagonal_handler(angle, t_len, div):
 
         # Let both axes settle before the next move
         wait_for_axis_stop(x, max_wait=10.0)
-        wait_for_axis_stop(y, max_wait=10.0)
+        wait_for_axis_stop(y, max_wait=10.0)"""
+
+def diagonal_handler(angle, t_len, div):
+    # Convert angle to radians
+
+    nordson_on() # Originally was off
+
+    theta = math.radians(abs(angle))
+
+    # Calculate dx and dy based on the angle
+    dx = t_len * math.cos(theta)
+    dy = t_len * math.sin(theta)
+
+    xstp = round(abs(dx / div))
+    ystp = round(abs(dy / div))
+    update_speed(1)
+
+    if (angle_dir[0] != None) & (angle_dir[1] != None):
+
+        for i in range(div):
+            _abort_if_emergency_stop()
+            move_linear_stage(x, angle_dir[0], xstp, wait_for_stop=True, max_wait=30.0)
+            move_linear_stage(y, angle_dir[1], ystp, wait_for_stop=True, max_wait=30.0)
+            time.sleep(0.001)
             
 def print_pad(pad_dict, pad_type, position):
     
@@ -461,6 +485,38 @@ def next_feature(num, xx, yy, spacing):
     up(1000)
     stop_motor_control() 
 
+def advance_to_next_feature(num, xx, yy, spacing):
+    """Move directly from current position to the next feature start.
+    Computes a single displacement to (xx + num*spacing, yy) instead of
+    returning to origin first and then stepping right."""
+    nordson_off()
+
+    update_speed(50)
+    down(1000)
+
+    x_target = xx + num * spacing
+    y_target = yy
+    cur_x = get_current_position(x)
+    cur_y = get_current_position(y)
+
+    xdisp = x_target - cur_x
+    ydisp = y_target - cur_y
+
+    # Settle Y back to the origin row first, then advance X to the target column.
+    if ydisp > 0:
+        back(abs(ydisp))
+    elif ydisp < 0:
+        front(abs(ydisp))
+
+    if xdisp > 0:
+        right(abs(xdisp))
+    elif xdisp < 0:
+        left(abs(xdisp))
+
+    print(f"Moving to next feature {num}")
+    up(1000)
+    stop_motor_control()
+
 def get_coord():
     global x_coord, y_coord, z_coord
 
@@ -480,12 +536,12 @@ def Z_probe():
     prev_speed = get_current_speed()
     _abort_if_emergency_stop()
     update_speed(100)
-    move_linear_stage('Z', '+', 20000, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage('Z', '+', 17000, wait_for_stop=True, max_wait=30.0)
     _abort_if_emergency_stop()
     time.sleep(0.5)  # Wait for any vibrations to settle before probing
     update_speed(1)
     # Run the fine approach asynchronously so Z_calibrate() can stop on contact.
-    move_linear_stage('Z', '+', 2000, wait_for_stop=False, max_wait=30.0)
+    move_linear_stage('Z', '+', 8000, wait_for_stop=False, max_wait=30.0)
     state = Z_calibrate()
 
     if state is None:
@@ -564,7 +620,7 @@ def z_home():
 def print_origin():
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    move_linear_stage(x, '+', 1700, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(x, '+', 2000, wait_for_stop=True, max_wait=30.0)
 
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
@@ -572,7 +628,7 @@ def print_origin():
 
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    move_linear_stage(z, '+', 1200, wait_for_stop=True, max_wait=30.0)
+    move_linear_stage(z, '+', 1300, wait_for_stop=True, max_wait=30.0)
     _wait_for_manual_origin_set()
     get_coord()
 
@@ -736,13 +792,19 @@ def fill_electrode_pads():
 
 # Full assembly sequence
 def full_sequence():
+    global _has_calibrated
     clear_emergency_stop()
     laser_relay_off()
     nordson_off()
 
     try:
         _abort_if_emergency_stop()
-        calibrate()
+        if not _has_calibrated:
+            calibrate()
+            _has_calibrated = True
+            print("Calibration complete. Subsequent runs will skip calibration.")
+        else:
+            print("Skipping calibration (already calibrated this session).")
         _abort_if_emergency_stop()
         print_origin()
         print_pcb()
