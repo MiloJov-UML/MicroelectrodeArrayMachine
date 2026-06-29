@@ -1,6 +1,7 @@
 # image_recognition.py
 
 import math
+import threading
 import cv2
 import os
 import json
@@ -49,6 +50,28 @@ x_align_done = False
 
 # Settings file path
 SETTINGS_FILE = "pcb_settings.json"
+
+# Camera port mapping: logical role index -> physical OS device index
+# Role 0 = main PCB view, Role 1 = wire tip view, Role 2 = clog detection
+camera_ports = {0: 0, 1: 1, 2: 2}
+
+# Per-camera stop events — set to signal a running open_camera thread to exit cleanly
+camera_stop_events = {0: threading.Event(), 1: threading.Event(), 2: threading.Event()}
+
+def load_camera_ports():
+    """Load camera port assignments from pcb_settings.json at startup."""
+    global camera_ports
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                data = json.load(f)
+            ports = data.get("camera_ports", {})
+            for role in [0, 1, 2]:
+                camera_ports[role] = int(ports.get(str(role), role))
+    except Exception as e:
+        print(f"Warning: Could not load camera ports from {SETTINGS_FILE}: {e}")
+
+load_camera_ports()
 
 # Function to get the pad spacing from settings
 def get_pad_spacing():
@@ -121,7 +144,7 @@ def custom_annotate(results, img, camera_index=0):
 
     # Define allowed objects per camera
     allowed_objects = {
-        0: ["Pad", "CF_Tip", "GC_Tip", "TrenchStop", "TrenchStart"],
+        0: ["Pad", "CF_Tip", "GC_Tip"],
         1: ["CF_Tip", "GC_Tip"],
         2: ["Clog"]
     }
@@ -191,18 +214,21 @@ def custom_annotate(results, img, camera_index=0):
 last_cf_box = None
 last_gc_box = None
 last_pad_box= None  # We'll store one "Pad" bounding box for extrude reference
+last_clog_box = None  # Exclusively updated by camera 2
 
 def open_camera(camera_index=0, model_path="best.pt"):
     global record_camera0, record_camera1
     global video_writers, run_timestamps
     global frames_per_still, frame_counts
-    global last_cf_box, last_gc_box, last_pad_box
+    global last_cf_box, last_gc_box, last_pad_box, last_clog_box
 
     desired_width = 1600
     desired_height = 1200
 
     model = YOLO(model_path)
-    cap = cv2.VideoCapture(camera_index)
+    device_port = camera_ports.get(camera_index, camera_index)
+    cap = cv2.VideoCapture(device_port)
+    print(f"[Camera {camera_index}] opening device port {device_port}")
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, desired_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, desired_height)
@@ -228,6 +254,9 @@ def open_camera(camera_index=0, model_path="best.pt"):
     height, width = frame.shape[:2]
 
     while True:
+        if camera_stop_events[camera_index].is_set():
+            print(f"[Camera {camera_index}] Stop requested, shutting down.")
+            break
         ret, frame = cap.read()
         if not ret:
             break
@@ -267,8 +296,21 @@ def open_camera(camera_index=0, model_path="best.pt"):
             if pad_found is not None:
                 last_pad_box= pad_found
 
+        elif camera_index == 2:
+            clog_found = None
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                class_name = names[cls_id]
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                if class_name == "Clog":
+                    clog_found = (x1, y1, x2, y2)
+            if clog_found is not None:
+                last_clog_box = clog_found
+            else:
+                last_clog_box = None  # Clear when no clog visible
+
         # 3) bounding box annotation
-        annotated_frame = custom_annotate(results[0], frame)
+        annotated_frame = custom_annotate(results[0], frame, camera_index)
 
         # 4) Recording logic - use original processed frame without annotations
         rec_flag = (camera_index==0 and record_camera0) or \
@@ -326,7 +368,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
             break
 
     cap.release()
-    cv2.destroyAllWindows()
+    cv2.destroyWindow(window_name)
     print(f"[Camera {camera_index}] feed ended.")
 
     if rec_flag and video_writers[camera_index]:

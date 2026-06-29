@@ -13,6 +13,22 @@ serial_lock = Lock()
 keyboard_pause = Event()  # set while a blocking GUI command is running; keyboard control suspends
 emergency_stop_event = Event()  # latched when GUI emergency stop is requested
 
+# Axis limit state set by relay_control monitor.
+# Maps axis -> the direction that is blocked (e.g. {'r': '+', 'Z': '+'}).
+# Moving in the OPPOSITE direction is always allowed so the axis can back out.
+_axis_at_limit = {}
+
+def set_axis_limit(axis, blocked_direction):
+    """Called by the relay monitor when an axis hits its limit switch."""
+    _axis_at_limit[axis] = blocked_direction
+    print(f"Axis {axis} limit set: '{blocked_direction}' direction blocked.")
+
+def clear_axis_limit(axis):
+    """Called by the relay monitor when the limit switch releases."""
+    if axis in _axis_at_limit:
+        del _axis_at_limit[axis]
+        print(f"Axis {axis} limit cleared — all directions allowed.")
+
 # Speed-related
 current_speed = 30  # default speed
 last_command_time = {}   # per-axis key -> timestamp, avoids one axis blocking another
@@ -117,8 +133,16 @@ def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retrie
     # Relay commands (laser, nordson, solenoid) are never blocked — routines abort
     # via _abort_if_emergency_stop() and clean up in finally blocks; blocking relay
     # commands here would break GUI toggles because the GUI runs in a non-main thread.
-    if emergency_stop_event.is_set() and device_name == "Motor Controller" and command.strip() != "S":
-        print(f"Emergency stop active. Skipping motor command: {command.strip()}")
+    # "S" (stop) and "V" (speed) are always allowed: stop is safety-critical and
+    # speed is configuration-only, not motion.
+    # "?" (position query) is also always allowed so Query Position works after stop.
+    _cmd_stripped = command.strip()
+    if (emergency_stop_event.is_set()
+            and device_name == "Motor Controller"
+            and _cmd_stripped != "S"
+            and not _cmd_stripped.startswith("V")
+            and not _cmd_stripped.startswith("?")):
+        print(f"Emergency stop active. Skipping motor command: {_cmd_stripped}")
         return None
 
     with serial_lock:
@@ -169,8 +193,12 @@ def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retrie
 
     # Polling loop — 1 s between checks, up to 100 s total
     for attempt in range(retries):
-        if emergency_stop_event.is_set() and command.strip() != "S":
-            print(f"Emergency stop active. Aborting wait for '{command.strip()}'.")
+        _stripped = command.strip()
+        if (emergency_stop_event.is_set()
+                and _stripped != "S"
+                and not _stripped.startswith("V")
+                and not _stripped.startswith("?")):
+            print(f"Emergency stop active. Aborting wait for '{_stripped}'.")
             return None
 
         if ser.in_waiting > 0:
@@ -329,6 +357,13 @@ def move_linear_stage(axis, direction, displacement_µm,
 
     if emergency_stop_event.is_set():
         print(f"Emergency stop active. Ignoring move request {axis}{direction}{displacement_µm}.")
+        return False
+
+    # Directional limit guard: block moves further into a triggered limit switch
+    # but always allow backing out in the opposite direction.
+    blocked_dir = _axis_at_limit.get(axis)
+    if blocked_dir and direction == blocked_dir:
+        print(f"Axis {axis} is at its limit ('{blocked_dir}' blocked). Move skipped — back out with '{'-' if blocked_dir == '+' else '+'}' first.")
         return False
 
     if not motor_ser:

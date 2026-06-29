@@ -51,8 +51,11 @@ from print import (
     r_corrector,
     Z_probe,
     get_coord,
-    confirm_manual_origin_set,
-    register_manual_origin_prompt_callback,
+    confirm_origin_set,
+    notify_fine_tune_choice,
+    register_origin_prompt_callback,
+    register_origin_ask_callback,
+    extruder_origin_setup,
 )
 
 from assembly import run_full_assembly
@@ -66,6 +69,8 @@ from image_recognition import (
 )
 
 SETTINGS_FILE = "pcb_settings.json"
+
+_camera_threads = {0: None, 1: None, 2: None}
 
 PAD_COUNT = 0
 PAD_SPACING = 0.0
@@ -96,7 +101,8 @@ def load_last_settings():
         "pad_count": 8,
         "pad_spacing": 1000.0,
         "offset": 1100.0,
-        "fixture_offset": 2000.0
+        "fixture_offset": 2000.0,
+        "camera_ports": {"0": 0, "1": 1, "2": 2}
     }
     if os.path.isfile(SETTINGS_FILE):
         try:
@@ -110,18 +116,43 @@ def load_last_settings():
     return defaults
 
 def save_settings(pad_count, pad_spacing, offset, fixture_offset):
-    data = {
+    # Read existing data so camera_ports (and other keys) are not lost
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing.update({
         "pad_count": pad_count,
         "pad_spacing": pad_spacing,
         "offset": offset,
-        "fixture_offset": fixture_offset
-    }
+        "fixture_offset": fixture_offset,
+    })
     try:
         with open(SETTINGS_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(existing, f, indent=2)
         print(f"Saved PCB settings to {SETTINGS_FILE}")
     except Exception as e:
         print(f"Warning: Could not write to {SETTINGS_FILE}: {e}")
+
+def save_camera_ports(ports_dict):
+    """Persist camera port assignments to pcb_settings.json."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing["camera_ports"] = {str(k): v for k, v in ports_dict.items()}
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Saved camera ports to {SETTINGS_FILE}: {ports_dict}")
+    except Exception as e:
+        print(f"Warning: Could not save camera ports: {e}")
 
 def continuous_motor_control():
     global keyboard_control_enabled
@@ -288,7 +319,15 @@ def run_full_manual_loop():
         motor_backward(20, timeout=30)
         _sleep_with_abort(2.0)
         motor_release()
-        
+
+        # Navigate to (and fine-tune) the extruder/laser-alignment origin.
+        # The confirmed position is saved to pcb_settings.json and reused next run.
+        # set_origin_to_current() then locks it in so return_to_origin() throughout
+        # the pad loop returns here every time.
+        _abort_if_emergency_stop()
+        extruder_origin_setup()
+        set_origin_to_current()
+
         # Move everything to origin before we begin
         _abort_if_emergency_stop()
         return_to_origin()
@@ -419,6 +458,55 @@ def toggle_recording():
 ###############################
 # IMAGE ADJUSTMENT SLIDER POPUP
 ###############################
+def open_camera_port_settings_window(root):
+    """Popup to reassign which OS camera device port each logical camera role uses."""
+    win = Toplevel(root)
+    win.title("Camera Port Assignments")
+    win.resizable(False, False)
+
+    role_labels = {
+        0: "Camera 0 — Main PCB View",
+        1: "Camera 1 — Wire Tip View",
+        2: "Camera 2 — Clog Detection",
+    }
+
+    port_vars = {}
+    for role, label in role_labels.items():
+        current_port = image_recognition.camera_ports.get(role, role)
+        tk.Label(win, text=f"{label}:").grid(row=role, column=0, padx=10, pady=6, sticky='w')
+        var = tk.StringVar(value=str(current_port))
+        port_vars[role] = var
+        spinbox = tk.Spinbox(win, from_=0, to=9, width=4, textvariable=var)
+        spinbox.grid(row=role, column=1, padx=10, pady=6)
+
+    tk.Label(
+        win,
+        text="Changes take effect on next program start.",
+        fg="gray"
+    ).grid(row=3, column=0, columnspan=2, padx=10, pady=(2, 8))
+
+    def on_apply():
+        try:
+            new_ports = {role: int(port_vars[role].get()) for role in role_labels}
+        except ValueError:
+            messagebox.showerror("Error", "Port numbers must be integers.", parent=win)
+            return
+        image_recognition.camera_ports.update(new_ports)
+        save_camera_ports(new_ports)
+        win.destroy()
+        if messagebox.askyesno(
+            "Restart Cameras",
+            "Port assignments saved.\nRestart cameras now to apply the new ports?"
+        ):
+            threading.Thread(target=restart_cameras, daemon=True).start()
+
+    btn_frame = tk.Frame(win)
+    btn_frame.grid(row=4, column=0, columnspan=2, pady=8)
+    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
+
 def open_image_adjustment_window():
     adj_win = Toplevel()
     adj_win.title("Image Adjustments")
@@ -575,13 +663,16 @@ def launch_gui():
             except Exception as e:
                 messagebox.showerror("Error", f"Movement error: {e}")
             finally:
-                axis_entry.config(state='normal')
-                displacement_entry.config(state='normal')
+                root.after(0, lambda: axis_entry.config(state='normal'))
+                root.after(0, lambda: displacement_entry.config(state='normal'))
+                root.after(0, lambda: move_stage_btn.config(state='normal'))
         axis_entry.config(state='disabled')
         displacement_entry.config(state='disabled')
+        move_stage_btn.config(state='disabled')
         threading.Thread(target=move_thread).start()
 
-    tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
+    move_stage_btn = tk.Button(root, text="Move Stage", command=move_stage_gui)
+    move_stage_btn.pack(pady=10)
     tk.Button(root, text="Stop Motors", command=on_stop_motors, bg="red", fg="black", font=(15)).pack(pady=10)
 
     # Keyboard control
@@ -637,18 +728,35 @@ def launch_gui():
     tk.Radiobutton(nord_frame, text="Off", variable=nord_state_var, value='Off', command=set_nord).pack(side='left')
 
     # Query & origin
-    def show_manual_origin_prompt():
+    def show_origin_ask(label):
+        """Ask the user (on the main thread) whether to fine-tune this origin."""
+        def _do_ask():
+            result = messagebox.askyesno(
+                f"{label} — Fine-tune?",
+                f"The machine is now at the {label} position.\n\n"
+                "Would you like to fine-tune it?\n\n"
+                "  Yes  →  adjust with the movement controls,\n"
+                "          then click \u2018Set Origin\u2019 to confirm\n"
+                "  No   →  accept the current position and continue",
+                icon='question'
+            )
+            notify_fine_tune_choice(result)
+        root.after(0, _do_ask)
+
+    def show_origin_prompt(label):
         root.after(0, lambda: messagebox.showinfo(
-            "Manual Origin Adjustment",
-            "Fine-tune the stage position with the GUI controls.\n"
-            "When placement looks correct, click Set Origin to continue."
+            f"{label} — Fine-tune",
+            f"Fine-tune the stage position for: {label}\n\n"
+            "Use the GUI movement controls to adjust, then click\n"
+            "'Set Origin' to confirm and continue."
         ))
 
-    register_manual_origin_prompt_callback(show_manual_origin_prompt)
+    register_origin_ask_callback(show_origin_ask)
+    register_origin_prompt_callback(show_origin_prompt)
 
     def on_set_origin_clicked():
         set_origin_to_current()
-        confirm_manual_origin_set()
+        confirm_origin_set()
 
     tk.Button(root, text="Set Origin", command=on_set_origin_clicked).pack(pady=5)
     tk.Button(root, text="Return to Origin", command=return_to_origin).pack(pady=5)
@@ -674,6 +782,8 @@ def launch_gui():
     # Add a button to manually launch the Image Adjustments
     tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
 
+    tk.Button(root, text="Camera Port Settings", command=lambda: open_camera_port_settings_window(root)).pack(pady=5)
+
     tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
 
     # Button: Full Assembly
@@ -686,13 +796,28 @@ def launch_gui():
 
 def start_camera_threads():
     """
-    Launch camera0, camera1, and camera2 in separate threads. 
-    They run open_camera(...) from image_recognition.
+    Launch camera0, camera1, and camera2 in separate daemon threads.
+    Stores thread references so restart_cameras() can manage them.
     """
-    cam0_thread = threading.Thread(target=open_camera, args=(0,))
-    cam1_thread = threading.Thread(target=open_camera, args=(1,))
-    cam2_thread = threading.Thread(target=open_camera, args=(2,))  
-    cam0_thread.start()
-    cam1_thread.start()
-    cam2_thread.start()  
-    return cam0_thread, cam1_thread, cam2_thread
+    global _camera_threads
+    for i in range(3):
+        t = threading.Thread(target=open_camera, args=(i,), daemon=True)
+        t.start()
+        _camera_threads[i] = t
+    return _camera_threads[0], _camera_threads[1], _camera_threads[2]
+
+def restart_cameras():
+    """Signal all camera threads to stop cleanly, then restart with current camera_ports."""
+    print("[Cameras] Stopping all camera threads...")
+    for i in range(3):
+        image_recognition.camera_stop_events[i].set()
+    for i in range(3):
+        t = _camera_threads.get(i)
+        if t and t.is_alive():
+            t.join(timeout=6.0)
+            if t.is_alive():
+                print(f"[Camera {i}] Warning: thread did not stop within timeout.")
+    for i in range(3):
+        image_recognition.camera_stop_events[i].clear()
+    print("[Cameras] Restarting with updated port assignments...")
+    start_camera_threads()

@@ -1,6 +1,8 @@
 import time
 import math
 import threading
+import json
+import os
 from motor_control import (
     move_linear_stage, 
     update_speed, 
@@ -50,14 +52,80 @@ temp_l = None
 temp_w = None
 
 #print_z_coord = probe_z_coord - print_gap # Z coordinate for printing, set after probing based on print_gap
-wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position, used for wiping probe after Z probe to prevent smearing ink on PCB during print process
+wipe_y = 2123.0 # Y Position for testing, replace with actual wipe position
 probe_y = 2342.0 #  Y Position for testing, replace with actual probe position
-print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for starting point for print process, probe to find Z
-print_origin = [74410.0, 2540840.0, 2612907.5, 4022.59] # X, Y, Z, R coordinate for tarting point for print process, probe to find Z
+print_home = [0, 0, 0, 0] # X, Y, Z, R coordinate for starting point for print process
 pcb_z_coord = None # Z coordinate for printing, set after probing
 _has_calibrated = False  # Set True after first successful calibrate(); skipped on reruns
-_manual_origin_event = threading.Event()
-_manual_origin_prompt_callback = None
+
+# ---------------------------------------------------------------------------
+# Three-origin system: probe, print, extruder
+# Each is persisted to pcb_settings.json so every confirmed position becomes
+# the starting point for the next run, making the system more accurate over time.
+# ---------------------------------------------------------------------------
+SETTINGS_FILE = "pcb_settings.json"
+
+# Saved origin dicts: None means "no saved value yet, use first-run defaults"
+_probe_origin    = None  # {'X': ..., 'Y': ...}
+_print_origin_saved   = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
+_extruder_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
+
+def _load_origins():
+    """Load the three saved origins from pcb_settings.json at startup."""
+    global _probe_origin, _print_origin_saved, _extruder_origin_saved
+    if not os.path.isfile(SETTINGS_FILE):
+        return
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            data = json.load(f)
+        _probe_origin          = data.get('probe_origin')    or None
+        _print_origin_saved    = data.get('print_origin_coords') or None
+        _extruder_origin_saved = data.get('extruder_origin') or None
+        print(f"Origins loaded — probe: {_probe_origin}, print: {_print_origin_saved}, extruder: {_extruder_origin_saved}")
+    except Exception as e:
+        print(f"Warning: could not load origins from {SETTINGS_FILE}: {e}")
+
+def _save_origin(key, positions_dict):
+    """Persist one origin dict to pcb_settings.json without overwriting other keys."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing[key] = positions_dict
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Origin '{key}' saved: {positions_dict}")
+    except Exception as e:
+        print(f"Warning: could not save origin '{key}': {e}")
+
+def _navigate_to_saved_origin(origin_dict, axes):
+    """Move each listed axis to its saved absolute position."""
+    for ax in axes:
+        val = origin_dict.get(ax)
+        if val is None:
+            continue
+        _abort_if_emergency_stop()
+        cur = get_current_position(ax)
+        if cur is None:
+            continue
+        diff = val - cur
+        if abs(diff) < 0.5:
+            continue
+        move_linear_stage(ax, '+' if diff >= 0 else '-', abs(diff),
+                          wait_for_stop=True, max_wait=30.0)
+
+# Event and callback used by all three fine-tune pauses
+_origin_event = threading.Event()
+_origin_prompt_callback = None  # callable(label: str) — registered by the GUI
+
+# Opt-in choice: user decides whether to fine-tune or accept current position.
+_origin_choice_event    = threading.Event()
+_origin_fine_tune_chosen = False
+_origin_ask_callback    = None  # callable(label: str) — shows the Yes/No dialog
 
 def _abort_if_emergency_stop():
     if is_emergency_stop_requested():
@@ -71,25 +139,57 @@ def _sleep_with_abort(seconds, step=0.05):
         time.sleep(dt)
         elapsed += dt
 
-def register_manual_origin_prompt_callback(callback):
-    global _manual_origin_prompt_callback
-    _manual_origin_prompt_callback = callback
+def register_origin_prompt_callback(callback):
+    """Register a GUI callable(label: str) shown when the user chooses to fine-tune."""
+    global _origin_prompt_callback
+    _origin_prompt_callback = callback
 
-def confirm_manual_origin_set():
-    _manual_origin_event.set()
+def register_origin_ask_callback(callback):
+    """Register a GUI callable(label: str) that asks the user: fine-tune or continue?"""
+    global _origin_ask_callback
+    _origin_ask_callback = callback
 
-def _wait_for_manual_origin_set():
-    _manual_origin_event.clear()
-    print("Manual origin fine-tune requested. Use GUI movement controls, then click Set Origin to continue.")
+def confirm_origin_set():
+    """Called by the GUI 'Set Origin' button to confirm the current position."""
+    _origin_event.set()
 
-    if _manual_origin_prompt_callback is not None:
+def notify_fine_tune_choice(chosen: bool):
+    """Called by the GUI when the user picks fine-tune (True) or skip (False)."""
+    global _origin_fine_tune_chosen
+    _origin_fine_tune_chosen = chosen
+    _origin_choice_event.set()
+
+def _wait_for_origin_fine_tune(label):
+    """Pause the routine so the user can fine-tune the current stage position.
+    Resumes when the GUI calls confirm_origin_set()."""
+    _origin_event.clear()
+    print(f"[{label}] Fine-tune: adjust position with GUI controls, then click 'Set Origin' to continue.")
+    if _origin_prompt_callback is not None:
         try:
-            _manual_origin_prompt_callback()
+            _origin_prompt_callback(label)
         except Exception as e:
-            print(f"Warning: failed to show manual-origin prompt: {e}")
-
-    while not _manual_origin_event.wait(0.1):
+            print(f"Warning: failed to show origin prompt: {e}")
+    while not _origin_event.wait(0.1):
         _abort_if_emergency_stop()
+
+def _maybe_fine_tune_origin(label):
+    """Ask the user whether to fine-tune this origin or accept the current position.
+    If they choose to fine-tune, waits for 'Set Origin' click.
+    Either way the caller should save the final position afterward."""
+    _origin_choice_event.clear()
+    print(f"[{label}] Prompting: fine-tune or accept current position?")
+    if _origin_ask_callback is not None:
+        try:
+            _origin_ask_callback(label)
+        except Exception as e:
+            print(f"Warning: failed to show origin ask prompt: {e}")
+    while not _origin_choice_event.wait(0.1):
+        _abort_if_emergency_stop()
+    if _origin_fine_tune_chosen:
+        _wait_for_origin_fine_tune(label)
+
+# Load persisted origins immediately so they are available before the first run.
+_load_origins()
 
 # BASIC MOVES  
 # Use for testing
@@ -127,9 +227,9 @@ traces = {
 
    3: {"a1": 90.0, "l1": 2.28, "a2": 135, "l2": 0.5},
 
-   4: {"a1": 90.0, "l1": 2.13},
+   4: {"a1": 90.0, "l1": 2.35},
    
-   5: {"a1": 90.0, "l1": 2.13},
+   5: {"a1": 90.0, "l1": 2.35},
 
    6: {"a1": 90.0, "l1": 2.28, "a2": 45, "l2": 0.5},
 
@@ -208,56 +308,56 @@ def print_pcb():
     _abort_if_emergency_stop()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 1)
     print_pad(pad_types, "cs", 4)
     
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 2)
     print_pad(pad_types, "cs", 2)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 3)
     print_pad(pad_types, "cl", 2)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 4)
     print_pad(pad_types, "cl", 1)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 5)
     print_pad(pad_types, "cl", 7)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 6)
     print_pad(pad_types, "cl", 6)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 7)
     print_pad(pad_types, "cs", 6)
 
     counter += 1
     advance_to_next_feature(counter, x_coord, y_coord, 1000)
 
-    print_pad(pad_types, "me", 4)
+    print_pad(pad_types, "me", 8)
     print_trace(traces, 8)
     print_pad(pad_types, "cs", 4)
 
@@ -468,6 +568,17 @@ def pad_handler(pad_dict, pad_type, position):
         right(width)
         back(length)
 
+    elif position == 8:
+        # "me" pad — start at center (half width, 3/4 down from top = 1/4 from bottom)
+        # Path: up 3/4 h → right w/2 → down h → left w → up h
+        back(length * 3 / 4)   # up 3/4 height → top center
+        right(width / 2)       # right half width → top-right corner
+        front(length)          # down full height → bottom-right corner
+        left(width)            # left full width → bottom-left corner
+        back(length)           # up full height → top-left corner
+        right(width / 2)       # right half width → top center (original start point)
+        front(length)          # down full height → bottom center
+
 def next_feature(num, xx, yy, spacing):
 
     nordson_off()
@@ -483,7 +594,7 @@ def next_feature(num, xx, yy, spacing):
     move = num * spacing
     right(move)
     up(1000)
-    stop_motor_control() 
+    stop_motor_control()
 
 def advance_to_next_feature(num, xx, yy, spacing):
     """Move directly from current position to the next feature start.
@@ -585,7 +696,7 @@ def r_corrector():
     r_limit()
     _sleep_with_abort(1.0)
     update_speed(30)
-    move_linear_stage('r', '-', 5, wait_for_stop=False, max_wait=30.0)
+    move_linear_stage('r', '-', 7, wait_for_stop=False, max_wait=30.0)
 
 def x_home():
     global print_home
@@ -618,18 +729,27 @@ def z_home():
         print(f"Z home position set at {print_home[2]}")    
     
 def print_origin():
-    _sleep_with_abort(1.0)
-    _abort_if_emergency_stop()
-    move_linear_stage(x, '+', 2000, wait_for_stop=True, max_wait=30.0)
-
-    _sleep_with_abort(1.0)
-    _abort_if_emergency_stop()
-    move_linear_stage(y, '+', 100, wait_for_stop=True, max_wait=30.0)
-
-    _sleep_with_abort(1.0)
-    _abort_if_emergency_stop()
-    move_linear_stage(z, '+', 1300, wait_for_stop=True, max_wait=30.0)
-    _wait_for_manual_origin_set()
+    global _print_origin_saved
+    if _print_origin_saved:
+        # Navigate directly to the last confirmed print origin.
+        print("Navigating to saved print origin...")
+        _navigate_to_saved_origin(_print_origin_saved, ['X', 'Y', 'Z', 'r'])
+    else:
+        # First run: use default relative offsets from the probe position.
+        _sleep_with_abort(1.0)
+        _abort_if_emergency_stop()
+        move_linear_stage(x, '+', 3500, wait_for_stop=True, max_wait=30.0)
+        _sleep_with_abort(1.0)
+        _abort_if_emergency_stop()
+        move_linear_stage(y, '+', 1600, wait_for_stop=True, max_wait=30.0)
+        _sleep_with_abort(1.0)
+        _abort_if_emergency_stop()
+        move_linear_stage(z, '+', 1300, wait_for_stop=True, max_wait=30.0)
+    # Always give the user the option to verify / fine-tune, then save.
+    _maybe_fine_tune_origin("Print Origin")
+    pos = {ax: get_current_position(ax) for ax in ('X', 'Y', 'Z', 'r')}
+    _print_origin_saved = {k: v for k, v in pos.items() if v is not None}
+    _save_origin('print_origin_coords', _print_origin_saved)
     get_coord()
 
 """def probe_origin():
@@ -662,7 +782,7 @@ def print_origin():
     down(1000)"""
 
 def calibrate():
-    global pcb_z_coord
+    global pcb_z_coord, _probe_origin
 
     _abort_if_emergency_stop()
     update_speed(100)
@@ -674,15 +794,21 @@ def calibrate():
 
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
-    move_linear_stage(x, '-', 29000, wait_for_stop=True, max_wait=30.0)
 
-    _sleep_with_abort(1.0)
-    _abort_if_emergency_stop()
-    move_linear_stage(y, '-', 11500, wait_for_stop=True, max_wait=30.0)
+    if _probe_origin:
+        # Navigate directly to the last confirmed probe origin (X, Y).
+        print("Navigating to saved probe origin...")
+        _navigate_to_saved_origin(_probe_origin, ['X', 'Y'])
+    else:
+        # First run: use default relative offsets from mechanical home.
+        move_linear_stage(x, '-', 27000, wait_for_stop=True, max_wait=30.0)
+        _sleep_with_abort(1.0)
+        _abort_if_emergency_stop()
+        move_linear_stage(y, '-', 13500, wait_for_stop=True, max_wait=30.0)
 
     _abort_if_emergency_stop()
     r_corrector()
-    
+
     update_speed(100)
     _sleep_with_abort(1.0)
     _abort_if_emergency_stop()
@@ -693,6 +819,13 @@ def calibrate():
     _abort_if_emergency_stop()
     update_speed(100)
     down(1000)
+
+    # Full calibrate routine is done. Now let the user optionally fine-tune
+    # the probe X, Y position and save it for the next run.
+    _maybe_fine_tune_origin("Probe Origin")
+    pos = {ax: get_current_position(ax) for ax in ('X', 'Y')}
+    _probe_origin = {k: v for k, v in pos.items() if v is not None}
+    _save_origin('probe_origin', _probe_origin)
 
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
@@ -791,6 +924,23 @@ def fill_electrode_pads():
         up(2000)
 
 # Full assembly sequence
+def extruder_origin_setup():
+    """Navigate to the saved microwire-extruder / laser-alignment origin, pause
+    for the user to fine-tune, then persist the confirmed position.
+    Call this once at the start of the wire-placement routine so every
+    subsequent run starts from the last confirmed position."""
+    global _extruder_origin_saved
+
+    if _extruder_origin_saved:
+        print("Navigating to saved extruder origin...")
+        _navigate_to_saved_origin(_extruder_origin_saved, ['X', 'Y', 'Z', 'r'])
+    # If no saved origin the machine stays wherever it is; user jogs manually.
+
+    _maybe_fine_tune_origin("Extruder Origin")
+    pos = {ax: get_current_position(ax) for ax in ('X', 'Y', 'Z', 'r')}
+    _extruder_origin_saved = {k: v for k, v in pos.items() if v is not None}
+    _save_origin('extruder_origin', _extruder_origin_saved)
+
 def full_sequence():
     global _has_calibrated
     clear_emergency_stop()

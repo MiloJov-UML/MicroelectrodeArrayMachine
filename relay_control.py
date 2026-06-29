@@ -2,6 +2,8 @@
 
 import serial
 import time
+import threading
+import queue
 from tkinter import messagebox
 from motor_control import (
     serial_lock,
@@ -9,9 +11,111 @@ from motor_control import (
     find_port,
     stop_motor_control,
     is_emergency_stop_requested,
+    set_axis_limit,
+    clear_axis_limit,
 )
 
 relay_ser = None
+
+# ---------------------------------------------------------------------------
+# Always-on relay serial monitor
+# ---------------------------------------------------------------------------
+# Events set by the monitor thread when specific messages arrive.
+_r_limit_event   = threading.Event()
+_z_limit_event   = threading.Event()
+_magnet_event    = threading.Event()
+# Queue for stepper-motor completion messages (motor_forward / motor_backward).
+_motor_done_queue = queue.Queue()
+
+_relay_monitor_thread = None
+
+# How long (seconds) with no limit messages before we treat the switch as released.
+_LIMIT_RELEASE_TIMEOUT = 0.5
+
+def _relay_monitor_loop():
+    """Daemon thread: reads every line from relay_ser and dispatches events.
+    Runs for the lifetime of the process; safe to start once after connection.
+
+    Limit-switch handling uses edge detection so the motor is stopped exactly
+    once on first contact.  The blocked direction is recorded so backing out
+    (moving the opposite way) is always permitted.  The block is cleared after
+    _LIMIT_RELEASE_TIMEOUT seconds of silence from that switch."""
+    global relay_ser
+
+    # Per-axis limit tracking (local to this thread — no shared state needed).
+    _r_at_limit = False
+    _r_limit_last_seen = 0.0
+    _z_at_limit = False
+    _z_limit_last_seen = 0.0
+
+    while True:
+        ser = relay_ser
+        if ser is None:
+            time.sleep(0.1)
+            continue
+        try:
+            raw = ser.readline()
+        except Exception:
+            time.sleep(0.1)
+            continue
+
+        now = time.time()
+
+        # Release detection: if the switch has been silent long enough, un-block.
+        if _r_at_limit and (now - _r_limit_last_seen) > _LIMIT_RELEASE_TIMEOUT:
+            _r_at_limit = False
+            clear_axis_limit('r')
+            _r_limit_event.clear()
+            print("Relay monitor: R limit switch released — R axis unblocked.")
+        if _z_at_limit and (now - _z_limit_last_seen) > _LIMIT_RELEASE_TIMEOUT:
+            _z_at_limit = False
+            clear_axis_limit('Z')
+            _z_limit_event.clear()
+            print("Relay monitor: Z limit switch released — Z axis unblocked.")
+
+        if not raw:
+            continue
+        try:
+            line = raw.decode('utf-8', errors='replace').strip()
+        except Exception:
+            continue
+        if not line:
+            continue
+        print(f"[Relay monitor] {line}")
+
+        if "R limit" in line:
+            _r_limit_last_seen = now
+            if not _r_at_limit:
+                # Edge: first contact — stop the motor and block the '+' direction.
+                stop_motor_control()
+                set_axis_limit('r', '+')
+                _r_at_limit = True
+                _r_limit_event.set()
+                print("Relay monitor: R limit hit — motor stopped, R+ blocked.")
+
+        if "Z limit" in line:
+            _z_limit_last_seen = now
+            if not _z_at_limit:
+                stop_motor_control()
+                set_axis_limit('Z', '+')
+                _z_at_limit = True
+                _z_limit_event.set()
+                print("Relay monitor: Z limit hit — motor stopped, Z+ blocked.")
+
+        if "Magnet Detected" in line:
+            _magnet_event.set()
+        if any(kw in line for kw in ("Motor forward complete", "Motor backward complete", "Motor released")):
+            _motor_done_queue.put(line)
+
+def start_relay_monitor():
+    """Start the background relay monitor.  Safe to call multiple times."""
+    global _relay_monitor_thread
+    if _relay_monitor_thread is not None and _relay_monitor_thread.is_alive():
+        return
+    t = threading.Thread(target=_relay_monitor_loop, daemon=True, name="relay-monitor")
+    t.start()
+    _relay_monitor_thread = t
+    print("Relay monitor thread started.")
 
 def auto_connect_relay():
     """Auto-detect and connect to the relay device (Arduino)."""
@@ -26,9 +130,11 @@ def connect_relay(port):
     """Connect to the relay device (Arduino) on the given COM port."""
     global relay_ser
     try:
-        ser = serial.Serial(port, 9600, timeout=2)
+        # Use a short timeout so the monitor thread returns quickly when idle.
+        ser = serial.Serial(port, 9600, timeout=0.1)
         relay_ser = ser
         print(f"Connected to Relay on {port}")
+        start_relay_monitor()
         return ser
     except serial.SerialException as e:
         print(f"Error connecting to relay on {port}: {e}")
@@ -132,33 +238,27 @@ def motor_forward(steps=100, wait_for_completion=True, timeout=30):
     if not relay_ser:
         messagebox.showerror("Error", "Not connected to relay device.")
         return False
-    
+
     command = f"Motor_Forward_{steps}"
-    
+
     if wait_for_completion:
-        # Send command and wait for completion message
+        # Drain any stale completions before sending so we don't pick up an old one.
+        while not _motor_done_queue.empty():
+            _motor_done_queue.get_nowait()
         with serial_lock:
             relay_ser.write((command + '\n').encode())
             print(f"Sent command to Relay Controller: {command}")
-            
-            start_time = time.time()
-            response_buffer = ""
-            
-            while time.time() - start_time < timeout:
-                if relay_ser.in_waiting > 0:
-                    data = relay_ser.read(relay_ser.in_waiting).decode()
-                    response_buffer += data
-                    print(f"Relay Controller response: {data.strip()}")
-                    
-                    # Check if we got the completion message
-                    if "Motor forward complete" in response_buffer:
-                        print("Motor forward movement completed")
-                        return True
-                
-                time.sleep(0.1)  # Small delay between checks
-            
-            print(f"Warning: Motor forward command timed out after {timeout}s")
-            return False
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                msg = _motor_done_queue.get(timeout=0.2)
+                if "Motor forward complete" in msg:
+                    print("Motor forward movement completed")
+                    return True
+            except queue.Empty:
+                pass
+        print(f"Warning: Motor forward command timed out after {timeout}s")
+        return False
     else:
         send_command(relay_ser, command, "Relay Controller")
         return True
@@ -175,33 +275,27 @@ def motor_backward(steps=100, wait_for_completion=True, timeout=30):
     if not relay_ser:
         messagebox.showerror("Error", "Not connected to relay device.")
         return False
-    
+
     command = f"Motor_Backward_{steps}"
-    
+
     if wait_for_completion:
-        # Send command and wait for completion message
+        # Drain any stale completions before sending so we don't pick up an old one.
+        while not _motor_done_queue.empty():
+            _motor_done_queue.get_nowait()
         with serial_lock:
             relay_ser.write((command + '\n').encode())
             print(f"Sent command to Relay Controller: {command}")
-            
-            start_time = time.time()
-            response_buffer = ""
-            
-            while time.time() - start_time < timeout:
-                if relay_ser.in_waiting > 0:
-                    data = relay_ser.read(relay_ser.in_waiting).decode()
-                    response_buffer += data
-                    print(f"Relay Controller response: {data.strip()}")
-                    
-                    # Check if we got the completion message
-                    if "Motor backward complete" in response_buffer:
-                        print("Motor backward movement completed")
-                        return True
-                
-                time.sleep(0.1)  # Small delay between checks
-            
-            print(f"Warning: Motor backward command timed out after {timeout}s")
-            return False
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                msg = _motor_done_queue.get(timeout=0.2)
+                if "Motor backward complete" in msg:
+                    print("Motor backward movement completed")
+                    return True
+            except queue.Empty:
+                pass
+        print(f"Warning: Motor backward command timed out after {timeout}s")
+        return False
     else:
         send_command(relay_ser, command, "Relay Controller")
         return True
@@ -250,55 +344,43 @@ def end_z_poll():
         messagebox.showerror("Error", "Not connected to relay device.")
 
 def r_calibrate():
-
+    # The relay monitor thread fires stop_motor_control() and sets _r_limit_event
+    # the instant "R limit" arrives on the serial line.  We just wait here.
+    _r_limit_event.clear()
     while True:
         if is_emergency_stop_requested():
             print("R calibration cancelled by emergency stop.")
             return None
-
-        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
-        resp = relay_ser.data = relay_ser.read_until(b'R limit').decode("utf-8").strip()
-        print(str(resp))
-        
-        if str(resp) != None:
-            if str(resp) == "R limit":
-                stop_motor_control()
-                print('R limit reached')
-                return resp
+        if _r_limit_event.wait(timeout=0.2):
+            _r_limit_event.clear()
+            print("R limit reached")
+            return "R limit"
           
 def Z_calibrate():
-    
+    # The relay monitor thread fires stop_motor_control() and sets _z_limit_event
+    # the instant "Z limit" arrives on the serial line.  We just wait here.
+    _z_limit_event.clear()
     while True:
         if is_emergency_stop_requested():
             print("Z calibration cancelled by emergency stop.")
             return None
-
-        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
-        respo = relay_ser.data = relay_ser.read_until(b'Z limit').decode("utf-8").strip()
-        print(str(respo))
-        
-        if str(respo) != None:
-            if str(respo) == "Z limit":
-                stop_motor_control()
-                print('Z limit reached')
-                return respo
+        if _z_limit_event.wait(timeout=0.2):
+            _z_limit_event.clear()
+            print("Z limit reached")
+            return "Z limit"
 
 def mag_detector():
-
+    # The relay monitor thread sets _magnet_event when "Magnet Detected" arrives.
+    _magnet_event.clear()
     while True:
         if is_emergency_stop_requested():
             print("Magnet detection cancelled by emergency stop.")
             return None
-
-        relay_ser.reset_input_buffer()  # Clear any existing data in the buffer
-        resp = relay_ser.data = relay_ser.read_until(b'Magnet Detected').decode("utf-8").strip()
-        print(str(resp))
-        
-        if str(resp) != None:
-            if str(resp) == "Magnet Detected":
-                pnp_release()
-                print('Connector Available')
-                return resp           
+        if _magnet_event.wait(timeout=0.2):
+            _magnet_event.clear()
+            pnp_release()
+            print("Connector Available")
+            return "Magnet Detected"           
            
         
             

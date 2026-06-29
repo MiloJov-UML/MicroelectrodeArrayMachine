@@ -2,5 +2,20 @@
   "pad_count": 8,
   "pad_spacing": 1000.0,
   "offset": 0.0,
-  "fixture_offset": 0.0
+  "fixture_offset": 0.0,
+  "camera_ports": {
+    "0": 2,
+    "1": 1,
+    "2": 0
+  },
+  "probe_origin": {
+    "X": 327000.0,
+    "Y": 2394550.0
+  },
+  "print_origin_coords": {
+    "X": 328600.0,
+    "Y": 2395750.0,
+    "Z": 2296570.0,
+    "r": 3146.3650000000002
+  }
 }
