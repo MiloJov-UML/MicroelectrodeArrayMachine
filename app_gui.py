@@ -18,6 +18,7 @@ from motor_control import (
     stop_motor_control,
     move_linear_stage,
     set_origin_to_current,
+    get_current_position,
     base_displacement,
     r_displacement,
     keyboard_pause,
@@ -55,7 +56,8 @@ from print import (
     notify_fine_tune_choice,
     register_origin_prompt_callback,
     register_origin_ask_callback,
-    extruder_origin_setup,
+    microwire_origin_setup,
+    reload_origins,
 )
 
 from assembly import run_full_assembly
@@ -74,7 +76,6 @@ _camera_threads = {0: None, 1: None, 2: None}
 
 PAD_COUNT = 0
 PAD_SPACING = 0.0
-FIRST_PAD_OFFSET = 0.0
 speed_display_label = None
 keyboard_control_enabled = False
 routine_thread = None
@@ -100,9 +101,13 @@ def load_last_settings():
     defaults = {
         "pad_count": 8,
         "pad_spacing": 1000.0,
-        "offset": 1100.0,
-        "fixture_offset": 2000.0,
-        "camera_ports": {"0": 0, "1": 1, "2": 2}
+        "camera_ports": {"0": 0, "1": 1, "2": 2},
+        "trace_tuning": {
+            "connector_cl_drop_mm": 2.5,
+            "corner_mm": 0.5,
+            "cs_clear_mm": 0.6,
+            "cs_layer_mm": 0.5,
+        },
     }
     if os.path.isfile(SETTINGS_FILE):
         try:
@@ -110,12 +115,14 @@ def load_last_settings():
                 data = json.load(f)
             for key in defaults:
                 data.setdefault(key, defaults[key])
+            for key in defaults["trace_tuning"]:
+                data["trace_tuning"].setdefault(key, defaults["trace_tuning"][key])
             return data
         except Exception as e:
             print(f"Warning: Could not read {SETTINGS_FILE}: {e}")
     return defaults
 
-def save_settings(pad_count, pad_spacing, offset, fixture_offset):
+def save_settings(pad_count, pad_spacing, trace_tuning):
     # Read existing data so camera_ports (and other keys) are not lost
     existing = {}
     if os.path.isfile(SETTINGS_FILE):
@@ -127,9 +134,11 @@ def save_settings(pad_count, pad_spacing, offset, fixture_offset):
     existing.update({
         "pad_count": pad_count,
         "pad_spacing": pad_spacing,
-        "offset": offset,
-        "fixture_offset": fixture_offset,
+        "trace_tuning": trace_tuning,
     })
+    # Remove obsolete keys
+    existing.pop("offset", None)
+    existing.pop("fixture_offset", None)
     try:
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(existing, f, indent=2)
@@ -300,7 +309,7 @@ def laser_cut():
         print(f"Exception in laser_cut: {e}")
 
 def run_full_manual_loop():
-    global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
+    global PAD_COUNT, PAD_SPACING
 
     try:
         clear_emergency_stop()
@@ -320,12 +329,12 @@ def run_full_manual_loop():
         _sleep_with_abort(2.0)
         motor_release()
 
-        # Navigate to (and fine-tune) the extruder/laser-alignment origin.
+        # Navigate to (and fine-tune) the microwire / laser-alignment origin.
         # The confirmed position is saved to pcb_settings.json and reused next run.
         # set_origin_to_current() then locks it in so return_to_origin() throughout
         # the pad loop returns here every time.
         _abort_if_emergency_stop()
-        extruder_origin_setup()
+        microwire_origin_setup()
         set_origin_to_current()
 
         # Move everything to origin before we begin
@@ -384,9 +393,13 @@ def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")
 
+    tuning_defaults = defaults.get("trace_tuning", {})
     pad_count_var = tk.StringVar(value=str(defaults.get("pad_count", 8)))
-    pad_spacing_var = tk.StringVar(value=str(defaults.get("pad_spacing", 500.0)))
-    user_offset_var = tk.StringVar(value=str(defaults.get("offset", 550.0)))
+    pad_spacing_var = tk.StringVar(value=str(defaults.get("pad_spacing", 1000.0)))
+    cl_drop_var = tk.StringVar(value=str(tuning_defaults.get("connector_cl_drop_mm", 2.5)))
+    corner_var = tk.StringVar(value=str(tuning_defaults.get("corner_mm", 0.5)))
+    cs_clear_var = tk.StringVar(value=str(tuning_defaults.get("cs_clear_mm", 0.6)))
+    cs_layer_var = tk.StringVar(value=str(tuning_defaults.get("cs_layer_mm", 0.5)))
 
     tk.Label(popup, text="How many pads?").pack(pady=5)
     e1 = tk.Entry(popup, textvariable=pad_count_var)
@@ -396,20 +409,39 @@ def ask_pcb_info_popup(root, defaults):
     e2 = tk.Entry(popup, textvariable=pad_spacing_var)
     e2.pack()
 
-    tk.Label(popup, text="Distance from bottom-right corner to 1st pad (µm):").pack(pady=5)
-    e3 = tk.Entry(popup, textvariable=user_offset_var)
+    tk.Label(popup, text="— Trace routing tuning —", fg="gray").pack(pady=(10, 2))
+
+    tk.Label(popup, text="ME row → connector row trace run (mm):").pack(pady=2)
+    e3 = tk.Entry(popup, textvariable=cl_drop_var)
     e3.pack()
 
-    result = {"pc": 0, "ps": 0.0, "user_off": 0.0, "submitted": False}
+    tk.Label(popup, text="45° corner length (mm):").pack(pady=2)
+    e4 = tk.Entry(popup, textvariable=corner_var)
+    e4.pack()
+
+    tk.Label(popup, text="Crossbar clearance above cs pads (mm):").pack(pady=2)
+    e5 = tk.Entry(popup, textvariable=cs_clear_var)
+    e5.pack()
+
+    tk.Label(popup, text="Onion layer spacing for outer traces (mm):").pack(pady=2)
+    e6 = tk.Entry(popup, textvariable=cs_layer_var)
+    e6.pack()
+
+    result = {"pc": 0, "ps": 0.0, "tuning": {}, "submitted": False}
 
     def on_ok():
         try:
             pc = int(pad_count_var.get())
             ps = float(pad_spacing_var.get())
-            off = float(user_offset_var.get())
+            tuning = {
+                "connector_cl_drop_mm": float(cl_drop_var.get()),
+                "corner_mm": float(corner_var.get()),
+                "cs_clear_mm": float(cs_clear_var.get()),
+                "cs_layer_mm": float(cs_layer_var.get()),
+            }
             result["pc"] = pc
             result["ps"] = ps
-            result["user_off"] = off
+            result["tuning"] = tuning
             result["submitted"] = True
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numeric values.")
@@ -426,9 +458,9 @@ def ask_pcb_info_popup(root, defaults):
     root.wait_window(popup)
 
     if result["submitted"]:
-        return (result["pc"], result["ps"], result["user_off"])
+        return (result["pc"], result["ps"], result["tuning"])
     else:
-        return (0, 0.0, 0.0)
+        return (0, 0.0, {})
 
 ###############################
 # BOUNDING BOX & RECORDING
@@ -507,8 +539,8 @@ def open_camera_port_settings_window(root):
 
     win.grab_set()
 
-def open_image_adjustment_window():
-    adj_win = Toplevel()
+def open_image_adjustment_window(parent=None):
+    adj_win = Toplevel(parent)
     adj_win.title("Image Adjustments")
 
     tk.Label(adj_win, text="Contrast (ALPHA)").pack()
@@ -569,10 +601,123 @@ def set_sharpness(val):
     image_recognition.SHARP_STRENGTH = float(val)
 
 ###############################
+# NAMED ORIGINS (probe / print / microwire)
+# JSON keys and axes match print.py so both systems share the same saved values.
+###############################
+_ORIGIN_CONFIG = {
+    'probe':    ('probe_origin',        ['X', 'Y', 'r', 'Z']),
+    'print':    ('print_origin_coords', ['X', 'Y', 'r', 'Z']),
+    'microwire': ('microwire_origin',     ['X', 'Y', 'Z', 'r']),
+}
+
+def save_named_origin(name):
+    """Read current axis positions and persist them to the print.py-compatible JSON key."""
+    cfg = _ORIGIN_CONFIG.get(name)
+    if not cfg:
+        print(f"[Origin] Unknown origin name '{name}'")
+        return
+    json_key, axes = cfg
+    positions = {}
+    for ax in axes:
+        pos = get_current_position(ax)
+        if pos is not None:
+            positions[ax] = pos
+    if not positions:
+        print(f"[Origin] Could not read any axis positions — '{name}' origin not saved.")
+        return
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing[json_key] = positions
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"[Origin] Saved '{name}' origin ({json_key}): { {k: f'{v:.3f}' for k, v in positions.items()} }")
+    except Exception as e:
+        print(f"Warning: Could not save named origin '{name}': {e}")
+        return
+    # Keep print.py's in-memory state in sync so the current session sees the update.
+    reload_origins()
+
+def load_named_origin(name):
+    """Return the saved axis-position dict for 'name', or None if not found."""
+    cfg = _ORIGIN_CONFIG.get(name)
+    if not cfg:
+        return None
+    json_key, _ = cfg
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                data = json.load(f)
+            return data.get(json_key)
+    except Exception as e:
+        print(f"Warning: Could not load named origin '{name}': {e}")
+    return None
+
+def _return_to_named_origin_thread(name):
+    """Move axes to the stored named origin. Checks emergency stop between each axis."""
+    cfg = _ORIGIN_CONFIG.get(name)
+    if not cfg:
+        print(f"[Origin] Unknown origin name '{name}'")
+        return
+    _, axes = cfg
+    positions = load_named_origin(name)
+    if not positions:
+        print(f"[Origin] No saved origin for '{name}'. Use 'Set Origin' first.")
+        return
+    print(f"\n--- Moving to '{name}' origin ---")
+    for ax in axes:
+        if is_emergency_stop_requested():
+            print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
+            return
+        if ax not in positions:
+            continue
+        current_pos = get_current_position(ax)
+        if current_pos is None:
+            print(f"[Origin] Axis {ax}: position unknown, skipping.")
+            continue
+        diff = positions[ax] - current_pos
+        if abs(diff) < 0.5:
+            continue
+        direction = '+' if diff >= 0 else '-'
+        print(f"[Origin] Moving {ax} -> {positions[ax]:.3f}")
+        move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+    print(f"--- Finished moving to '{name}' origin ---\n")
+
+def open_settings_window(root):
+    """Settings hub popup — opens Image Adjustments or Camera Port Settings."""
+    win = Toplevel(root)
+    win.title("Settings")
+    win.resizable(False, False)
+
+    tk.Label(win, text="Settings", font=("Helvetica", 13, "bold")).pack(pady=(14, 6))
+
+    tk.Button(
+        win,
+        text="Image Adjustments",
+        width=24,
+        command=lambda: open_image_adjustment_window(win)
+    ).pack(pady=6)
+
+    tk.Button(
+        win,
+        text="Camera Port Settings",
+        width=24,
+        command=lambda: open_camera_port_settings_window(root)
+    ).pack(pady=6)
+
+    tk.Button(win, text="Close", command=win.destroy).pack(pady=(6, 14))
+
+
+###############################
 # MAIN GUI LAUNCH
 ###############################
 def launch_gui():
-    global PAD_COUNT, PAD_SPACING, FIRST_PAD_OFFSET
+    global PAD_COUNT, PAD_SPACING
 
     root = tk.Tk()
     root.title("Motor & Camera Feed Control")
@@ -580,17 +725,14 @@ def launch_gui():
     # Hide main window, ask user for pad info
     root.withdraw()
     last_vals = load_last_settings()
-    pc, ps, user_off = ask_pcb_info_popup(root, last_vals)
-
-    fixture_off = last_vals["fixture_offset"]
-    final_offset = user_off + fixture_off
+    pc, ps, tuning = ask_pcb_info_popup(root, last_vals)
 
     PAD_COUNT = pc
     PAD_SPACING = ps
-    FIRST_PAD_OFFSET = final_offset
 
     if pc > 0:
-        save_settings(pc, ps, user_off, fixture_off)
+        save_settings(pc, ps, tuning)
+        reload_origins()  # also refreshes trace tuning in print.py
 
     # Show main window
     root.deiconify()
@@ -603,7 +745,7 @@ def launch_gui():
 
     info_label = tk.Label(
         root,
-        text=(f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING} µm, Offset: {FIRST_PAD_OFFSET} µm")
+        text=(f"Pads: {PAD_COUNT}, Spacing: {PAD_SPACING} µm")
     )
     info_label.pack(pady=5)
 
@@ -673,7 +815,32 @@ def launch_gui():
 
     move_stage_btn = tk.Button(root, text="Move Stage", command=move_stage_gui)
     move_stage_btn.pack(pady=10)
-    tk.Button(root, text="Stop Motors", command=on_stop_motors, bg="red", fg="black", font=(15)).pack(pady=10)
+
+    stop_frame = tk.Frame(root)
+    stop_frame.pack(pady=10)
+
+    release_btn = tk.Button(
+        stop_frame, text="Release Stop",
+        bg="orange", fg="black", font=(15),
+        state='disabled'
+    )
+
+    def on_stop_clicked():
+        on_stop_motors()
+        release_btn.config(state='normal')
+
+    def on_release_clicked():
+        clear_emergency_stop()
+        release_btn.config(state='disabled')
+        print("[GUI] Emergency stop released — system ready.")
+
+    release_btn.config(command=on_release_clicked)
+
+    tk.Button(
+        stop_frame, text="Stop Motors",
+        command=on_stop_clicked, bg="red", fg="black", font=(15)
+    ).pack(side='left', padx=5)
+    release_btn.pack(side='left', padx=5)
 
     # Keyboard control
     kb_var = tk.IntVar(value=0)
@@ -754,12 +921,38 @@ def launch_gui():
     register_origin_ask_callback(show_origin_ask)
     register_origin_prompt_callback(show_origin_prompt)
 
-    def on_set_origin_clicked():
-        set_origin_to_current()
-        confirm_origin_set()
+    # Named-origin controls
+    origin_mode_var = tk.StringVar(value='probe')
 
-    tk.Button(root, text="Set Origin", command=on_set_origin_clicked).pack(pady=5)
-    tk.Button(root, text="Return to Origin", command=return_to_origin).pack(pady=5)
+    def on_set_origin_clicked():
+        mode = origin_mode_var.get()
+        set_origin_to_current()       # keeps in-memory axis_origins in sync for automated routines
+        save_named_origin(mode)        # persists to JSON and reloads print.py in-memory state
+        confirm_origin_set()           # unblocks any waiting setup flow
+
+    def on_return_to_origin_clicked():
+        mode = origin_mode_var.get()
+        threading.Thread(
+            target=_return_to_named_origin_thread,
+            args=(mode,),
+            daemon=True
+        ).start()
+
+    origin_btn_frame = tk.Frame(root)
+    origin_btn_frame.pack(pady=4)
+    tk.Button(origin_btn_frame, text="Set Origin", command=on_set_origin_clicked).pack(side='left', padx=6)
+    tk.Button(origin_btn_frame, text="Return to Origin", command=on_return_to_origin_clicked).pack(side='left', padx=6)
+
+    origin_radio_frame = tk.Frame(root)
+    origin_radio_frame.pack(pady=(0, 4))
+    tk.Label(origin_radio_frame, text="Origin:").pack(side='left', padx=(0, 6))
+    for _mode in ('Probe', 'Print', 'Microwire'):
+        tk.Radiobutton(
+            origin_radio_frame,
+            text=_mode,
+            variable=origin_mode_var,
+            value=_mode.lower()
+        ).pack(side='left')
 
     # BOUNDING BOX radio
     global box_var
@@ -779,15 +972,26 @@ def launch_gui():
     tk.Radiobutton(record_frame, text="On", variable=record_var, value='On', command=toggle_recording).pack(side='left')
     tk.Radiobutton(record_frame, text="Off", variable=record_var, value='Off', command=toggle_recording).pack(side='left')
 
-    # Add a button to manually launch the Image Adjustments
-    tk.Button(root, text="Open Image Adjustments", command=open_image_adjustment_window).pack(pady=5)
-
-    tk.Button(root, text="Camera Port Settings", command=lambda: open_camera_port_settings_window(root)).pack(pady=5)
+    # Settings hub (image adjustments + camera ports)
+    tk.Button(root, text="Settings", command=lambda: open_settings_window(root)).pack(pady=5)
 
     tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
 
     # Button: Full Assembly
-    tk.Button(root, text="Print Metal Ink Traces/Pads", command=lambda: start_routine_thread(run_full_assembly, "run_full_assembly")).pack(pady=5)
+    calib_var = tk.IntVar(value=0)
+    tk.Checkbutton(
+        root,
+        text="Run Calibration Before Printing",
+        variable=calib_var
+    ).pack(pady=(5, 0))
+    tk.Button(
+        root,
+        text="Print Metal Ink Traces/Pads",
+        command=lambda: start_routine_thread(
+            lambda: run_full_assembly(run_calibration=bool(calib_var.get())),
+            "run_full_assembly"
+        )
+    ).pack(pady=5)
 
     # Full manual loop
     tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)

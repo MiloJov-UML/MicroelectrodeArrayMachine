@@ -34,9 +34,9 @@ def _create_unique_daily_record_dir(root_dir, folder_prefix):
     os.makedirs(candidate, exist_ok=False)
     return candidate
 
-record_dir0 = _create_unique_daily_record_dir("D:\\", "camera0_pcb2_CFmicrowire")
-record_dir1 = _create_unique_daily_record_dir("D:\\", "camera1_pcb2_CFmicrowire")
-record_dir2 = _create_unique_daily_record_dir("D:\\", "camera2_pcb2_CFmicrowire")
+record_dir0 = None
+record_dir1 = None
+record_dir2 = None
 
 video_writers = {0: None, 1: None, 2: None}  
 run_timestamps = {0: None, 1: None, 2: None}
@@ -221,6 +221,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
     global video_writers, run_timestamps
     global frames_per_still, frame_counts
     global last_cf_box, last_gc_box, last_pad_box, last_clog_box
+    global record_dir0, record_dir1, record_dir2
 
     desired_width = 1600
     desired_height = 1200
@@ -321,13 +322,13 @@ def open_camera(camera_index=0, model_path="best.pt"):
                 run_timestamps[camera_index] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 if camera_index==0:
-                    os.makedirs(record_dir0,exist_ok=True)
+                    record_dir0 = _create_unique_daily_record_dir("D:\\", "camera0_pcb2_CFmicrowire")
                     video_path = os.path.join(record_dir0, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
                 elif camera_index==1:
-                    os.makedirs(record_dir1,exist_ok=True)
+                    record_dir1 = _create_unique_daily_record_dir("D:\\", "camera1_pcb2_CFmicrowire")
                     video_path = os.path.join(record_dir1, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
                 else:  # camera_index==2
-                    os.makedirs(record_dir2,exist_ok=True)
+                    record_dir2 = _create_unique_daily_record_dir("D:\\", "camera2_pcb2_CFmicrowire")
                     video_path = os.path.join(record_dir2, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
                 video_writers[camera_index] = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
                 print(f"[Camera {camera_index}] Recording started => {video_path}")

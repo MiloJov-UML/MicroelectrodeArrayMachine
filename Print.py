@@ -59,7 +59,7 @@ pcb_z_coord = None # Z coordinate for printing, set after probing
 _has_calibrated = False  # Set True after first successful calibrate(); skipped on reruns
 
 # ---------------------------------------------------------------------------
-# Three-origin system: probe, print, extruder
+# Three-origin system: probe, print, microwire
 # Each is persisted to pcb_settings.json so every confirmed position becomes
 # the starting point for the next run, making the system more accurate over time.
 # ---------------------------------------------------------------------------
@@ -68,11 +68,11 @@ SETTINGS_FILE = "pcb_settings.json"
 # Saved origin dicts: None means "no saved value yet, use first-run defaults"
 _probe_origin    = None  # {'X': ..., 'Y': ...}
 _print_origin_saved   = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
-_extruder_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
+_microwire_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 
 def _load_origins():
     """Load the three saved origins from pcb_settings.json at startup."""
-    global _probe_origin, _print_origin_saved, _extruder_origin_saved
+    global _probe_origin, _print_origin_saved, _microwire_origin_saved
     if not os.path.isfile(SETTINGS_FILE):
         return
     try:
@@ -80,8 +80,8 @@ def _load_origins():
             data = json.load(f)
         _probe_origin          = data.get('probe_origin')    or None
         _print_origin_saved    = data.get('print_origin_coords') or None
-        _extruder_origin_saved = data.get('extruder_origin') or None
-        print(f"Origins loaded — probe: {_probe_origin}, print: {_print_origin_saved}, extruder: {_extruder_origin_saved}")
+        _microwire_origin_saved = data.get('microwire_origin') or None
+        print(f"Origins loaded — probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}")
     except Exception as e:
         print(f"Warning: could not load origins from {SETTINGS_FILE}: {e}")
 
@@ -101,6 +101,11 @@ def _save_origin(key, positions_dict):
         print(f"Origin '{key}' saved: {positions_dict}")
     except Exception as e:
         print(f"Warning: could not save origin '{key}': {e}")
+
+def reload_origins():
+    """Reload all three saved origins from pcb_settings.json into memory.
+    Call this after the GUI saves a new origin so in-session routines see it."""
+    _load_origins()
 
 def _navigate_to_saved_origin(origin_dict, axes):
     """Move each listed axis to its saved absolute position."""
@@ -266,7 +271,7 @@ pad_types = {
 
     "cl": {"l": 0.7, "w": 0.2}, # Dimensions of cable conncetor long pads, mm
 
-    "me": {"l": 1.2, "w": 0.5}    # Dimensions of electrode pads, mm
+    "me": {"l": 1.2, "w": 0.5}    # Dimensions of microelectrode pads, mm
     
 }
 
@@ -300,6 +305,176 @@ pad_types = {
 
 }"""
 
+# ---------------------------------------------------------------------------
+# PARAMETRIC TRACE GENERATION
+# ME pad pitch comes from the user popup (pad_spacing in pcb_settings.json).
+# Connector pad pitch is fixed at ~650 µm (1 step ≈ 1 µm on the linear stages).
+# Trace horizontal runs are computed so every ME pad lands on its connector pad.
+# ---------------------------------------------------------------------------
+CONNECTOR_PITCH_UM = 650.0        # center-to-center X pitch of connector pad columns, µm
+CONNECTOR_ROW_STAGGER_UM = 1200.0 # center-to-center Y offset between the two connector rows, µm
+CONN_PAD_LEN_MM = 0.7             # connector pad length (must match pad_types cs/cl "l"), mm
+FINAL_ENTRY_MM = 0.3              # short final straight run entering a cl pad, mm
+
+# User-tunable routing values (set in the startup popup, stored in pcb_settings.json).
+# These are fallback defaults if the settings file has no trace_tuning section.
+CONNECTOR_CL_DROP_MM = 2.5        # trace run from ME pad row to the cl-row pad entry, mm
+CORNER_MM = 0.5                   # 45° corner length used on routed cs traces, mm
+CS_CLEAR_MM = 0.6                 # clearance of the inner (2/7) crossbar beyond the cs pad tops, mm
+CS_LAYER_MM = 0.5                 # extra onion spacing for the outer (1/8) crossbar, mm
+
+def get_trace_tuning():
+    """Read user-tunable trace routing values from pcb_settings.json."""
+    tuning = {
+        "connector_cl_drop_mm": CONNECTOR_CL_DROP_MM,
+        "corner_mm": CORNER_MM,
+        "cs_clear_mm": CS_CLEAR_MM,
+        "cs_layer_mm": CS_LAYER_MM,
+    }
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                saved = json.load(f).get("trace_tuning", {})
+            for key in tuning:
+                if key in saved:
+                    tuning[key] = float(saved[key])
+    except Exception as e:
+        print(f"Warning: could not read trace_tuning from {SETTINGS_FILE}: {e}")
+    return tuning
+
+# Connector grid, 4x2 with no gaps (all directions in PCB view, but note the
+# stage moves the PCB under a still printhead, so machine moves are mirrored;
+# the code below works in trace-space where "print direction" = away from ME row):
+#   Top row    (cs, printed last along each trace): pads 1, 2, 7, 8
+#   Bottom row (cl, nearest the ME pads):           pads 3, 4, 5, 6
+# Columns (right -> left in PCB view): (2,3) (1,4) (8,5) (7,6)
+# In machine trace-space X (units of CONNECTOR_PITCH_UM from array centerline):
+CONNECTOR_X_COLUMNS = {2: -1.5, 3: -1.5, 1: -0.5, 4: -0.5,
+                       8: +0.5, 5: +0.5, 7: +1.5, 6: +1.5}
+CS_PADS = {1, 2, 7, 8}  # top row — routed around the outside (onion style)
+
+def get_pad_spacing_um():
+    """Read the ME pad pitch the user entered in the startup popup."""
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                return float(json.load(f).get("pad_spacing", 1000.0))
+    except Exception as e:
+        print(f"Warning: could not read pad_spacing from {SETTINGS_FILE}: {e}")
+    return 1000.0
+
+def get_pad_count():
+    """Read the pad count the user entered in the startup popup (clamped 1-8)."""
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                count = int(json.load(f).get("pad_count", 8))
+            return max(1, min(8, count))
+    except Exception as e:
+        print(f"Warning: could not read pad_count from {SETTINGS_FILE}: {e}")
+    return 8
+
+def build_traces(me_pitch_um, connector_pitch_um=CONNECTOR_PITCH_UM):
+    """Generate non-intersecting traces from ME pad n to connector pad n.
+
+    cl pads (3,4,5,6 — bottom row): near-vertical trace, small 45° jog to the
+    column, entering the pad from below.
+
+    cs pads (1,2,7,8 — top row): routed like onion layers so nothing crosses:
+    straight up at the ME pad's own X (outside the grid), 45° corner, a
+    crossbar ABOVE the whole connector grid, 45° corner, then straight down
+    into the pad from the top. Traces 1/8 use the outermost/highest layer,
+    2/7 the inner one.
+    """
+    c_mm = connector_pitch_um / 1000.0
+    stagger_mm = CONNECTOR_ROW_STAGGER_UM / 1000.0
+    tuning = get_trace_tuning()
+    cl_drop = tuning["connector_cl_drop_mm"]
+    corner_len = tuning["corner_mm"]
+    cs_clear = tuning["cs_clear_mm"]
+    cs_layer = tuning["cs_layer_mm"]
+    corner_v = corner_len / math.sqrt(2)    # x = y component of a 45° corner
+    d_cl = cl_drop                          # cl pad entry (bottom edge)
+    d_cs = d_cl + stagger_mm + CONN_PAD_LEN_MM  # cs pad entry (top edge)
+
+    traces_out = {}
+    for n in range(1, 9):
+        me_x = (n - 4.5) * me_pitch_um / 1000.0
+        col_x = CONNECTOR_X_COLUMNS[n] * c_mm
+        dx = col_x - me_x
+        shift = abs(dx)
+        inward_pos = dx > 0  # True => shift toward machine +x
+        seg = {}
+        idx = 1
+
+        def add(angle, length):
+            nonlocal idx
+            if length > 1e-6:
+                seg[f"a{idx}"] = angle
+                seg[f"l{idx}"] = length
+                idx += 1
+
+        if n in CS_PADS:
+            # Routed trace over the top of the grid
+            H = d_cs + cs_clear + (cs_layer if n in (1, 8) else 0.0)
+            up_corner = 135 if inward_pos else 45
+            horiz = 180 if inward_pos else 0
+            down_corner = 225 if inward_pos else 315
+
+            # Riser must sit outside the connector grid to avoid crossing it
+            grid_edge = 1.5 * c_mm + 0.3
+            if shift > 1e-6 and abs(me_x) < grid_edge:
+                print(f"Warning: trace {n} riser at {me_x:.3f} mm is inside the "
+                      f"connector grid ({grid_edge:.3f} mm); increase ME pitch.")
+
+            if shift <= 2 * corner_v:
+                # Columns nearly aligned: two shortened corners, no crossbar
+                cv = shift / 2.0
+                add(90.0, H - cv)
+                add(up_corner, cv * math.sqrt(2))
+                add(down_corner, cv * math.sqrt(2))
+                add(270.0, (H - cv) - d_cs)
+            else:
+                add(90.0, H - corner_v)
+                add(up_corner, corner_len)
+                add(horiz, shift - 2 * corner_v)
+                add(down_corner, corner_len)
+                add(270.0, (H - corner_v) - d_cs)
+        else:
+            # Near-vertical cl trace
+            diag_v = 0.0
+            tail = []
+            if shift > 1e-6:
+                diag_angle = 135 if inward_pos else 45
+                horiz_angle = 180 if inward_pos else 0
+                if shift <= corner_v:
+                    tail.append((diag_angle, shift * math.sqrt(2)))
+                    diag_v = shift
+                else:
+                    tail.append((diag_angle, corner_len))
+                    tail.append((horiz_angle, shift - corner_v))
+                    diag_v = corner_v
+            l1 = d_cl - diag_v - FINAL_ENTRY_MM
+            if l1 < 0.1:
+                print(f"Warning: trace {n} vertical clamped ({l1:.3f} mm); "
+                      f"increase CONNECTOR_CL_DROP_MM.")
+                l1 = 0.1
+            add(90.0, l1)
+            for a, l in tail:
+                add(a, l)
+            add(90.0, FINAL_ENTRY_MM)
+
+        traces_out[n] = seg
+    return traces_out
+
+# Connector pad printed at the end of each trace: (pad_type, position)
+# Position 9  = trace arrives from below (cl row), pad extends onward/up.
+# Position 10 = trace arrives from above (cs row), pad extends back/down.
+PAD_SEQUENCE = [
+    ("cs", 10), ("cs", 10), ("cl", 9), ("cl", 9),
+    ("cl", 9), ("cl", 9), ("cs", 10), ("cs", 10),
+]
+
 def print_pcb():
     global x_coord, y_coord, counter
 
@@ -308,58 +483,23 @@ def print_pcb():
     _abort_if_emergency_stop()
     x_coord, y_coord = get_current_position(x), get_current_position(y)
 
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 1)
-    print_pad(pad_types, "cs", 4)
-    
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
+    me_pitch_um = get_pad_spacing_um()
+    pad_count = get_pad_count()
+    active_traces = build_traces(me_pitch_um)
+    print(f"[print_pcb] Printing {pad_count} pad(s) | ME pitch: {me_pitch_um:.0f} µm "
+          f"| connector pitch: {CONNECTOR_PITCH_UM:.0f} µm")
+    for n in range(1, pad_count + 1):
+        print(f"[print_pcb] trace {n}: {active_traces[n]}")
 
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 2)
-    print_pad(pad_types, "cs", 2)
+    for n, (pad_type, position) in enumerate(PAD_SEQUENCE[:pad_count], start=1):
+        _abort_if_emergency_stop()
+        print_pad(pad_types, "me", 8)
+        print_trace(active_traces, n)
+        print_pad(pad_types, pad_type, position)
 
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 3)
-    print_pad(pad_types, "cl", 2)
-
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 4)
-    print_pad(pad_types, "cl", 1)
-
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 5)
-    print_pad(pad_types, "cl", 7)
-
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 6)
-    print_pad(pad_types, "cl", 6)
-
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 7)
-    print_pad(pad_types, "cs", 6)
-
-    counter += 1
-    advance_to_next_feature(counter, x_coord, y_coord, 1000)
-
-    print_pad(pad_types, "me", 8)
-    print_trace(traces, 8)
-    print_pad(pad_types, "cs", 4)
+        if n < pad_count:
+            counter += 1
+            advance_to_next_feature(counter, x_coord, y_coord, me_pitch_um)
 
     update_speed(50)
     down(10000)
@@ -579,6 +719,23 @@ def pad_handler(pad_dict, pad_type, position):
         right(width / 2)       # right half width → top center (original start point)
         front(length)          # down full height → bottom center
 
+    elif position == 9:
+        # Connector pad — trace arrives from BELOW (cl row), pad extends onward.
+        right(width / 2)       # → entry-side corner
+        front(length)          # → far corner (direction of travel)
+        left(width)            # → far corner, other side
+        back(length)           # → entry-side corner, other side
+        right(width / 2)       # → back to entry center
+
+    elif position == 10:
+        # Connector pad — trace arrives from ABOVE (cs row), pad extends back
+        # toward the ME row (opposite the arrival direction).
+        right(width / 2)       # → entry-side corner
+        back(length)           # → far corner (opposite direction of travel)
+        left(width)            # → far corner, other side
+        front(length)          # → entry-side corner, other side
+        right(width / 2)       # → back to entry center
+
 def next_feature(num, xx, yy, spacing):
 
     nordson_off()
@@ -645,9 +802,6 @@ def get_coord():
 def Z_probe():
     global pcb_z_coord
     prev_speed = get_current_speed()
-    _abort_if_emergency_stop()
-    update_speed(100)
-    move_linear_stage('Z', '+', 17000, wait_for_stop=True, max_wait=30.0)
     _abort_if_emergency_stop()
     time.sleep(0.5)  # Wait for any vibrations to settle before probing
     update_speed(1)
@@ -733,7 +887,7 @@ def print_origin():
     if _print_origin_saved:
         # Navigate directly to the last confirmed print origin.
         print("Navigating to saved print origin...")
-        _navigate_to_saved_origin(_print_origin_saved, ['X', 'Y', 'Z', 'r'])
+        _navigate_to_saved_origin(_print_origin_saved, ['X', 'Y', 'r', 'Z'])
     else:
         # First run: use default relative offsets from the probe position.
         _sleep_with_abort(1.0)
@@ -796,9 +950,9 @@ def calibrate():
     _abort_if_emergency_stop()
 
     if _probe_origin:
-        # Navigate directly to the last confirmed probe origin (X, Y).
+        # Navigate directly to the last confirmed probe origin (X, Y, Z, r).
         print("Navigating to saved probe origin...")
-        _navigate_to_saved_origin(_probe_origin, ['X', 'Y'])
+        _navigate_to_saved_origin(_probe_origin, ['X', 'Y', 'r', 'Z'])
     else:
         # First run: use default relative offsets from mechanical home.
         move_linear_stage(x, '-', 27000, wait_for_stop=True, max_wait=30.0)
@@ -823,7 +977,7 @@ def calibrate():
     # Full calibrate routine is done. Now let the user optionally fine-tune
     # the probe X, Y position and save it for the next run.
     _maybe_fine_tune_origin("Probe Origin")
-    pos = {ax: get_current_position(ax) for ax in ('X', 'Y')}
+    pos = {ax: get_current_position(ax) for ax in ('X', 'Y', 'Z', 'r')}
     _probe_origin = {k: v for k, v in pos.items() if v is not None}
     _save_origin('probe_origin', _probe_origin)
 
@@ -924,24 +1078,42 @@ def fill_electrode_pads():
         up(2000)
 
 # Full assembly sequence
-def extruder_origin_setup():
-    """Navigate to the saved microwire-extruder / laser-alignment origin, pause
+def sacrificial_print():
+    """Print a 1 x 1 mm square at the current position to prime the nozzle
+    before moving to the actual print origin."""
+    sac = mm_to_um(1.0)  # 1 mm square for sacrificial print
+    print("--- Sacrificial print (1 x 1 mm) ---")
+    update_speed(1)
+    nordson_off()
+    _sleep_with_abort(delay)
+    right(sac/2)
+    back(sac/2)
+    left(sac)
+    front(sac)
+    right(sac)
+    nordson_off()
+    update_speed(30)
+    down(1000)
+    print("--- Sacrificial print complete ---")
+
+def microwire_origin_setup():
+    """Navigate to the saved microwire / laser-alignment origin, pause
     for the user to fine-tune, then persist the confirmed position.
     Call this once at the start of the wire-placement routine so every
     subsequent run starts from the last confirmed position."""
-    global _extruder_origin_saved
+    global _microwire_origin_saved
 
-    if _extruder_origin_saved:
-        print("Navigating to saved extruder origin...")
-        _navigate_to_saved_origin(_extruder_origin_saved, ['X', 'Y', 'Z', 'r'])
+    if _microwire_origin_saved:
+        print("Navigating to saved microwire origin...")
+        _navigate_to_saved_origin(_microwire_origin_saved, ['X', 'Y', 'Z', 'r'])
     # If no saved origin the machine stays wherever it is; user jogs manually.
 
-    _maybe_fine_tune_origin("Extruder Origin")
+    _maybe_fine_tune_origin("Microwire Origin")
     pos = {ax: get_current_position(ax) for ax in ('X', 'Y', 'Z', 'r')}
-    _extruder_origin_saved = {k: v for k, v in pos.items() if v is not None}
-    _save_origin('extruder_origin', _extruder_origin_saved)
+    _microwire_origin_saved = {k: v for k, v in pos.items() if v is not None}
+    _save_origin('microwire_origin', _microwire_origin_saved)
 
-def full_sequence():
+def full_sequence(run_calibration=True):
     global _has_calibrated
     clear_emergency_stop()
     laser_relay_off()
@@ -949,12 +1121,21 @@ def full_sequence():
 
     try:
         _abort_if_emergency_stop()
-        if not _has_calibrated:
-            calibrate()
-            _has_calibrated = True
-            print("Calibration complete. Subsequent runs will skip calibration.")
+        if run_calibration:
+            if not _has_calibrated:
+                calibrate()
+                _has_calibrated = True
+                print("Calibration complete. Subsequent runs will skip calibration.")
+            else:
+                print("Skipping calibration (already calibrated this session).")
         else:
-            print("Skipping calibration (already calibrated this session).")
+            print("Calibration skipped by user.")
+            # Navigate to probe origin so the sacrificial print is in the right place
+            if _probe_origin:
+                print("Navigating to probe origin for sacrificial print...")
+                _navigate_to_saved_origin(_probe_origin, ['X', 'Y', 'r', 'Z'])
+        _abort_if_emergency_stop()
+        sacrificial_print()
         _abort_if_emergency_stop()
         print_origin()
         print_pcb()

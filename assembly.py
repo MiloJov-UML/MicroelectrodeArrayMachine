@@ -132,9 +132,9 @@
 
 from print import full_sequence
 
-def run_full_assembly():
+def run_full_assembly(run_calibration=True):
     try:
-        full_sequence()
+        full_sequence(run_calibration=run_calibration)
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("Metal ink routine stopped by emergency stop.")

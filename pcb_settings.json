@@ -1,21 +1,27 @@
 {
   "pad_count": 8,
-  "pad_spacing": 1000.0,
-  "offset": 0.0,
-  "fixture_offset": 0.0,
+  "pad_spacing": 1050.0,
+  "trace_tuning": {
+    "connector_cl_drop_mm": 2.5,
+    "corner_mm": 0.5,
+    "cs_clear_mm": 0.6,
+    "cs_layer_mm": 0.5
+  },
   "camera_ports": {
     "0": 2,
     "1": 1,
     "2": 0
   },
   "probe_origin": {
-    "X": 327000.0,
-    "Y": 2394550.0
+    "X": 330110.0,
+    "Y": 2393950.0,
+    "r": 3146.15,
+    "Z": 2296347.5
   },
   "print_origin_coords": {
-    "X": 328600.0,
-    "Y": 2395750.0,
-    "Z": 2296570.0,
-    "r": 3146.3650000000002
+    "X": 332140.0,
+    "Y": 2395735.0,
+    "Z": 2296920.0,
+    "r": 3146.15
   }
 }
