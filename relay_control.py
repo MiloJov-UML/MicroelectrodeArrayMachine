@@ -381,10 +381,3 @@ def mag_detector():
             pnp_release()
             print("Connector Available")
             return "Magnet Detected"           
-           
-        
-            
-    
-    
-        
-

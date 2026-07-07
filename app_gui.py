@@ -1,12 +1,20 @@
 # app_gui.py
 
 import threading
+import queue
 import tkinter as tk
 import keyboard
 import time
 from tkinter import messagebox, Toplevel
 import json
 import os
+
+# Thread-safe channel for work that MUST run on the Tk GUI thread.
+# Worker/routine threads put a callable here; _poll_gui_requests (scheduled via
+# root.after and therefore running on the GUI thread) drains and executes it.
+# This avoids calling Tk directly from worker threads, which raises
+# "main thread is not in main loop" and silently skips origin popups.
+_gui_request_queue = queue.Queue()
 
 from motor_control import (
     auto_connect_motor,
@@ -44,7 +52,7 @@ from relay_control import (
     pnp_release
 )
 
-from print import (
+from assembly import (
     glue_sequence,
     print_tester,
     calibrate,
@@ -58,9 +66,8 @@ from print import (
     register_origin_ask_callback,
     microwire_origin_setup,
     reload_origins,
+    full_sequence,
 )
-
-from assembly import run_full_assembly
 
 import image_recognition
 from image_recognition import (
@@ -275,20 +282,6 @@ def start_routine_thread(target, routine_name):
     routine_thread = threading.Thread(target=runner, daemon=True)
     routine_thread.start()
 
-# Test extrude and alignment for one pad only — no laser cut
-def test_extrude_align():
-    threading.Thread(target=_test_extrude_align_thread).start()
-
-def _test_extrude_align_thread():
-    clear_emergency_stop()
-    extrude(1)
-    if not wait_for_extrude_done():
-        return
-    r_align()
-    if not wait_for_r_align_done():
-        return
-    print("Extrude and align test complete.")
-
 def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
@@ -307,6 +300,15 @@ def laser_cut():
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
         print(f"Exception in laser_cut: {e}")
+
+def run_full_assembly(run_calibration=True):
+    try:
+        full_sequence(run_calibration=run_calibration)
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("Metal ink routine stopped by emergency stop.")
+        else:
+            raise
 
 def run_full_manual_loop():
     global PAD_COUNT, PAD_SPACING
@@ -896,8 +898,11 @@ def launch_gui():
 
     # Query & origin
     def show_origin_ask(label):
-        """Ask the user (on the main thread) whether to fine-tune this origin."""
+        """Ask the user whether to fine-tune this origin.
+        Called from the routine worker thread, so the actual dialog is queued
+        to run on the GUI thread via _poll_gui_requests()."""
         def _do_ask():
+            root.lift()
             result = messagebox.askyesno(
                 f"{label} — Fine-tune?",
                 f"The machine is now at the {label} position.\n\n"
@@ -905,18 +910,23 @@ def launch_gui():
                 "  Yes  →  adjust with the movement controls,\n"
                 "          then click \u2018Set Origin\u2019 to confirm\n"
                 "  No   →  accept the current position and continue",
-                icon='question'
+                icon='question',
+                parent=root,
             )
             notify_fine_tune_choice(result)
-        root.after(0, _do_ask)
+        _gui_request_queue.put(_do_ask)
 
     def show_origin_prompt(label):
-        root.after(0, lambda: messagebox.showinfo(
-            f"{label} — Fine-tune",
-            f"Fine-tune the stage position for: {label}\n\n"
-            "Use the GUI movement controls to adjust, then click\n"
-            "'Set Origin' to confirm and continue."
-        ))
+        def _do_prompt():
+            root.lift()
+            messagebox.showinfo(
+                f"{label} — Fine-tune",
+                f"Fine-tune the stage position for: {label}\n\n"
+                "Use the GUI movement controls to adjust, then click\n"
+                "'Set Origin' to confirm and continue.",
+                parent=root,
+            )
+        _gui_request_queue.put(_do_prompt)
 
     register_origin_ask_callback(show_origin_ask)
     register_origin_prompt_callback(show_origin_prompt)
@@ -995,6 +1005,22 @@ def launch_gui():
 
     # Full manual loop
     tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)
+
+    # Drain GUI requests queued by worker threads (origin popups, etc.) on the
+    # GUI thread. Reschedules itself so it runs for the lifetime of the window.
+    def _poll_gui_requests():
+        try:
+            while True:
+                job = _gui_request_queue.get_nowait()
+                try:
+                    job()
+                except Exception as e:
+                    print(f"Warning: GUI request failed: {e}")
+        except queue.Empty:
+            pass
+        root.after(100, _poll_gui_requests)
+
+    root.after(100, _poll_gui_requests)
 
     root.mainloop()
 
