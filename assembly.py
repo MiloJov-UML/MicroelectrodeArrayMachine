@@ -13,6 +13,7 @@ from motor_control import (
     mm_to_um,
     clear_emergency_stop,
     is_emergency_stop_requested,
+    flush_serial,
 )
 
 from relay_control import (
@@ -421,6 +422,8 @@ PAD_SEQUENCE = [
 def print_pcb():
     global x_coord, y_coord, counter
 
+    counter = 0  # Always start at feature 1 regardless of any previous run
+
     update_speed(1)
 
     _abort_if_emergency_stop()
@@ -448,17 +451,18 @@ def print_pcb():
     down(10000)
 
 # Component identifiers accepted by reprint_feature().
-REPRINT_COMPONENTS = ("me_pad", "trace", "connector_pad", "full")
+REPRINT_COMPONENTS = ("me_pad", "trace", "connector_pad", "trace_and_connector", "full")
 
 def reprint_feature(index, component="full"):
     """Reprint a single feature (or one of its components) at the CURRENT head
     position, without stepping between features.
 
     Jog the printhead to the START of the selected component before calling:
-      * 'me_pad'        — the microelectrode pad start point
-      * 'trace'         — where the trace leaves the ME pad
-      * 'connector_pad' — the connector-pad entry point
-      * 'full'          — the ME-pad start point (prints ME pad → trace → pad)
+      * 'me_pad'             — the microelectrode pad start point
+      * 'trace'              — where the trace leaves the ME pad
+      * 'connector_pad'      — the connector-pad entry point
+      * 'trace_and_connector'— trace start (prints trace → connector pad)
+      * 'full'               — the ME-pad start point (prints ME pad → trace → pad)
 
     index:     connector feature number 1..8 (selects the trace path and the
                connector-pad style). Ignored for a lone ME pad.
@@ -483,10 +487,10 @@ def reprint_feature(index, component="full"):
         _abort_if_emergency_stop()
         if component in ("me_pad", "full"):
             print_pad(pad_types, "me", 8)
-        if component in ("trace", "full"):
+        if component in ("trace", "full", "trace_and_connector"):
             _abort_if_emergency_stop()
             print_trace(active_traces, index)
-        if component in ("connector_pad", "full"):
+        if component in ("connector_pad", "full", "trace_and_connector"):
             _abort_if_emergency_stop()
             print_pad(pad_types, pad_type, position)
     except RuntimeError as e:
@@ -580,10 +584,98 @@ def jog_to_trace_start(index):
     y_offset_um = -mm_to_um(pad_types["me"]["l"] / 4.0)  # front (-y) by 1/4 ME height
     _jog_to_print_point(index, y_offset_um, "trace start")
 
+def jog_to_connector_pad(index):
+    """Jog to the connector pad entry point for feature `index` (1-8), then
+    touch down by lowering Z LAST. Useful for reprinting a connector pad on its
+    own, or for inspecting the connector pad area.
+
+    Connector pad positions (machine coords from saved print origin):
+      X = origin_X + 3.5 * me_pitch + CONNECTOR_X_COLUMNS[n] * CONNECTOR_PITCH
+      Y = origin_Y - d_cl        (cl row, pads 3-6)
+        = origin_Y - d_cs        (cs top-over row, pads 1 & 8)
+        = origin_Y - center_h    (cs side-entry, pads 2 & 7)
+    """
+    if not (1 <= index <= 8):
+        print(f"[jog] Feature index {index} out of range (1-8).")
+        return
+    reload_origins()
+    origin = _print_origin_saved
+    if not origin or 'X' not in origin or 'Y' not in origin:
+        print("[jog] No saved 'print' origin. Set the Print origin first.")
+        return
+
+    clear_emergency_stop()
+    me_pitch_um = get_pad_spacing_um()
+    tuning = get_trace_tuning()
+    cl_drop = tuning["connector_cl_drop_mm"]
+    stagger_mm = CONNECTOR_ROW_STAGGER_UM / 1000.0
+    d_cl = cl_drop
+    d_cs = d_cl + stagger_mm + CONN_PAD_LEN_MM
+
+    # X position: independent of which ME pad column the trace starts at
+    target_x = origin['X'] + 3.5 * me_pitch_um + CONNECTOR_X_COLUMNS[index] * CONNECTOR_PITCH_UM
+
+    # Y position: depends on pad row
+    if index in (2, 7):          # cs side-entry pads
+        center_h = d_cs - CONN_PAD_LEN_MM / 2.0
+        y_offset_um = -mm_to_um(center_h)
+    elif index in CS_PADS:       # cs top-over pads (1, 8)
+        y_offset_um = -mm_to_um(d_cs)
+    else:                        # cl row pads (3, 4, 5, 6)
+        y_offset_um = -mm_to_um(d_cl)
+
+    target_y = origin['Y'] + y_offset_um
+    print_z = origin.get('Z')
+
+    def move_axis_to(ax, target):
+        cur = get_current_position(ax)
+        if cur is None:
+            print(f"[jog] Axis {ax}: position unknown, skipping.")
+            return
+        diff = target - cur
+        if abs(diff) < 0.5:
+            return
+        direction = '+' if diff >= 0 else '-'
+        move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+
+    label = f"connector pad entry (feature {index})"
+    print(f"[jog] Jogging to {label} (X={target_x:.1f}, Y={target_y:.1f})")
+    try:
+        update_speed(30)
+        # 1) Retract Z to safe clearance
+        if print_z is not None:
+            _abort_if_emergency_stop()
+            move_axis_to(z, print_z - JOG_Z_CLEARANCE_UM)
+        # 2) Move XY with pen clear of board
+        _abort_if_emergency_stop()
+        move_axis_to(x, target_x)
+        _abort_if_emergency_stop()
+        move_axis_to(y, target_y)
+        if 'r' in origin:
+            _abort_if_emergency_stop()
+            move_axis_to('r', origin['r'])
+        # 3) Touch down Z last
+        if print_z is not None:
+            _abort_if_emergency_stop()
+            move_axis_to(z, print_z)
+        print(f"[jog] At {label}.")
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[jog] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        update_speed(50)
+
 # Don't modify - Phillipe's edit
 def print_trace(trace_dict, index):
-    global counter,angle_dir, angle_axis, t_len               
-    
+    global counter, angle_dir, angle_axis, t_len
+
+    # Reset trace-state globals so a previous interrupted run never bleeds into
+    # this one.  Without this, a stale t_len causes the first angle to fire
+    # immediately with the wrong length, shifting every subsequent segment.
+    angle_dir, angle_axis, t_len = None, None, None
+
     for key, value in (trace_dict.get(index)).items():
         _abort_if_emergency_stop()
         if key.find("a") != -1:
@@ -1049,6 +1141,10 @@ def microwire_origin_setup():
 def full_sequence(run_calibration=True):
     global _has_calibrated
     clear_emergency_stop()
+    # Flush the PC-side serial buffer so any bytes left over from a previous
+    # stop or motor-release don't get interpreted as the start of a new command
+    # by the controller, which would cause the sacrificial print to skip steps.
+    flush_serial()
     laser_relay_off()
     nordson_off()
 

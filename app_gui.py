@@ -70,6 +70,7 @@ from assembly import (
     reprint_feature,
     jog_to_feature_start,
     jog_to_trace_start,
+    jog_to_connector_pad,
 )
 
 import image_recognition
@@ -778,6 +779,7 @@ def open_reprint_window(root):
         ("Full feature (ME pad → trace → connector pad)", "full"),
         ("ME pad only", "me_pad"),
         ("Trace only", "trace"),
+        ("Trace + connector pad", "trace_and_connector"),
         ("Connector pad only", "connector_pad"),
     ]
     component_var = tk.StringVar(value="full")
@@ -818,12 +820,20 @@ def open_reprint_window(root):
         index = _get_index()
         if index is None:
             return
-        # Jog to the start of whatever is selected: the trace start for a
-        # trace reprint, otherwise the feature (ME-pad) start.
-        if component_var.get() == 'trace':
+        # Route jog to the appropriate start point for the selected component:
+        #   trace / trace_and_connector -> trace start (where trace leaves ME pad)
+        #   connector_pad               -> connector pad entry point
+        #   everything else             -> feature (ME-pad) start
+        component = component_var.get()
+        if component in ('trace', 'trace_and_connector'):
             start_routine_thread(
                 lambda: jog_to_trace_start(index),
                 "jog_to_trace_start"
+            )
+        elif component == 'connector_pad':
+            start_routine_thread(
+                lambda: jog_to_connector_pad(index),
+                "jog_to_connector_pad"
             )
         else:
             start_routine_thread(
