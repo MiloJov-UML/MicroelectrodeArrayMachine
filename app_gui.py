@@ -67,6 +67,9 @@ from assembly import (
     microwire_origin_setup,
     reload_origins,
     full_sequence,
+    reprint_feature,
+    jog_to_feature_start,
+    jog_to_trace_start,
 )
 
 import image_recognition
@@ -113,7 +116,6 @@ def load_last_settings():
             "connector_cl_drop_mm": 2.5,
             "corner_mm": 0.5,
             "cs_clear_mm": 0.6,
-            "cs_layer_mm": 0.5,
         },
     }
     if os.path.isfile(SETTINGS_FILE):
@@ -129,8 +131,8 @@ def load_last_settings():
             print(f"Warning: Could not read {SETTINGS_FILE}: {e}")
     return defaults
 
-def save_settings(pad_count, pad_spacing, trace_tuning):
-    # Read existing data so camera_ports (and other keys) are not lost
+def save_settings(pad_count, pad_spacing):
+    # Read existing data so camera_ports, trace_tuning (and other keys) are not lost
     existing = {}
     if os.path.isfile(SETTINGS_FILE):
         try:
@@ -141,7 +143,6 @@ def save_settings(pad_count, pad_spacing, trace_tuning):
     existing.update({
         "pad_count": pad_count,
         "pad_spacing": pad_spacing,
-        "trace_tuning": trace_tuning,
     })
     # Remove obsolete keys
     existing.pop("offset", None)
@@ -152,6 +153,23 @@ def save_settings(pad_count, pad_spacing, trace_tuning):
         print(f"Saved PCB settings to {SETTINGS_FILE}")
     except Exception as e:
         print(f"Warning: Could not write to {SETTINGS_FILE}: {e}")
+
+def save_trace_tuning(trace_tuning):
+    """Persist trace routing tuning values to pcb_settings.json."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing["trace_tuning"] = trace_tuning
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Saved trace tuning to {SETTINGS_FILE}: {trace_tuning}")
+    except Exception as e:
+        print(f"Warning: Could not save trace tuning: {e}")
 
 def save_camera_ports(ports_dict):
     """Persist camera port assignments to pcb_settings.json."""
@@ -395,13 +413,8 @@ def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
     popup.title("PCB Setup")
 
-    tuning_defaults = defaults.get("trace_tuning", {})
     pad_count_var = tk.StringVar(value=str(defaults.get("pad_count", 8)))
     pad_spacing_var = tk.StringVar(value=str(defaults.get("pad_spacing", 1000.0)))
-    cl_drop_var = tk.StringVar(value=str(tuning_defaults.get("connector_cl_drop_mm", 2.5)))
-    corner_var = tk.StringVar(value=str(tuning_defaults.get("corner_mm", 0.5)))
-    cs_clear_var = tk.StringVar(value=str(tuning_defaults.get("cs_clear_mm", 0.6)))
-    cs_layer_var = tk.StringVar(value=str(tuning_defaults.get("cs_layer_mm", 0.5)))
 
     tk.Label(popup, text="How many pads?").pack(pady=5)
     e1 = tk.Entry(popup, textvariable=pad_count_var)
@@ -411,39 +424,20 @@ def ask_pcb_info_popup(root, defaults):
     e2 = tk.Entry(popup, textvariable=pad_spacing_var)
     e2.pack()
 
-    tk.Label(popup, text="— Trace routing tuning —", fg="gray").pack(pady=(10, 2))
+    tk.Label(
+        popup,
+        text="Trace routing tuning is under Settings › Trace Routing Tuning.",
+        fg="gray"
+    ).pack(pady=(10, 2))
 
-    tk.Label(popup, text="ME row → connector row trace run (mm):").pack(pady=2)
-    e3 = tk.Entry(popup, textvariable=cl_drop_var)
-    e3.pack()
-
-    tk.Label(popup, text="45° corner length (mm):").pack(pady=2)
-    e4 = tk.Entry(popup, textvariable=corner_var)
-    e4.pack()
-
-    tk.Label(popup, text="Crossbar clearance above cs pads (mm):").pack(pady=2)
-    e5 = tk.Entry(popup, textvariable=cs_clear_var)
-    e5.pack()
-
-    tk.Label(popup, text="Onion layer spacing for outer traces (mm):").pack(pady=2)
-    e6 = tk.Entry(popup, textvariable=cs_layer_var)
-    e6.pack()
-
-    result = {"pc": 0, "ps": 0.0, "tuning": {}, "submitted": False}
+    result = {"pc": 0, "ps": 0.0, "submitted": False}
 
     def on_ok():
         try:
             pc = int(pad_count_var.get())
             ps = float(pad_spacing_var.get())
-            tuning = {
-                "connector_cl_drop_mm": float(cl_drop_var.get()),
-                "corner_mm": float(corner_var.get()),
-                "cs_clear_mm": float(cs_clear_var.get()),
-                "cs_layer_mm": float(cs_layer_var.get()),
-            }
             result["pc"] = pc
             result["ps"] = ps
-            result["tuning"] = tuning
             result["submitted"] = True
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numeric values.")
@@ -460,9 +454,9 @@ def ask_pcb_info_popup(root, defaults):
     root.wait_window(popup)
 
     if result["submitted"]:
-        return (result["pc"], result["ps"], result["tuning"])
+        return (result["pc"], result["ps"])
     else:
-        return (0, 0.0, {})
+        return (0, 0.0)
 
 ###############################
 # BOUNDING BOX & RECORDING
@@ -672,23 +666,72 @@ def _return_to_named_origin_thread(name):
         print(f"[Origin] No saved origin for '{name}'. Use 'Set Origin' first.")
         return
     print(f"\n--- Moving to '{name}' origin ---")
-    for ax in axes:
-        if is_emergency_stop_requested():
-            print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
-            return
-        if ax not in positions:
-            continue
-        current_pos = get_current_position(ax)
-        if current_pos is None:
-            print(f"[Origin] Axis {ax}: position unknown, skipping.")
-            continue
-        diff = positions[ax] - current_pos
-        if abs(diff) < 0.5:
-            continue
-        direction = '+' if diff >= 0 else '-'
-        print(f"[Origin] Moving {ax} -> {positions[ax]:.3f}")
-        move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+    prev_speed = get_current_speed()
+    update_speed(30)
+    try:
+        for ax in axes:
+            if is_emergency_stop_requested():
+                print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
+                return
+            if ax not in positions:
+                continue
+            current_pos = get_current_position(ax)
+            if current_pos is None:
+                print(f"[Origin] Axis {ax}: position unknown, skipping.")
+                continue
+            diff = positions[ax] - current_pos
+            if abs(diff) < 0.5:
+                continue
+            direction = '+' if diff >= 0 else '-'
+            print(f"[Origin] Moving {ax} -> {positions[ax]:.3f}")
+            move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+    finally:
+        update_speed(prev_speed)
     print(f"--- Finished moving to '{name}' origin ---\n")
+
+def open_trace_tuning_window(root):
+    """Popup to edit trace routing tuning values (persisted to pcb_settings.json)."""
+    win = Toplevel(root)
+    win.title("Trace Routing Tuning")
+    win.resizable(False, False)
+
+    tuning = load_last_settings().get("trace_tuning", {})
+
+    fields = [
+        ("connector_cl_drop_mm", "ME row → connector row trace run (mm):", 2.5),
+        ("corner_mm", "45° corner length (mm):", 0.5),
+        ("cs_clear_mm", "Crossbar clearance above cs pads (mm):", 0.6),
+    ]
+
+    vars_by_key = {}
+    for row, (key, label, default) in enumerate(fields):
+        tk.Label(win, text=label).grid(row=row, column=0, padx=10, pady=6, sticky='w')
+        var = tk.StringVar(value=str(tuning.get(key, default)))
+        vars_by_key[key] = var
+        tk.Entry(win, textvariable=var, width=8).grid(row=row, column=1, padx=10, pady=6)
+
+    tk.Label(
+        win,
+        text="Applies to the next PCB print.",
+        fg="gray"
+    ).grid(row=len(fields), column=0, columnspan=2, padx=10, pady=(2, 8))
+
+    def on_apply():
+        try:
+            new_tuning = {key: float(var.get()) for key, var in vars_by_key.items()}
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid numeric values.", parent=win)
+            return
+        save_trace_tuning(new_tuning)
+        reload_origins()  # refresh trace tuning in assembly.py
+        win.destroy()
+
+    btn_frame = tk.Frame(win)
+    btn_frame.grid(row=len(fields) + 1, column=0, columnspan=2, pady=8)
+    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
 
 def open_settings_window(root):
     """Settings hub popup — opens Image Adjustments or Camera Port Settings."""
@@ -712,7 +755,100 @@ def open_settings_window(root):
         command=lambda: open_camera_port_settings_window(root)
     ).pack(pady=6)
 
+    tk.Button(
+        win,
+        text="Trace Routing Tuning",
+        width=24,
+        command=lambda: open_trace_tuning_window(root)
+    ).pack(pady=6)
+
     tk.Button(win, text="Close", command=win.destroy).pack(pady=(6, 14))
+
+
+def open_reprint_window(root):
+    """Popup to reprint a single feature (any pad or trace) at the current
+    printhead position."""
+    win = Toplevel(root)
+    win.title("Reprint Feature")
+    win.resizable(False, False)
+
+    pad_count = PAD_COUNT if PAD_COUNT and PAD_COUNT > 0 else 8
+
+    component_labels = [
+        ("Full feature (ME pad → trace → connector pad)", "full"),
+        ("ME pad only", "me_pad"),
+        ("Trace only", "trace"),
+        ("Connector pad only", "connector_pad"),
+    ]
+    component_var = tk.StringVar(value="full")
+    index_var = tk.StringVar(value="1")
+
+    tk.Label(win, text="What to reprint:", font=("Helvetica", 10, "bold")).pack(
+        anchor='w', padx=12, pady=(12, 2))
+    for label, value in component_labels:
+        tk.Radiobutton(win, text=label, variable=component_var, value=value).pack(
+            anchor='w', padx=16)
+
+    idx_frame = tk.Frame(win)
+    idx_frame.pack(anchor='w', padx=12, pady=(8, 2))
+    tk.Label(idx_frame, text="Feature number:").pack(side='left')
+    tk.Spinbox(idx_frame, from_=1, to=pad_count, width=4, textvariable=index_var).pack(
+        side='left', padx=8)
+
+    tk.Label(
+        win,
+        text=("Jog to the feature start to auto-position (Z touches down last),\n"
+              "or position the head manually. Printing begins at the current position."),
+        fg="gray",
+        justify='left'
+    ).pack(anchor='w', padx=12, pady=(6, 8))
+
+    def _get_index():
+        try:
+            index = int(index_var.get())
+        except ValueError:
+            messagebox.showerror("Error", "Feature number must be an integer.", parent=win)
+            return None
+        if not (1 <= index <= 8):
+            messagebox.showerror("Error", "Feature number must be between 1 and 8.", parent=win)
+            return None
+        return index
+
+    def on_jog():
+        index = _get_index()
+        if index is None:
+            return
+        # Jog to the start of whatever is selected: the trace start for a
+        # trace reprint, otherwise the feature (ME-pad) start.
+        if component_var.get() == 'trace':
+            start_routine_thread(
+                lambda: jog_to_trace_start(index),
+                "jog_to_trace_start"
+            )
+        else:
+            start_routine_thread(
+                lambda: jog_to_feature_start(index),
+                "jog_to_feature_start"
+            )
+
+    def on_reprint():
+        index = _get_index()
+        if index is None:
+            return
+        component = component_var.get()
+        win.destroy()
+        start_routine_thread(
+            lambda: reprint_feature(index, component),
+            "reprint_feature"
+        )
+
+    btn_frame = tk.Frame(win)
+    btn_frame.pack(pady=(2, 12))
+    tk.Button(btn_frame, text="Jog to Start", command=on_jog).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Reprint", command=on_reprint).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
 
 
 ###############################
@@ -727,13 +863,13 @@ def launch_gui():
     # Hide main window, ask user for pad info
     root.withdraw()
     last_vals = load_last_settings()
-    pc, ps, tuning = ask_pcb_info_popup(root, last_vals)
+    pc, ps = ask_pcb_info_popup(root, last_vals)
 
     PAD_COUNT = pc
     PAD_SPACING = ps
 
     if pc > 0:
-        save_settings(pc, ps, tuning)
+        save_settings(pc, ps)
         reload_origins()  # also refreshes trace tuning in print.py
 
     # Show main window
@@ -1001,6 +1137,13 @@ def launch_gui():
             lambda: run_full_assembly(run_calibration=bool(calib_var.get())),
             "run_full_assembly"
         )
+    ).pack(pady=5)
+
+    # Reprint a single feature (any pad or trace)
+    tk.Button(
+        root,
+        text="Reprint Feature",
+        command=lambda: open_reprint_window(root)
     ).pack(pady=5)
 
     # Full manual loop

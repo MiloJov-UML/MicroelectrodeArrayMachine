@@ -295,11 +295,16 @@ def build_traces(me_pitch_um, connector_pitch_um=CONNECTOR_PITCH_UM):
     cl pads (3,4,5,6 bottom row): near-vertical trace, small 45° jog to the
     column, entering the pad from below.
 
-    cs pads (1,2,7,8 top row): routed like onion layers so nothing crosses:
-    straight up at the ME pad's own X (outside the grid), 45° corner, a
-    crossbar ABOVE the whole connector grid, 45° corner, then straight down
-    into the pad from the top. Traces 1/8 use the outermost/highest layer,
-    2/7 the inner one.
+    cs pads (1,8 top row, outer): routed over the top of the grid — straight
+    up at the ME pad's own X (outside the grid), 45° corner, a crossbar ABOVE
+    the connector grid, 45° corner, then straight down into the pad from the
+    top. With pads 2/7 no longer riding over the top, this crossbar sits at the
+    base clearance height only (no extra onion layer).
+
+    cs pads (2,7 top row, outermost columns): the ME pad sits outboard of the
+    connector column, so the trace rises alongside the grid and enters the
+    connector pad from its outer SIDE instead of routing over the top. This
+    keeps those two traces shorter and uses less ink.
     """
     c_mm = connector_pitch_um / 1000.0
     stagger_mm = CONNECTOR_ROW_STAGGER_UM / 1000.0
@@ -307,7 +312,6 @@ def build_traces(me_pitch_um, connector_pitch_um=CONNECTOR_PITCH_UM):
     cl_drop = tuning["connector_cl_drop_mm"]
     corner_len = tuning["corner_mm"]
     cs_clear = tuning["cs_clear_mm"]
-    cs_layer = tuning["cs_layer_mm"]
     corner_v = corner_len / math.sqrt(2)    # x = y component of a 45° corner
     d_cl = cl_drop                          # cl pad entry (bottom edge)
     d_cs = d_cl + stagger_mm + CONN_PAD_LEN_MM  # cs pad entry (top edge)
@@ -330,31 +334,53 @@ def build_traces(me_pitch_um, connector_pitch_um=CONNECTOR_PITCH_UM):
                 idx += 1
 
         if n in CS_PADS:
-            # Routed trace over the top of the grid
-            H = d_cs + cs_clear + (cs_layer if n in (1, 8) else 0.0)
-            up_corner = 135 if inward_pos else 45
-            horiz = 180 if inward_pos else 0
-            down_corner = 225 if inward_pos else 315
-
-            # Riser must sit outside the connector grid to avoid crossing it
+            pad_w = pad_types["cs"]["w"]
             grid_edge = 1.5 * c_mm + 0.3
             if shift > 1e-6 and abs(me_x) < grid_edge:
                 print(f"Warning: trace {n} riser at {me_x:.3f} mm is inside the "
                       f"connector grid ({grid_edge:.3f} mm); increase ME pitch.")
 
-            if shift <= 2 * corner_v:
-                # Columns nearly aligned: two shortened corners, no crossbar
-                cv = shift / 2.0
-                add(90.0, H - cv)
-                add(up_corner, cv * math.sqrt(2))
-                add(down_corner, cv * math.sqrt(2))
-                add(270.0, (H - cv) - d_cs)
+            if n in (2, 7):
+                # SIDE ENTRY: outermost columns. Rise alongside the grid and
+                # enter the connector pad from its outer side (shorter, less ink).
+                center_h = d_cs - CONN_PAD_LEN_MM / 2.0   # cs pad vertical center
+                up_corner = 135 if inward_pos else 45
+                horiz = 180 if inward_pos else 0
+                h_total = shift - pad_w / 2.0             # stop at the pad's outer edge
+                if h_total < 0.0:
+                    h_total = 0.0
+
+                if h_total <= corner_v:
+                    # Column nearly under the ME pad: single diagonal into the side
+                    add(90.0, center_h - h_total)
+                    add(up_corner, h_total * math.sqrt(2))
+                else:
+                    add(90.0, center_h - corner_v)
+                    add(up_corner, corner_len)
+                    add(horiz, h_total - corner_v)
             else:
-                add(90.0, H - corner_v)
-                add(up_corner, corner_len)
-                add(horiz, shift - 2 * corner_v)
-                add(down_corner, corner_len)
-                add(270.0, (H - corner_v) - d_cs)
+                # Routed trace over the top of the grid (pads 1 and 8).
+                # With pads 2/7 now entering from the side, nothing else rides
+                # over the top, so 1/8 only need the base clearance above the cs
+                # pads (no extra onion layer) — a lower, shorter crossbar.
+                H = d_cs + cs_clear
+                up_corner = 135 if inward_pos else 45
+                horiz = 180 if inward_pos else 0
+                down_corner = 225 if inward_pos else 315
+
+                if shift <= 2 * corner_v:
+                    # Columns nearly aligned: two shortened corners, no crossbar
+                    cv = shift / 2.0
+                    add(90.0, H - cv)
+                    add(up_corner, cv * math.sqrt(2))
+                    add(down_corner, cv * math.sqrt(2))
+                    add(270.0, (H - cv) - d_cs)
+                else:
+                    add(90.0, H - corner_v)
+                    add(up_corner, corner_len)
+                    add(horiz, shift - 2 * corner_v)
+                    add(down_corner, corner_len)
+                    add(270.0, (H - corner_v) - d_cs)
         else:
             # Near-vertical cl trace
             diag_v = 0.0
@@ -385,9 +411,11 @@ def build_traces(me_pitch_um, connector_pitch_um=CONNECTOR_PITCH_UM):
 # Connector pad printed at the end of each trace: (pad_type, position)
 # Position 9  = trace arrives from below (cl row), pad extends onward/up.
 # Position 10 = trace arrives from above (cs row), pad extends back/down.
+# Position 11 = trace arrives from the LEFT side (pad 2), pad extends inward/right.
+# Position 12 = trace arrives from the RIGHT side (pad 7), pad extends inward/left.
 PAD_SEQUENCE = [
-    ("cs", 10), ("cs", 10), ("cl", 9), ("cl", 9),
-    ("cl", 9), ("cl", 9), ("cs", 10), ("cs", 10),
+    ("cs", 10), ("cs", 11), ("cl", 9), ("cl", 9),
+    ("cl", 9), ("cl", 9), ("cs", 12), ("cs", 10),
 ]
 
 def print_pcb():
@@ -418,6 +446,139 @@ def print_pcb():
 
     update_speed(50)
     down(10000)
+
+# Component identifiers accepted by reprint_feature().
+REPRINT_COMPONENTS = ("me_pad", "trace", "connector_pad", "full")
+
+def reprint_feature(index, component="full"):
+    """Reprint a single feature (or one of its components) at the CURRENT head
+    position, without stepping between features.
+
+    Jog the printhead to the START of the selected component before calling:
+      * 'me_pad'        — the microelectrode pad start point
+      * 'trace'         — where the trace leaves the ME pad
+      * 'connector_pad' — the connector-pad entry point
+      * 'full'          — the ME-pad start point (prints ME pad → trace → pad)
+
+    index:     connector feature number 1..8 (selects the trace path and the
+               connector-pad style). Ignored for a lone ME pad.
+    component: one of REPRINT_COMPONENTS.
+    """
+    if component not in REPRINT_COMPONENTS:
+        print(f"[reprint] Unknown component '{component}'.")
+        return
+    if not (1 <= index <= 8):
+        print(f"[reprint] Feature index {index} out of range (1-8).")
+        return
+
+    clear_emergency_stop()
+    update_speed(1)
+
+    me_pitch_um = get_pad_spacing_um()
+    active_traces = build_traces(me_pitch_um)
+    pad_type, position = PAD_SEQUENCE[index - 1]
+
+    print(f"[reprint] Reprinting feature {index}, component '{component}'")
+    try:
+        _abort_if_emergency_stop()
+        if component in ("me_pad", "full"):
+            print_pad(pad_types, "me", 8)
+        if component in ("trace", "full"):
+            _abort_if_emergency_stop()
+            print_trace(active_traces, index)
+        if component in ("connector_pad", "full"):
+            _abort_if_emergency_stop()
+            print_pad(pad_types, pad_type, position)
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[reprint] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        nordson_off()
+        update_speed(50)
+    print(f"[reprint] Finished feature {index}, component '{component}'")
+
+    # Lower the PCB (effectively lifting the printhead clear) after reprinting.
+    update_speed(50)
+    down(8000)
+
+# Z clearance (in stage units) held above the print height while jogging XY, so
+# the pen never drags across the PCB before touching down.
+JOG_Z_CLEARANCE_UM = 1000
+
+def _jog_to_print_point(index, y_offset_um, label):
+    """Jog to a print point for feature `index` (feature 1 = saved 'print'
+    origin; feature n at origin_X + (n-1)*pad_spacing). `y_offset_um` shifts Y
+    from the feature start (negative = front/-y). XY (and rotation) move with the
+    pen held a fixed clearance above the print height, then Z touches down LAST.
+    """
+    if not (1 <= index <= 8):
+        print(f"[jog] Feature index {index} out of range (1-8).")
+        return
+    reload_origins()  # pick up any origin the user just saved in the GUI
+    origin = _print_origin_saved
+    if not origin or 'X' not in origin or 'Y' not in origin:
+        print("[jog] No saved 'print' origin. Set the Print origin first.")
+        return
+
+    clear_emergency_stop()
+    me_pitch_um = get_pad_spacing_um()
+    target_x = origin['X'] + (index - 1) * me_pitch_um
+    target_y = origin['Y'] + y_offset_um
+    print_z = origin.get('Z')
+
+    def move_axis_to(ax, target):
+        cur = get_current_position(ax)
+        if cur is None:
+            print(f"[jog] Axis {ax}: position unknown, skipping.")
+            return
+        diff = target - cur
+        if abs(diff) < 0.5:
+            return
+        direction = '+' if diff >= 0 else '-'
+        move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+
+    print(f"[jog] Jogging to {label} for feature {index} "
+          f"(X={target_x:.1f}, Y={target_y:.1f})")
+    try:
+        update_speed(30)
+        # 1) Retract Z to a safe clearance below the print height (pen off the board)
+        if print_z is not None:
+            _abort_if_emergency_stop()
+            move_axis_to(z, print_z - JOG_Z_CLEARANCE_UM)
+        # 2) Position XY (and rotation) with the pen clear of the board
+        _abort_if_emergency_stop()
+        move_axis_to(x, target_x)
+        _abort_if_emergency_stop()
+        move_axis_to(y, target_y)
+        if 'r' in origin:
+            _abort_if_emergency_stop()
+            move_axis_to('r', origin['r'])
+        # 3) Touch down: lower Z onto the board LAST
+        if print_z is not None:
+            _abort_if_emergency_stop()
+            move_axis_to(z, print_z)
+        print(f"[jog] At {label} for feature {index}.")
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[jog] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        update_speed(50)
+
+def jog_to_feature_start(index):
+    """Automatically jog to feature `index`'s start (the ME-pad start point),
+    then touch down by lowering Z to the print height LAST."""
+    _jog_to_print_point(index, 0.0, "feature start")
+
+def jog_to_trace_start(index):
+    """Automatically jog to feature `index`'s trace start — where the trace
+    leaves the ME pad, a quarter of the ME pad height 'up' (front / -y) from the
+    feature start — then touch down by lowering Z LAST."""
+    y_offset_um = -mm_to_um(pad_types["me"]["l"] / 4.0)  # front (-y) by 1/4 ME height
+    _jog_to_print_point(index, y_offset_um, "trace start")
 
 # Don't modify - Phillipe's edit
 def print_trace(trace_dict, index):
@@ -554,6 +715,24 @@ def pad_handler(pad_dict, pad_type, position):
         left(width)            # †’ far corner, other side
         front(length)          # †’ entry-side corner, other side
         right(width / 2)       # †’ back to entry center
+
+    elif position == 11:
+        # Connector pad trace arrives from the LEFT side (pad 2). Pen enters at
+        # the left-edge center; pad body extends inward (to the right).
+        back(length / 2)       # †’ top-left corner
+        right(width)           # †’ top-right corner
+        front(length)          # †’ bottom-right corner
+        left(width)            # †’ bottom-left corner
+        back(length / 2)       # †’ back to left-edge center (entry)
+
+    elif position == 12:
+        # Connector pad trace arrives from the RIGHT side (pad 7). Pen enters at
+        # the right-edge center; pad body extends inward (to the left).
+        back(length / 2)       # †’ top-right corner
+        left(width)            # †’ top-left corner
+        front(length)          # †’ bottom-left corner
+        right(width)           # †’ bottom-right corner
+        back(length / 2)       # †’ back to right-edge center (entry)
 
 def advance_to_next_feature(num, xx, yy, spacing):
     """Move directly from current position to the next feature start.
