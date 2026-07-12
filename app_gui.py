@@ -49,7 +49,9 @@ from relay_control import (
     nordson_off,
     pnp_forward,
     pnp_backward,
-    pnp_release
+    pnp_release,
+    servo_to,
+    wait_for_magnet,
 )
 
 from assembly import (
@@ -862,6 +864,197 @@ def open_reprint_window(root):
 
 
 ###############################
+# PNP SUBSYSTEM TEST POPUP
+###############################
+def open_pnp_test_window(root):
+    """Non-modal popup for discrete testing of each PNP subsystem."""
+    win = Toplevel(root)
+    win.title("PNP Subsystem Test")
+    win.resizable(False, False)
+
+    IDLE_BG = 'lightgray'
+    BUSY_BG = '#ffffaa'   # yellow  — in progress / listening
+    OK_BG   = '#aaffaa'   # green   — confirmed / detected
+    ERR_BG  = '#ffaaaa'   # red     — error
+
+    # ── Servo ─────────────────────────────────────────────────────────────────
+    servo_lf = tk.LabelFrame(win, text="Servo", padx=10, pady=6)
+    servo_lf.pack(fill='x', padx=12, pady=(10, 4))
+
+    servo_status = tk.Label(servo_lf, text="Last command: —", width=26,
+                             relief='sunken', bg=IDLE_BG, anchor='center')
+    servo_status.pack(pady=(0, 6))
+
+    def _servo_go(angle):
+        servo_status.config(text=f"Sent: {angle}°", bg=OK_BG)
+        threading.Thread(target=servo_to, args=(angle,), daemon=True).start()
+
+    preset_row = tk.Frame(servo_lf)
+    preset_row.pack()
+    tk.Label(preset_row, text="Presets:").pack(side='left', padx=(0, 6))
+    for _a in (0, 55, 71):
+        tk.Button(preset_row, text=f"{_a}°", width=5,
+                  command=lambda a=_a: _servo_go(a)).pack(side='left', padx=3)
+
+    custom_row = tk.Frame(servo_lf)
+    custom_row.pack(pady=(5, 0))
+    tk.Label(custom_row, text="Custom (0–270):").pack(side='left')
+    custom_angle_entry = tk.Entry(custom_row, width=5)
+    custom_angle_entry.insert(0, "0")
+    custom_angle_entry.pack(side='left', padx=4)
+
+    def _servo_custom():
+        try:
+            angle = int(custom_angle_entry.get())
+        except ValueError:
+            messagebox.showerror("Error", "Enter an integer angle.", parent=win)
+            return
+        if not (0 <= angle <= 270):
+            messagebox.showerror("Error", "Angle must be 0–270.", parent=win)
+            return
+        _servo_go(angle)
+
+    tk.Button(custom_row, text="Go", command=_servo_custom).pack(side='left')
+
+    # ── DC Motor (PNP) ────────────────────────────────────────────────────────
+    motor_lf = tk.LabelFrame(win, text="DC Motor (PNP)", padx=10, pady=6)
+    motor_lf.pack(fill='x', padx=12, pady=4)
+
+    motor_status = tk.Label(motor_lf, text="State: Idle", width=26,
+                             relief='sunken', bg=IDLE_BG, anchor='center')
+    motor_status.pack(pady=(0, 6))
+
+    speed_row = tk.Frame(motor_lf)
+    speed_row.pack()
+    tk.Label(speed_row, text="Speed (1–255):").pack(side='left')
+    speed_var = tk.StringVar(value="25")
+    tk.Entry(speed_row, textvariable=speed_var, width=5).pack(side='left', padx=4)
+
+    def _get_pnp_speed():
+        try:
+            s = int(speed_var.get())
+            if 1 <= s <= 255:
+                return s
+        except ValueError:
+            pass
+        messagebox.showerror("Error", "Speed must be an integer 1–255.", parent=win)
+        return None
+
+    def _pnp_fwd():
+        s = _get_pnp_speed()
+        if s is None:
+            return
+        motor_status.config(text="State: Forward", bg='#aaddff')
+        threading.Thread(target=pnp_forward, kwargs={'speed': s}, daemon=True).start()
+
+    def _pnp_bwd():
+        s = _get_pnp_speed()
+        if s is None:
+            return
+        motor_status.config(text="State: Backward", bg=BUSY_BG)
+        threading.Thread(target=pnp_backward, kwargs={'speed': s}, daemon=True).start()
+
+    def _pnp_rel():
+        motor_status.config(text="State: Released", bg=IDLE_BG)
+        threading.Thread(target=pnp_release, daemon=True).start()
+
+    motor_btn_row = tk.Frame(motor_lf)
+    motor_btn_row.pack(pady=(5, 0))
+    tk.Button(motor_btn_row, text="Forward",  width=10, command=_pnp_fwd).pack(side='left', padx=4)
+    tk.Button(motor_btn_row, text="Backward", width=10, command=_pnp_bwd).pack(side='left', padx=4)
+    tk.Button(motor_btn_row, text="Release",  width=10, command=_pnp_rel).pack(side='left', padx=4)
+
+    # ── Hall Effect Sensor ────────────────────────────────────────────────────
+    hall_lf = tk.LabelFrame(win, text="Hall Effect Sensor", padx=10, pady=6)
+    hall_lf.pack(fill='x', padx=12, pady=4)
+
+    hall_status = tk.Label(hall_lf, text="State: Idle", width=26,
+                            relief='sunken', bg=IDLE_BG, anchor='center')
+    hall_status.pack(pady=(0, 6))
+
+    _hall_cancel = threading.Event()
+
+    def _start_hall_listen():
+        _hall_cancel.clear()
+        hall_status.config(text="Listening for magnet...", bg=BUSY_BG)
+        listen_btn.config(state='disabled')
+        cancel_hall_btn.config(state='normal')
+
+        def _listen_thread():
+            result = wait_for_magnet(cancel_event=_hall_cancel)
+            def _update():
+                try:
+                    if not win.winfo_exists():
+                        return
+                    if result == "Magnet Detected":
+                        hall_status.config(text="Magnet Detected!", bg=OK_BG)
+                    else:
+                        hall_status.config(text="State: Idle (cancelled)", bg=IDLE_BG)
+                    listen_btn.config(state='normal')
+                    cancel_hall_btn.config(state='disabled')
+                except Exception:
+                    pass
+            win.after(0, _update)
+
+        threading.Thread(target=_listen_thread, daemon=True).start()
+
+    def _cancel_hall_listen():
+        _hall_cancel.set()
+
+    hall_btn_row = tk.Frame(hall_lf)
+    hall_btn_row.pack()
+    listen_btn = tk.Button(hall_btn_row, text="Listen for Magnet", width=16,
+                           command=_start_hall_listen)
+    listen_btn.pack(side='left', padx=4)
+    cancel_hall_btn = tk.Button(hall_btn_row, text="Cancel", width=8,
+                                command=_cancel_hall_listen, state='disabled')
+    cancel_hall_btn.pack(side='left', padx=4)
+
+    # ── Full Sequence ─────────────────────────────────────────────────────────
+    seq_lf = tk.LabelFrame(win, text="Full Sequence (print_tester)", padx=10, pady=6)
+    seq_lf.pack(fill='x', padx=12, pady=(4, 8))
+
+    seq_status = tk.Label(seq_lf, text="State: Idle", width=26,
+                           relief='sunken', bg=IDLE_BG, anchor='center')
+    seq_status.pack(pady=(0, 6))
+
+    def _run_full_seq():
+        seq_status.config(text="Running...", bg=BUSY_BG)
+        run_seq_btn.config(state='disabled')
+
+        def _seq_thread():
+            try:
+                print_tester()
+                def _done():
+                    try:
+                        if win.winfo_exists():
+                            seq_status.config(text="Completed", bg=OK_BG)
+                            run_seq_btn.config(state='normal')
+                    except Exception:
+                        pass
+                win.after(0, _done)
+            except Exception as e:
+                def _err():
+                    try:
+                        if win.winfo_exists():
+                            seq_status.config(text=f"Error: {e}", bg=ERR_BG)
+                            run_seq_btn.config(state='normal')
+                    except Exception:
+                        pass
+                win.after(0, _err)
+
+        threading.Thread(target=_seq_thread, daemon=True).start()
+
+    run_seq_btn = tk.Button(seq_lf, text="Run Full Sequence", width=22, command=_run_full_seq)
+    run_seq_btn.pack()
+
+    # Cancel any listening if the window is closed
+    win.protocol("WM_DELETE_WINDOW", lambda: (_hall_cancel.set(), win.destroy()))
+
+    tk.Button(win, text="Close", command=lambda: (_hall_cancel.set(), win.destroy())).pack(pady=(0, 10))
+
+
+###############################
 # MAIN GUI LAUNCH
 ###############################
 def launch_gui():
@@ -1154,6 +1347,13 @@ def launch_gui():
         root,
         text="Reprint Feature",
         command=lambda: open_reprint_window(root)
+    ).pack(pady=5)
+
+    # Test PNP routine
+    tk.Button(
+        root,
+        text="Test PNP Routine",
+        command=lambda: open_pnp_test_window(root)
     ).pack(pady=5)
 
     # Full manual loop

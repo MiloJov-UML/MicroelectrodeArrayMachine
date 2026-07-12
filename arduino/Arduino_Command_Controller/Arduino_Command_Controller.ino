@@ -3,7 +3,7 @@
 #include <Servo.h>   // Include the standard Servo library
 
 Servo myservo;  // Create servo object to control a servo
-int pos = 0;   // Variable to store the servo position, start at 0 degrees
+int pos = 15;  // Variable to store the servo position, start at 15 degrees (rest position)
 int val;        // Variable to read the value from serial input
 bool poll = false;
 
@@ -90,12 +90,35 @@ void loop() {
 
     // Servo control Command  
     if (command.startsWith("Servo_To_")) {
-      int angle = command.substring(9).toInt();
-      if (angle >= 0 && angle <= 270) {
-        Serial.print("Moving Servo to Angle ");
-        Serial.println(angle);
+      String params = command.substring(9);
+      int underscoreIdx = params.indexOf('_');
+      int targetAngle, stepDelay;
 
-        myservo.write(angle); // Tell servo to go to the new position
+      if (underscoreIdx >= 0) {
+        targetAngle = params.substring(0, underscoreIdx).toInt();
+        stepDelay   = params.substring(underscoreIdx + 1).toInt();
+      } else {
+        targetAngle = params.toInt();
+        stepDelay   = 15;  // default: 15 ms per degree
+      }
+
+      if (targetAngle >= 0 && targetAngle <= 270 && stepDelay >= 0) {
+        Serial.print("Moving Servo to Angle ");
+        Serial.println(targetAngle);
+
+        // Sweep one degree at a time so components don't go flying
+        if (targetAngle > pos) {
+          for (int p = pos + 1; p <= targetAngle; p++) {
+            myservo.write(p);
+            delay(stepDelay);
+          }
+        } else if (targetAngle < pos) {
+          for (int p = pos - 1; p >= targetAngle; p--) {
+            myservo.write(p);
+            delay(stepDelay);
+          }
+        }
+        pos = targetAngle;
         Serial.println("Motion complete");
       } else {
         Serial.println("Invalid angle (must be 0-270)");

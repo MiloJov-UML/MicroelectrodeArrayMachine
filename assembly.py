@@ -1031,7 +1031,7 @@ def print_tester():
     # print_pcb()
     #calibrate()
     #print_pcb()
-    servo_to(0)
+    servo_to(15)
     time.sleep(2.0)
     # servo_to(45)
     # time.sleep(2.0)
@@ -1054,7 +1054,7 @@ def print_tester():
     pnp_backward(speed=25)
     time.sleep(2.0)
     
-    servo_to(0)
+    servo_to(15)
     time.sleep(2.0)
     # time.sleep(2.0)
     # mag_detector()

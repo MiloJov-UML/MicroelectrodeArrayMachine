@@ -1,53 +1,286 @@
-#include <Wire.h>
-#include <Servo.h>
 #include <Adafruit_MotorShield.h>
+#include <Wire.h>
+#include <Servo.h>   // Include the standard Servo library
 
-// Create the motor shield object with the default I2C address (0x60)
+Servo myservo;  // Create servo object to control a servo
+int pos = 15;  // Variable to store the servo position, start at 15 degrees (rest position)
+int val;        // Variable to read the value from serial input
+bool poll = false;
+
+const int hallPin = 2; // Pin connected to sensor Signal
+const int ledPin = 13; // Built-in LED
+int sensorValue = 1;
+
+const int relayPin = 8; // Pin connected to relay
+const int solPin = 11; // Pin connected to relay2
+const int nordPin = 7;
+const int r_limit = 5;
+const int z_probe = 4;
+bool r_lim = false;
+bool z_prb = false;
+
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
-
-// Select the port where your DC motor is connected (M1, M2, M3, or M4)
+Adafruit_StepperMotor *myStepper = AFMS.getStepper(200, 1);
 Adafruit_DCMotor *motor = AFMS.getMotor(3); // Motor on M1
 
-Servo myservo1;
-const int servo1Pin = 9; 
-
-// Motor speed (0–255)
-const uint8_t MOTOR_SPEED = 100;
-
-// Delay time in milliseconds for each direction
-const unsigned long MOVE_TIME = 500;
-
 void setup() {
-  Serial.begin(9600);
-  Serial.println("Adafruit Motor Shield V2 - Back and Forth Example");
+  pinMode(relayPin, OUTPUT);
+  pinMode(solPin, OUTPUT);
+  pinMode(nordPin, OUTPUT);
+  pinMode(r_limit, INPUT_PULLUP);
+  pinMode(z_probe, INPUT_PULLUP);
 
-  // Initialize the motor shield
+  pinMode(hallPin, INPUT_PULLUP);
+  pinMode(ledPin, OUTPUT);
+
+  digitalWrite(relayPin, LOW);    // Start with the relay off for safety
+  digitalWrite(solPin, LOW);
+  digitalWrite(nordPin, LOW);     // Start with the solenoid relay off for safety
+  
+  Serial.begin(9600); // Start serial communication at 9600 baud
+  myservo.attach(9); // Attaches the servo on pin 10 to the servo object (or pin 9)
+  myservo.write(pos);
+  
+
   if (!AFMS.begin()) {
     Serial.println("Could not find Motor Shield. Check wiring.");
-    while (1); // Halt if shield not found
+    while (1);
   }
-
-  myservo1.attach(servo1Pin);
-  // Set initial speed
-  motor->setSpeed(MOTOR_SPEED);
+  
+  myStepper->setSpeed(1);  // lower speed = more torque
+  
+  Serial.println("Arduino is ready to receive commands.");
 }
 
 void loop() {
-  // Move forward
-  Serial.println("Moving forward...");
-  motor->run(FORWARD);
-  delay(MOVE_TIME);
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    Serial.print("Received command: ");
+    Serial.println(command);
 
-  // Stop briefly
-  motor->run(RELEASE);
-  delay(500);
+    if (command.equalsIgnoreCase("Laser_Relay_On")) {
+      digitalWrite(relayPin, HIGH);
+      Serial.println("Relay turned ON");
+    }
+    else if (command.equalsIgnoreCase("Laser_Relay_Off")) {
+      digitalWrite(relayPin, LOW);
+      Serial.println("Relay turned OFF");
+    }
 
-  // Move backward
-  Serial.println("Moving backward...");
-  motor->run(BACKWARD);
-  delay(MOVE_TIME);
+    // Solenoid control commands
+    if (command.equalsIgnoreCase("Solenoid_Relay_On")) {
+      digitalWrite(solPin, HIGH);
+      Serial.println("Solenoid relay turned ON");
+    }
+    else if (command.equalsIgnoreCase("Solenoid_Relay_Off")) {
+      digitalWrite(solPin, LOW);
+      Serial.println("Solenoid relay turned OFF");
+    }
 
-  // Stop briefly
-  motor->run(RELEASE);
-  delay(500);
+    // Nordson control commands
+    if (command.equalsIgnoreCase("Nordson_On")) {
+      digitalWrite(nordPin, HIGH);
+      Serial.println("Nordson turned ON");
+    }
+    else if (command.equalsIgnoreCase("Nordson_Off")) {
+      digitalWrite(nordPin, LOW);
+      Serial.println("Nordson turned OFF");
+    }
+
+    // Servo control Command  
+    if (command.startsWith("Servo_To_")) {
+      String params = command.substring(9);
+      int underscoreIdx = params.indexOf('_');
+      int targetAngle, stepDelay;
+
+      if (underscoreIdx >= 0) {
+        targetAngle = params.substring(0, underscoreIdx).toInt();
+        stepDelay   = params.substring(underscoreIdx + 1).toInt();
+      } else {
+        targetAngle = params.toInt();
+        stepDelay   = 15;  // default: 15 ms per degree
+      }
+
+      if (targetAngle >= 0 && targetAngle <= 270 && stepDelay >= 0) {
+        Serial.print("Moving Servo to Angle ");
+        Serial.println(targetAngle);
+
+        // Sweep one degree at a time so components don't go flying
+        if (targetAngle > pos) {
+          for (int p = pos + 1; p <= targetAngle; p++) {
+            myservo.write(p);
+            delay(stepDelay);
+          }
+        } else if (targetAngle < pos) {
+          for (int p = pos - 1; p >= targetAngle; p--) {
+            myservo.write(p);
+            delay(stepDelay);
+          }
+        }
+        pos = targetAngle;
+        Serial.println("Motion complete");
+      } else {
+        Serial.println("Invalid angle (must be 0-270)");
+      }
+    }
+    
+    // Motor Control Commands
+    if (command.startsWith("PNP_Forward_")) {
+      int speed = command.substring(12).toInt();
+      if (speed > 0 && speed <= 255) {
+        Serial.print("Moving motor forward, ");
+        Serial.print("Speed: ");
+        Serial.println(speed);
+        
+        motor->setSpeed(speed);  // MICROSTEP for more torque
+        motor->run(BACKWARD);
+        delay(1000);
+        poll = true;
+
+
+        /*
+        if (sensorValue == 0)
+        {
+          motor->run(RELEASE);
+          Serial.println("Connector Available");
+        }
+
+        ///*
+        else
+        {
+          delay(1000);
+          motor->run(RELEASE);
+          Serial.println("Connector Not Available");
+        }
+        */
+        
+      } else {
+        Serial.println("Invalid speed count (must be 0-255)");
+      }
+    }
+    else if (command.startsWith("PNP_Backward_")) {
+      int speed = command.substring(13).toInt();
+      if (speed > 0 && speed <= 255) {
+        Serial.print("Moving motor backward, ");
+        Serial.print("Speed: ");
+        Serial.println(speed);
+        
+        motor->setSpeed(speed);  
+        motor->run(FORWARD);
+        delay(1000);
+        poll = true;
+        
+        /*
+        if (sensorValue == 0)
+        {
+          motor->run(RELEASE);
+          Serial.println("Connector Available");
+        }
+        
+        ///*
+        else
+        {
+          delay(1000);
+          motor->run(RELEASE);
+          Serial.println("Connector Not Available");
+        }
+        */
+
+      } else {
+        Serial.println("Invalid speed count (must be 0-255)");
+      }
+    }
+    else if (command.equalsIgnoreCase("PNP_Release")) {
+      motor->run(RELEASE);
+      Serial.println("Motor released");
+    }
+    else {
+      Serial.println("Unknown command");
+    }
+
+    // Stepper Motor Control Commands
+    if (command.startsWith("Motor_Forward_")) {
+      int steps = command.substring(14).toInt();
+      if (steps > 0 && steps <= 10000) {
+        Serial.print("Moving motor forward ");
+        Serial.print(steps);
+        Serial.println(" steps");
+        myStepper->step(steps, FORWARD, MICROSTEP);  // MICROSTEP for more torque
+        myStepper->release();
+        Serial.println("Motor forward complete");
+      } else {
+        Serial.println("Invalid step count (must be 1-10000)");
+      }
+    }
+    else if (command.startsWith("Motor_Backward_")) {
+      int steps = command.substring(15).toInt();
+      if (steps > 0 && steps <= 10000) {
+        Serial.print("Moving motor backward ");
+        Serial.print(steps);
+        Serial.println(" steps");
+        myStepper->step(steps, BACKWARD, MICROSTEP);  // MICROSTEP for more torque
+        myStepper->release();
+        Serial.println("Motor backward complete");
+      } else {
+        Serial.println("Invalid step count (must be 1-10000)");
+      }
+    }
+    else if (command.equalsIgnoreCase("Motor_Release")) {
+      myStepper->release();
+      Serial.println("Motor released");
+    }
+    else {
+      Serial.println("Unknown command");
+    }
+  
+    // R limit switch control commands
+    if (command.equalsIgnoreCase("Start_R_Poll")) {
+      r_lim = true;
+      //Serial.println("Starting r axis Poll");
+        
+    }
+    else if (command.equalsIgnoreCase("End_R_Poll")) {
+      r_lim = false;
+      //Serial.println("Ending r axis Poll");
+    }
+
+    /// Z probe control commands
+    if (command.equalsIgnoreCase("Start_Z_Poll")) {
+      z_prb = true;
+      //Serial.println("Starting Z axis Poll");
+
+    }
+    else if (command.equalsIgnoreCase("End_Z_Poll")) {
+      z_prb = false; 
+        //Serial.println("Ending Z axis Poll");
+    }
+  } 
+    if (10>0)
+    {
+      // R limit commands
+      if (digitalRead(r_limit) == LOW)
+      {
+        Serial.println("R limit"); 
+      }
+
+      // Z limit commands
+      if (digitalRead(z_probe) == LOW)
+      {
+        Serial.println("Z limit"); 
+      }
+      
+      // Hall Pin
+      if ((digitalRead(sensorValue) == LOW) && poll)
+      {
+        Serial.println("Magnet Detected");
+        delay(250);
+        motor->run(RELEASE);
+        poll = false;
+      }
+      
+    }
+    
+        
+ 
 }

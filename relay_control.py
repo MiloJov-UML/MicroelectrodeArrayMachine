@@ -24,6 +24,7 @@ relay_ser = None
 _r_limit_event   = threading.Event()
 _z_limit_event   = threading.Event()
 _magnet_event    = threading.Event()
+_servo_done_event = threading.Event()
 # Queue for stepper-motor completion messages (motor_forward / motor_backward).
 _motor_done_queue = queue.Queue()
 
@@ -104,6 +105,8 @@ def _relay_monitor_loop():
 
         if "Magnet Detected" in line:
             _magnet_event.set()
+        if "Motion complete" in line:
+            _servo_done_event.set()
         if any(kw in line for kw in ("Motor forward complete", "Motor backward complete", "Motor released")):
             _motor_done_queue.put(line)
 
@@ -190,12 +193,30 @@ def nordson_off():
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
-def servo_to(angle: int):
-    """Move the servo to the specified angle (0-180 degrees)."""
+def servo_to(angle: int, step_ms: int = 15):
+    """Move the servo to angle, stepping step_ms milliseconds per degree (default 15).
+
+    The Arduino sweeps 1° at a time so the move is smooth and gentle.  This
+    function blocks until the Arduino signals 'Motion complete' or the estimated
+    worst-case travel time elapses.
+    """
     global relay_ser
     if relay_ser:
-        command = f"Servo_To_{angle}"
-        send_command(relay_ser, command, "Relay Controller")
+        command = f"Servo_To_{angle}_{step_ms}"
+        _servo_done_event.clear()
+        send_command(relay_ser, command, "Relay Controller", blocking=False)
+        # Wait for the monitor thread to receive 'Motion complete'.
+        # Worst case: full 270° sweep + 1 s serial latency buffer.
+        timeout = (270 * step_ms / 1000.0) + 1.0
+        elapsed = 0.0
+        while elapsed < timeout:
+            if is_emergency_stop_requested():
+                print("servo_to: aborted by emergency stop.")
+                return
+            if _servo_done_event.wait(timeout=0.1):
+                return
+            elapsed += 0.1
+        print(f"Warning: servo_to({angle}) timed out after {timeout:.1f}s")
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -203,8 +224,10 @@ def pnp_forward(speed: int):
     """Move the pick-and-place mechanism forward at the specified speed (0-100)."""
     global relay_ser
     if relay_ser:
-        command = f"PNP_Forward_{speed}"
-        send_command(relay_ser, command, "Relay Controller")
+        command = f"PNP_Backward_{speed}"
+        # The DC motor starts running and never sends a completion signal — use
+        # blocking=False like laser/solenoid to avoid racing with _relay_monitor_loop.
+        send_command(relay_ser, command, "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -212,8 +235,8 @@ def pnp_backward(speed: int):
     """Move the pick-and-place mechanism backward at the specified speed (0-100)."""
     global relay_ser
     if relay_ser:
-        command = f"PNP_Backward_{speed}"
-        send_command(relay_ser, command, "Relay Controller")
+        command = f"PNP_Forward_{speed}"
+        send_command(relay_ser, command, "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -221,7 +244,7 @@ def pnp_release():
     """Release the pick-and-place mechanism."""
     global relay_ser
     if relay_ser:
-        send_command(relay_ser, "PNP_Release", "Relay Controller")
+        send_command(relay_ser, "PNP_Release", "Relay Controller", blocking=False)
     else:
         messagebox.showerror("Error", "Not connected to relay device.")
 
@@ -380,4 +403,22 @@ def mag_detector():
             _magnet_event.clear()
             pnp_release()
             print("Connector Available")
-            return "Magnet Detected"           
+            return "Magnet Detected"
+
+def wait_for_magnet(cancel_event=None, poll_interval=0.2):
+    """Block until a magnet is detected, cancel_event is set, or emergency stop.
+
+    Unlike mag_detector(), does not call pnp_release() on detection and accepts
+    an external threading.Event so the caller can cancel without triggering an
+    emergency stop.  Returns 'Magnet Detected' or None if cancelled.
+    """
+    _magnet_event.clear()
+    while True:
+        if cancel_event is not None and cancel_event.is_set():
+            return None
+        if is_emergency_stop_requested():
+            return None
+        if _magnet_event.wait(timeout=poll_interval):
+            _magnet_event.clear()
+            print("Hall effect: magnet detected.")
+            return "Magnet Detected"
