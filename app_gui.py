@@ -174,6 +174,23 @@ def save_trace_tuning(trace_tuning):
     except Exception as e:
         print(f"Warning: Could not save trace tuning: {e}")
 
+def save_pnp_offsets(offsets_dict):
+    """Persist PNP-to-nozzle offsets to pcb_settings.json."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing["pnp_offsets"] = offsets_dict
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Saved PNP offsets to {SETTINGS_FILE}: {offsets_dict}")
+    except Exception as e:
+        print(f"Warning: Could not save PNP offsets: {e}")
+
 def save_camera_ports(ports_dict):
     """Persist camera port assignments to pcb_settings.json."""
     existing = {}
@@ -496,9 +513,9 @@ def open_camera_port_settings_window(root):
     win.resizable(False, False)
 
     role_labels = {
-        0: "Camera 0 — Main PCB View",
-        1: "Camera 1 — Wire Tip View",
-        2: "Camera 2 — Clog Detection",
+        0: "Camera 0 — Wire Tip View",
+        1: "Camera 1 — Clog Detection",
+        2: "Camera 2 — Main PCB View",
     }
 
     port_vars = {}
@@ -538,75 +555,100 @@ def open_camera_port_settings_window(root):
 
     win.grab_set()
 
+def save_camera_adjustments(adjustments):
+    """Persist per-camera image adjustments to pcb_settings.json."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing['camera_adjustments'] = {str(role): dict(adj) for role, adj in adjustments.items()}
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Saved camera adjustments to {SETTINGS_FILE}")
+    except Exception as e:
+        print(f"Warning: Could not save camera adjustments: {e}")
+
 def open_image_adjustment_window(parent=None):
     adj_win = Toplevel(parent)
     adj_win.title("Image Adjustments")
 
-    tk.Label(adj_win, text="Contrast (ALPHA)").pack()
-    alpha_scale = tk.Scale(
-        adj_win, from_=0.1, to=3.0, resolution=0.1,
-        orient='horizontal', command=lambda val: set_alpha(val)
-    )
-    alpha_scale.set(image_recognition.ALPHA)
-    alpha_scale.pack()
+    _FIELDS = [
+        ('alpha',         'Contrast (Alpha)',  0.1,  3.0,  0.1),
+        ('beta',          'Brightness (Beta)', -100, 100,  1  ),
+        ('sat_factor',    'Saturation',        0.0,  2.0,  0.1),
+        ('gamma',         'Gamma',             0.1,  2.5,  0.1),
+        ('sharp_strength','Sharpness',         0.0,  2.0,  0.1),
+    ]
 
-    tk.Label(adj_win, text="Brightness (BETA)").pack()
-    beta_scale = tk.Scale(
-        adj_win, from_=-100, to=100, resolution=1,
-        orient='horizontal', command=lambda val: set_beta(val)
-    )
-    beta_scale.set(image_recognition.BETA)
-    beta_scale.pack()
+    _CAM_LABELS = {0: '0 — Wire Tip', 1: '1 — Clog', 2: '2 — PCB View'}
 
-    tk.Label(adj_win, text="Saturation Factor").pack()
-    sat_scale = tk.Scale(
-        adj_win, from_=0.0, to=2.0, resolution=0.1,
-        orient='horizontal', command=lambda val: set_saturation(val)
-    )
-    sat_scale.set(image_recognition.SAT_FACTOR)
-    sat_scale.pack()
+    # Camera selector
+    cam_var = tk.IntVar(value=0)
+    cam_frame = tk.Frame(adj_win)
+    cam_frame.pack(pady=(10, 4))
+    tk.Label(cam_frame, text="Camera:").pack(side='left', padx=(0, 6))
 
-    tk.Label(adj_win, text="Gamma").pack()
-    gamma_scale = tk.Scale(
-        adj_win, from_=0.1, to=2.5, resolution=0.1,
-        orient='horizontal', command=lambda val: set_gamma(val)
-    )
-    gamma_scale.set(image_recognition.GAMMA)
-    gamma_scale.pack()
+    # Sliders — built once, values swapped when camera changes
+    sliders = {}
+    slider_frame = tk.Frame(adj_win)
+    slider_frame.pack(fill='x', padx=10, pady=4)
 
-    tk.Label(adj_win, text="Sharpness").pack()
-    sharp_scale = tk.Scale(
-        adj_win, from_=0.0, to=2.0, resolution=0.1,
-        orient='horizontal', command=lambda val: set_sharpness(val)
-    )
-    sharp_scale.set(image_recognition.SHARP_STRENGTH)
-    sharp_scale.pack()
+    for key, label, lo, hi, res in _FIELDS:
+        tk.Label(slider_frame, text=label, anchor='w').pack(fill='x')
+        s = tk.Scale(
+            slider_frame, from_=lo, to=hi, resolution=res,
+            orient='horizontal',
+            command=lambda val, k=key: _on_slider(k, float(val)),
+        )
+        s.pack(fill='x')
+        sliders[key] = s
 
-    tk.Button(adj_win, text="Close", command=adj_win.destroy).pack(pady=5)
+    def _load_sliders(role=None):
+        if role is None:
+            role = cam_var.get()
+        adj = image_recognition.camera_adjustments.get(role, {})
+        for key, s in sliders.items():
+            s.set(adj.get(key, image_recognition._DEFAULT_ADJUSTMENTS[key]))
 
-def set_alpha(val):
-    image_recognition.ALPHA = float(val)
+    def _on_slider(key, val):
+        role = cam_var.get()
+        image_recognition.camera_adjustments[role][key] = val
 
-def set_beta(val):
-    image_recognition.BETA = float(val)
+    def _switch_camera():
+        _load_sliders(cam_var.get())
 
-def set_saturation(val):
-    image_recognition.SAT_FACTOR = float(val)
+    for role, label in _CAM_LABELS.items():
+        tk.Radiobutton(
+            cam_frame, text=label, variable=cam_var,
+            value=role, command=_switch_camera,
+        ).pack(side='left', padx=4)
 
-def set_gamma(val):
-    image_recognition.GAMMA = float(val)
+    _load_sliders(0)
 
-def set_sharpness(val):
-    image_recognition.SHARP_STRENGTH = float(val)
+    btn_frame = tk.Frame(adj_win)
+    btn_frame.pack(pady=(6, 10))
+    tk.Button(
+        btn_frame, text="Save & Close",
+        command=lambda: [
+            save_camera_adjustments(image_recognition.camera_adjustments),
+            adj_win.destroy(),
+        ]
+    ).pack(side='left', padx=8)
+    tk.Button(btn_frame, text="Close", command=adj_win.destroy).pack(side='left', padx=8)
 
 ###############################
 # NAMED ORIGINS (probe / print / microwire)
 # JSON keys and axes match print.py so both systems share the same saved values.
 ###############################
 _ORIGIN_CONFIG = {
-    'probe':    ('probe_origin',        ['X', 'Y', 'r', 'Z']),
-    'print':    ('print_origin_coords', ['X', 'Y', 'r', 'Z']),
-    'microwire': ('microwire_origin',     ['X', 'Y', 'Z', 'r']),
+    'probe':     ('probe_origin',        ['X', 'Y', 'r', 'Z']),
+    'print':     ('print_origin_coords', ['X', 'Y', 'r', 'Z']),
+    'microwire': ('microwire_origin',    ['X', 'Y', 'Z', 'r']),
+    'connector': ('connector_origin',    ['X', 'Y', 'Z', 'r']),
 }
 
 def save_named_origin(name):
@@ -658,12 +700,16 @@ def load_named_origin(name):
     return None
 
 def _return_to_named_origin_thread(name):
-    """Move axes to the stored named origin. Checks emergency stop between each axis."""
+    """Move axes to the stored named origin with camera-fixture-safe axis ordering.
+
+    Arriving AT microwire:   Z drop 5000  → X → r → Z(target) → Y
+    Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
+    All other moves:          Z drop 5000  → X → Y → r → Z(target)
+    """
     cfg = _ORIGIN_CONFIG.get(name)
     if not cfg:
         print(f"[Origin] Unknown origin name '{name}'")
         return
-    _, axes = cfg
     positions = load_named_origin(name)
     if not positions:
         print(f"[Origin] No saved origin for '{name}'. Use 'Set Origin' first.")
@@ -671,23 +717,58 @@ def _return_to_named_origin_thread(name):
     print(f"\n--- Moving to '{name}' origin ---")
     prev_speed = get_current_speed()
     update_speed(30)
+
+    def _move(ax):
+        if is_emergency_stop_requested():
+            print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
+            return False
+        if ax not in positions:
+            return True
+        current_pos = get_current_position(ax)
+        if current_pos is None:
+            print(f"[Origin] Axis {ax}: position unknown, skipping.")
+            return True
+        diff = positions[ax] - current_pos
+        if abs(diff) < 0.5:
+            return True
+        direction = '+' if diff >= 0 else '-'
+        print(f"[Origin] Moving {ax} -> {positions[ax]:.3f}")
+        move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+        return True
+
+    arriving_at_microwire = (name == 'microwire')
+    departing_microwire = False
+    if not arriving_at_microwire:
+        microwire_pos = load_named_origin('microwire')
+        if microwire_pos and 'Z' in microwire_pos:
+            cur_z = get_current_position('Z')
+            if cur_z is not None and abs(cur_z - microwire_pos['Z']) < 10000:
+                departing_microwire = True
+
+    z_drop = 15000 if departing_microwire else 5000
+
     try:
-        for ax in axes:
-            if is_emergency_stop_requested():
-                print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
-                return
-            if ax not in positions:
-                continue
-            current_pos = get_current_position(ax)
-            if current_pos is None:
-                print(f"[Origin] Axis {ax}: position unknown, skipping.")
-                continue
-            diff = positions[ax] - current_pos
-            if abs(diff) < 0.5:
-                continue
-            direction = '+' if diff >= 0 else '-'
-            print(f"[Origin] Moving {ax} -> {positions[ax]:.3f}")
-            move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+        # 1) Drop Z for clearance
+        if is_emergency_stop_requested():
+            print(f"[Origin] Emergency stop — aborting return to '{name}' origin.")
+            return
+        move_linear_stage('Z', '-', z_drop, wait_for_stop=True, max_wait=30.0)
+
+        if arriving_at_microwire:
+            # 2a) Arriving at microwire: X → r → Z → Y (Y last)
+            for ax in ('X', 'r', 'Z', 'Y'):
+                if not _move(ax):
+                    return
+        elif departing_microwire:
+            # 2b) Departing from microwire: Y → X → r → Z (Y first)
+            for ax in ('Y', 'X', 'r', 'Z'):
+                if not _move(ax):
+                    return
+        else:
+            # 2c) Standard: X → Y → r → Z
+            for ax in ('X', 'Y', 'r', 'Z'):
+                if not _move(ax):
+                    return
     finally:
         update_speed(prev_speed)
     print(f"--- Finished moving to '{name}' origin ---\n")
@@ -736,6 +817,54 @@ def open_trace_tuning_window(root):
 
     win.grab_set()
 
+def open_pnp_offsets_window(root):
+    """Popup to edit the PNP-to-nozzle axis offsets (µm), persisted to pcb_settings.json."""
+    win = Toplevel(root)
+    win.title("PNP Offsets")
+    win.resizable(False, False)
+
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            current = json.load(f).get('pnp_offsets', {})
+    except Exception:
+        current = {}
+
+    fields = [
+        ('X', 'X offset (µm):', -29580),
+        ('Y', 'Y offset (µm):', -2300),
+        ('Z', 'Z offset (µm):', 4800),
+    ]
+
+    vars_by_key = {}
+    for row, (key, label, default) in enumerate(fields):
+        tk.Label(win, text=label).grid(row=row, column=0, padx=10, pady=6, sticky='w')
+        var = tk.StringVar(value=str(current.get(key, default)))
+        vars_by_key[key] = var
+        tk.Entry(win, textvariable=var, width=10).grid(row=row, column=1, padx=10, pady=6)
+
+    tk.Label(
+        win,
+        text="Applied when navigating to the PNP position.\nPositive = stage moves in + direction.",
+        fg="gray",
+        justify='left',
+    ).grid(row=len(fields), column=0, columnspan=2, padx=10, pady=(2, 8))
+
+    def on_apply():
+        try:
+            new_offsets = {key: int(var.get()) for key, var in vars_by_key.items()}
+        except ValueError:
+            messagebox.showerror("Error", "Offsets must be integers (µm).", parent=win)
+            return
+        save_pnp_offsets(new_offsets)
+        win.destroy()
+
+    btn_frame = tk.Frame(win)
+    btn_frame.grid(row=len(fields) + 1, column=0, columnspan=2, pady=8)
+    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
+
 def open_settings_window(root):
     """Settings hub popup — opens Image Adjustments or Camera Port Settings."""
     win = Toplevel(root)
@@ -763,6 +892,13 @@ def open_settings_window(root):
         text="Trace Routing Tuning",
         width=24,
         command=lambda: open_trace_tuning_window(root)
+    ).pack(pady=6)
+
+    tk.Button(
+        win,
+        text="PNP Offsets",
+        width=24,
+        command=lambda: open_pnp_offsets_window(root)
     ).pack(pady=6)
 
     tk.Button(win, text="Close", command=win.destroy).pack(pady=(6, 14))
@@ -1295,7 +1431,7 @@ def launch_gui():
     origin_radio_frame = tk.Frame(root)
     origin_radio_frame.pack(pady=(0, 4))
     tk.Label(origin_radio_frame, text="Origin:").pack(side='left', padx=(0, 6))
-    for _mode in ('Probe', 'Print', 'Microwire'):
+    for _mode in ('Probe', 'Print', 'Connector', 'Microwire'):
         tk.Radiobutton(
             origin_radio_frame,
             text=_mode,

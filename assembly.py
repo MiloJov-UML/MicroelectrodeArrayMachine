@@ -29,7 +29,9 @@ from relay_control import (
     pnp_forward,
     pnp_backward,
     pnp_release,
-    mag_detector
+    mag_detector,
+    solenoid_relay_on,
+    solenoid_relay_off
 )   
 
 #parameters for line test
@@ -50,7 +52,7 @@ pcb_z_coord = None # Z coordinate for printing, set after probing
 _has_calibrated = False  # Set True after first successful calibrate(); skipped on reruns
 
 # ---------------------------------------------------------------------------
-# Three-origin system: probe, print, microwire
+# Four-origin system: probe, print, microwire, connector
 # Each is persisted to pcb_settings.json so every confirmed position becomes
 # the starting point for the next run, making the system more accurate over time.
 # ---------------------------------------------------------------------------
@@ -60,19 +62,21 @@ SETTINGS_FILE = "pcb_settings.json"
 _probe_origin    = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _print_origin_saved   = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _microwire_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
+_connector_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — center of 4x2 connector pad array
 
 def _load_origins():
-    """Load the three saved origins from pcb_settings.json at startup."""
-    global _probe_origin, _print_origin_saved, _microwire_origin_saved
+    """Load the four saved origins from pcb_settings.json at startup."""
+    global _probe_origin, _print_origin_saved, _microwire_origin_saved, _connector_origin_saved
     if not os.path.isfile(SETTINGS_FILE):
         return
     try:
         with open(SETTINGS_FILE, 'r') as f:
             data = json.load(f)
-        _probe_origin          = data.get('probe_origin')    or None
-        _print_origin_saved    = data.get('print_origin_coords') or None
-        _microwire_origin_saved = data.get('microwire_origin') or None
-        print(f"Origins loaded probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}")
+        _probe_origin           = data.get('probe_origin')       or None
+        _print_origin_saved     = data.get('print_origin_coords') or None
+        _microwire_origin_saved = data.get('microwire_origin')   or None
+        _connector_origin_saved = data.get('connector_origin')   or None
+        print(f"Origins loaded probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}, connector: {_connector_origin_saved}")
     except Exception as e:
         print(f"Warning: could not load origins from {SETTINGS_FILE}: {e}")
 
@@ -94,25 +98,65 @@ def _save_origin(key, positions_dict):
         print(f"Warning: could not save origin '{key}': {e}")
 
 def reload_origins():
-    """Reload all three saved origins from pcb_settings.json into memory.
+    """Reload all four saved origins from pcb_settings.json into memory.
     Call this after the GUI saves a new origin so in-session routines see it."""
     _load_origins()
 
 def _navigate_to_saved_origin(origin_dict, axes):
-    """Move each listed axis to its saved absolute position."""
-    for ax in axes:
-        val = origin_dict.get(ax)
-        if val is None:
-            continue
+    """Move to a saved origin with camera-fixture-safe axis ordering.
+
+    Arriving AT microwire:   Z drop 5000  → X → r → Z(target) → Y
+    Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
+    All other moves:          Z drop 5000  → non-Z axes (given order) → Z(target)
+    """
+    def _move(ax, val):
         _abort_if_emergency_stop()
         cur = get_current_position(ax)
         if cur is None:
-            continue
+            return
         diff = val - cur
         if abs(diff) < 0.5:
-            continue
+            return
         move_linear_stage(ax, '+' if diff >= 0 else '-', abs(diff),
                           wait_for_stop=True, max_wait=30.0)
+
+    arriving_at_microwire = (origin_dict is _microwire_origin_saved)
+    departing_microwire = False
+    if not arriving_at_microwire and _microwire_origin_saved and 'Z' in _microwire_origin_saved:
+        cur_z = get_current_position('Z')
+        if cur_z is not None and abs(cur_z - _microwire_origin_saved['Z']) < 10000:
+            departing_microwire = True
+
+    z_drop = 15000 if departing_microwire else 5000
+
+    # 1) Drop Z for clearance
+    _abort_if_emergency_stop()
+    move_linear_stage('Z', '-', z_drop, wait_for_stop=True, max_wait=30.0)
+
+    if arriving_at_microwire:
+        # 2a) Arriving at microwire: X → r → Z → Y (Y last to clear camera fixturing)
+        for ax in ('X', 'r', 'Z', 'Y'):
+            val = origin_dict.get(ax)
+            if val is not None:
+                _move(ax, val)
+    elif departing_microwire:
+        # 2b) Departing from microwire: Y → X → r → Z (Y first to clear camera fixturing)
+        for ax in ('Y', 'X', 'r', 'Z'):
+            val = origin_dict.get(ax)
+            if val is not None:
+                _move(ax, val)
+    else:
+        # 2c) Standard: non-Z axes in given order, then Z last
+        for ax in axes:
+            if ax == 'Z':
+                continue
+            val = origin_dict.get(ax)
+            if val is None:
+                continue
+            _move(ax, val)
+        z_val = origin_dict.get('Z')
+        if z_val is not None:
+            _move('Z', z_val)
 
 # Event and callback used by all three fine-tune pauses
 _origin_event = threading.Event()
@@ -257,6 +301,90 @@ def get_trace_tuning():
     except Exception as e:
         print(f"Warning: could not read trace_tuning from {SETTINGS_FILE}: {e}")
     return tuning
+
+# Default PNP-to-nozzle offsets (µm).  Override via Settings › PNP Offsets.
+PNP_OFFSET_X = -29580
+PNP_OFFSET_Y = -2300
+PNP_OFFSET_Z =  4800
+
+def get_pnp_offsets():
+    """Read the PNP-to-nozzle axis offsets (µm) from pcb_settings.json.
+    Returns a dict with keys 'X', 'Y', 'Z'.
+    Defaults: X=-29580, Y=-2300, Z=4800."""
+    defaults = {'X': PNP_OFFSET_X, 'Y': PNP_OFFSET_Y, 'Z': PNP_OFFSET_Z}
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                saved = json.load(f).get('pnp_offsets', {})
+            return {k: int(saved[k]) if k in saved else v for k, v in defaults.items()}
+    except Exception as e:
+        print(f"Warning: could not read pnp_offsets from {SETTINGS_FILE}: {e}")
+    return defaults
+
+def goto_pnp_origin():
+    """Navigate the PNP head to the center of the connector pad array.
+
+    Target position = connector origin + PNP offsets (X, Y, Z).
+    Rotation (r) is taken directly from the connector origin unchanged.
+
+    Move order: drop Z -5000 µm first (clearance) → move XY (and r) → move Z to final target.
+    Call after setting the connector origin and configuring PNP offsets in Settings.
+    """
+    reload_origins()
+    origin = _connector_origin_saved
+    if not origin or 'X' not in origin or 'Y' not in origin:
+        print("[PNP] No saved connector origin. Set the Connector origin first.")
+        return
+
+    offsets = get_pnp_offsets()
+    target_x = origin['X'] + offsets['X']
+    target_y = origin['Y'] + offsets['Y']
+    target_z = origin.get('Z')
+    if target_z is not None:
+        target_z = target_z + offsets['Z']
+
+    print(f"[PNP] Connector origin: X={origin['X']:.1f}, Y={origin['Y']:.1f}, Z={origin.get('Z')}")
+    print(f"[PNP] PNP offsets: {offsets}")
+    print(f"[PNP] Target: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z}")
+
+    def move_to(ax, target):
+        cur = get_current_position(ax)
+        if cur is None:
+            print(f"[PNP] Axis {ax}: position unknown, skipping.")
+            return
+        diff = target - cur
+        if abs(diff) < 0.5:
+            return
+        move_linear_stage(ax, '+' if diff >= 0 else '-', abs(diff),
+                          wait_for_stop=True, max_wait=30.0)
+
+    clear_emergency_stop()
+    prev_speed = get_current_speed()
+    try:
+        update_speed(30)
+        # 1) Drop Z by 5000 µm first to clear any obstacles before any XY movement
+        _abort_if_emergency_stop()
+        move_linear_stage('Z', '-', 5000, wait_for_stop=True, max_wait=30.0)
+        # 2) Move XY (and r if saved)
+        _abort_if_emergency_stop()
+        move_to('X', target_x)
+        _abort_if_emergency_stop()
+        move_to('Y', target_y)
+        if 'r' in origin:
+            _abort_if_emergency_stop()
+            move_to('r', origin['r'])
+        # 3) Move Z to final target last
+        if target_z is not None:
+            _abort_if_emergency_stop()
+            move_to('Z', target_z)
+        print("[PNP] At PNP origin.")
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[PNP] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        update_speed(prev_speed)
 
 # Connector grid, 4x2 with no gaps (all directions in PCB view, but note the
 # stage moves the PCB under a still printhead, so machine moves are mirrored;
@@ -1027,55 +1155,15 @@ def calibrate():
 
 # Add code into function to test it using the gui "Print tester" button
 def print_tester():
-
-    # print_pcb()
-    #calibrate()
-    #print_pcb()
-    servo_to(15)
-    time.sleep(2.0)
-    # servo_to(45)
-    # time.sleep(2.0)
-    # servo_to(85)
-    # time.sleep(2.0)
-    # servo_to(0)
-    # time.sleep(2.0)
-    servo_to(55)
-    time.sleep(2.0)
-
-    pnp_forward(speed=25)
-    time.sleep(2.0)
-
     servo_to(71)
-    time.sleep(2.0)
-    
-    servo_to(55)
-    time.sleep(2.0)
-
-    pnp_backward(speed=25)
-    time.sleep(2.0)
-    
+    solenoid_relay_on()
+    time.sleep(5.0)
     servo_to(15)
-    time.sleep(2.0)
-    # time.sleep(2.0)
-    # mag_detector()
-
-    # pnp_forward(speed=50)
-    # time.sleep(2.0)
-    # mag_detector()
-
-    # pnp_backward(speed=50)
-    # time.sleep(2.0)
-    # mag_detector()
-
-    # pnp_backward(speed=50)
-    # time.sleep(2.0)
-    # mag_detector()
-
-    # update_speed(1)
-    # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
-    # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
-    # move_linear_stage('t', '+', 600, wait_for_stop=True, max_wait=60.0)
-    # move_linear_stage('t', '-', 600, wait_for_stop=True, max_wait=60.0)
+    time.sleep(0.2)
+    goto_pnp_origin()
+    time.sleep(0.2)
+    solenoid_relay_off()
+    time.sleep(10)
           
 # GLUE DROP & SEQUENCE
 def glue_drop():

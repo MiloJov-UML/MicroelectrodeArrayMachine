@@ -86,39 +86,71 @@ def get_pad_spacing():
     return 1000.0  # Default value if file not found or error occurs
 
 ########################################################
-# SOFTWARE-BASED IMAGE ADJUSTMENTS
+# SOFTWARE-BASED IMAGE ADJUSTMENTS  (per-camera)
 ########################################################
-ALPHA          = 1.5
-BETA           = -100
-SAT_FACTOR     = 1.2
-GAMMA          = 1.4
-SHARP_STRENGTH = 2
+_DEFAULT_ADJUSTMENTS = {
+    'alpha':         1.5,
+    'beta':          -100.0,
+    'sat_factor':    1.2,
+    'gamma':         1.4,
+    'sharp_strength': 2.0,
+}
 
-def post_process_frame(frame):
+# Keyed by logical camera role (0, 1, 2)
+camera_adjustments = {
+    0: dict(_DEFAULT_ADJUSTMENTS),
+    1: dict(_DEFAULT_ADJUSTMENTS),
+    2: dict(_DEFAULT_ADJUSTMENTS),
+}
+
+def load_camera_adjustments():
+    """Load per-camera image adjustment values from pcb_settings.json at startup."""
+    global camera_adjustments
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                saved = json.load(f).get('camera_adjustments', {})
+            for role in [0, 1, 2]:
+                role_data = saved.get(str(role), {})
+                for key, default in _DEFAULT_ADJUSTMENTS.items():
+                    camera_adjustments[role][key] = float(role_data.get(key, default))
+    except Exception as e:
+        print(f"Warning: Could not load camera adjustments from {SETTINGS_FILE}: {e}")
+
+load_camera_adjustments()
+
+def post_process_frame(frame, camera_index=0):
+    adj = camera_adjustments.get(camera_index, camera_adjustments[0])
+    alpha  = adj['alpha']
+    beta   = adj['beta']
+    sat    = adj['sat_factor']
+    gamma  = adj['gamma']
+    sharp  = adj['sharp_strength']
+
     # 1) Contrast & Brightness
-    adjusted = cv2.convertScaleAbs(frame, alpha=ALPHA, beta=BETA)
+    adjusted = cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
 
     # 2) Saturation
-    if SAT_FACTOR != 1.0:
+    if sat != 1.0:
         hsv = cv2.cvtColor(adjusted, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
-        s = (s.astype(np.float32) * SAT_FACTOR).clip(0, 255).astype(np.uint8)
+        s = (s.astype(np.float32) * sat).clip(0, 255).astype(np.uint8)
         hsv = cv2.merge([h, s, v])
         adjusted = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
     # 3) Gamma
-    if GAMMA != 1.0:
-        inv_gamma = 1.0 / GAMMA
+    if gamma != 1.0:
+        inv_gamma = 1.0 / gamma
         lut = np.array([(i/255.0)**inv_gamma * 255 for i in range(256)]).astype("uint8")
         adjusted = cv2.LUT(adjusted, lut)
 
     # 4) Sharpen
-    if SHARP_STRENGTH > 0:
+    if sharp > 0:
         blurred = cv2.GaussianBlur(adjusted, (5,5), 0)
         f_ad = adjusted.astype(np.float32)
         f_bl = blurred.astype(np.float32)
         mask = f_ad - f_bl
-        f_sharp = f_ad + SHARP_STRENGTH * mask
+        f_sharp = f_ad + sharp * mask
         f_sharp = np.clip(f_sharp, 0, 255).astype(np.uint8)
         adjusted = f_sharp
 
@@ -143,10 +175,11 @@ def custom_annotate(results, img, camera_index=0):
     trench_stop_boxes = []
 
     # Define allowed objects per camera
+    # 0 = Wire Tip view, 1 = Clog detection, 2 = PCB view (display only, no detection)
     allowed_objects = {
-        0: ["Pad", "CF_Tip", "GC_Tip"],
-        1: ["CF_Tip", "GC_Tip"],
-        2: ["Clog"]
+        0: ["CF_Tip", "GC_Tip", "Pad"],
+        1: ["Clog"],
+        2: [],
     }
 
     # 1) gather bounding boxes
@@ -174,7 +207,7 @@ def custom_annotate(results, img, camera_index=0):
             cv2.putText(annotated_img, label, (x1, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-    # Only process special boxes for camera 0
+    # Only process special boxes for camera 0 (Wire Tip view)
     if camera_index == 0:
         # Sort boxes top->bottom
         pad_boxes.sort(key=lambda b: b[4], reverse=True)
@@ -263,7 +296,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
             break
 
         # 1) Post-process
-        frame = post_process_frame(frame)
+        frame = post_process_frame(frame, camera_index)
 
         # 2) YOLO detect
         results = model.predict(frame, conf=0.5, verbose=False)
@@ -271,33 +304,32 @@ def open_camera(camera_index=0, model_path="best.pt"):
         names = results[0].names
 
         if camera_index == 0:
+            # Wire Tip view: detect CF_Tip, GC_Tip, and Pad
             cf_found = None
             gc_found = None
-            pad_found= None
+            pad_found = None
 
             for box in boxes:
                 cls_id = int(box.cls[0])
                 class_name = names[cls_id]
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
 
-                # For CF_Tip/GC_Tip, watch case-sensitivity:
                 if class_name == "CF_Tip":
                     cf_found = (x1, y1, x2, y2)
                 elif class_name == "GC_Tip":
                     gc_found = (x1, y1, x2, y2)
                 elif class_name == "Pad":
-                    # If multiple pads appear, pick the first or some logic
                     pad_found = (x1, y1, x2, y2)
 
-            # Update global boxes if found
             if cf_found is not None:
                 last_cf_box = cf_found
             if gc_found is not None:
                 last_gc_box = gc_found
             if pad_found is not None:
-                last_pad_box= pad_found
+                last_pad_box = pad_found
 
-        elif camera_index == 2:
+        elif camera_index == 1:
+            # Clog detection view
             clog_found = None
             for box in boxes:
                 cls_id = int(box.cls[0])
@@ -309,6 +341,8 @@ def open_camera(camera_index=0, model_path="best.pt"):
                 last_clog_box = clog_found
             else:
                 last_clog_box = None  # Clear when no clog visible
+
+        # camera_index == 2 is PCB view — display only, no object tracking needed
 
         # 3) bounding box annotation
         annotated_frame = custom_annotate(results[0], frame, camera_index)
