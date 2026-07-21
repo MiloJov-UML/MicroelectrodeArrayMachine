@@ -63,20 +63,22 @@ _probe_origin    = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _print_origin_saved   = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _microwire_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _connector_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — center of 4x2 connector pad array
+_connector_print_offset = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — offset from print origin to connector origin (overrides absolute if set)
 
 def _load_origins():
     """Load the four saved origins from pcb_settings.json at startup."""
-    global _probe_origin, _print_origin_saved, _microwire_origin_saved, _connector_origin_saved
+    global _probe_origin, _print_origin_saved, _microwire_origin_saved, _connector_origin_saved, _connector_print_offset
     if not os.path.isfile(SETTINGS_FILE):
         return
     try:
         with open(SETTINGS_FILE, 'r') as f:
             data = json.load(f)
-        _probe_origin           = data.get('probe_origin')       or None
-        _print_origin_saved     = data.get('print_origin_coords') or None
-        _microwire_origin_saved = data.get('microwire_origin')   or None
-        _connector_origin_saved = data.get('connector_origin')   or None
-        print(f"Origins loaded probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}, connector: {_connector_origin_saved}")
+        _probe_origin             = data.get('probe_origin')            or None
+        _print_origin_saved       = data.get('print_origin_coords')     or None
+        _microwire_origin_saved   = data.get('microwire_origin')        or None
+        _connector_origin_saved   = data.get('connector_origin')        or None
+        _connector_print_offset   = data.get('connector_print_offset')  or None
+        print(f"Origins loaded probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}, connector: {_connector_origin_saved}, connector_offset: {_connector_print_offset}")
     except Exception as e:
         print(f"Warning: could not load origins from {SETTINGS_FILE}: {e}")
 
@@ -101,6 +103,16 @@ def reload_origins():
     """Reload all four saved origins from pcb_settings.json into memory.
     Call this after the GUI saves a new origin so in-session routines see it."""
     _load_origins()
+
+def get_connector_print_offset():
+    """Return the saved connector-from-print offset dict, or None if not configured."""
+    return _connector_print_offset
+
+def save_connector_print_offset(offset_dict):
+    """Persist the connector-from-print offset to pcb_settings.json and update in-memory state."""
+    global _connector_print_offset
+    _connector_print_offset = offset_dict if offset_dict else None
+    _save_origin('connector_print_offset', offset_dict)
 
 def _navigate_to_saved_origin(origin_dict, axes):
     """Move to a saved origin with camera-fixture-safe axis ordering.
@@ -327,13 +339,27 @@ def goto_pnp_origin():
     Target position = connector origin + PNP offsets (X, Y, Z).
     Rotation (r) is taken directly from the connector origin unchanged.
 
+    Connector origin is determined in priority order:
+      1. print_origin + connector_print_offset  (if both are saved)
+      2. saved absolute connector_origin
+
     Move order: drop Z -5000 µm first (clearance) → move XY (and r) → move Z to final target.
-    Call after setting the connector origin and configuring PNP offsets in Settings.
     """
     reload_origins()
-    origin = _connector_origin_saved
+
+    # Prefer print_origin + connector_print_offset when both are available.
+    if _connector_print_offset is not None and _print_origin_saved is not None:
+        origin = {
+            ax: _print_origin_saved[ax] + _connector_print_offset.get(ax, 0)
+            for ax in ('X', 'Y', 'Z', 'r')
+            if ax in _print_origin_saved
+        }
+        print(f"[PNP] Connector position derived from print origin + connector offset: {_connector_print_offset}")
+    else:
+        origin = _connector_origin_saved
+
     if not origin or 'X' not in origin or 'Y' not in origin:
-        print("[PNP] No saved connector origin. Set the Connector origin first.")
+        print("[PNP] No connector position available. Set the Connector origin or configure a connector offset from Print Origin in Settings.")
         return
 
     offsets = get_pnp_offsets()

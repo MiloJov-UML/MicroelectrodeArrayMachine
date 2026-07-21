@@ -68,6 +68,7 @@ from assembly import (
     register_origin_ask_callback,
     microwire_origin_setup,
     reload_origins,
+    save_connector_print_offset,
     full_sequence,
     reprint_feature,
     jog_to_feature_start,
@@ -323,19 +324,46 @@ def start_routine_thread(target, routine_name):
 def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
+        _abort_if_emergency_stop()
         update_speed(1)
+        _abort_if_emergency_stop()
         move_linear_stage("Z", "+", 2400, wait_for_stop=True, max_wait=30.0)
+        _abort_if_emergency_stop()
         update_speed(30)
+        _abort_if_emergency_stop()
         move_linear_stage("T", "+", 22700, wait_for_stop=True, max_wait=30.0)
+        _abort_if_emergency_stop()
         laser_relay_on()
+        if laser_state_var is not None:
+            laser_state_var.set('On')
+        _abort_if_emergency_stop()
         update_speed(1)
+        _abort_if_emergency_stop()
         move_linear_stage("T", "+", 1800, wait_for_stop=True, max_wait=30.0)
+        _abort_if_emergency_stop()
         laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        _abort_if_emergency_stop()
         update_speed(30)
+        _abort_if_emergency_stop()
         move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
+        _abort_if_emergency_stop()
         move_linear_stage("Z", "-", 2400, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("Laser cutting sequence aborted by emergency stop.")
+            laser_relay_off()
+            if laser_state_var is not None:
+                laser_state_var.set('Off')
+            raise
+        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
+        print(f"Exception in laser_cut: {e}")
     except Exception as e:
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
         print(f"Exception in laser_cut: {e}")
 
@@ -817,6 +845,87 @@ def open_trace_tuning_window(root):
 
     win.grab_set()
 
+def open_connector_offset_window(root):
+    """Popup to edit the connector origin offset relative to the print origin (µm).
+
+    When set, goto_pnp_origin() derives the connector position as
+    print_origin + this offset instead of using the saved absolute connector_origin.
+    Set all axes to 0 and click Clear to revert to the absolute connector origin.
+    """
+    win = Toplevel(root)
+    win.title("Connector Offset from Print Origin")
+    win.resizable(False, False)
+
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            current = json.load(f).get('connector_print_offset', {})
+    except Exception:
+        current = {}
+
+    fields = [
+        ('X', 'X offset (µm):', 0),
+        ('Y', 'Y offset (µm):', 0),
+        ('Z', 'Z offset (µm):', 0),
+        ('r', 'r offset (µm):', 0),
+    ]
+
+    vars_by_key = {}
+    for row, (key, label, default) in enumerate(fields):
+        tk.Label(win, text=label).grid(row=row, column=0, padx=10, pady=6, sticky='w')
+        var = tk.StringVar(value=str(current.get(key, default)))
+        vars_by_key[key] = var
+        tk.Entry(win, textvariable=var, width=10).grid(row=row, column=1, padx=10, pady=6)
+
+    tk.Label(
+        win,
+        text=("Offset from print origin to connector pad array center.\n"
+              "When set, overrides the saved absolute connector origin.\n"
+              "Use 'Clear' to remove and revert to the absolute connector origin."),
+        fg="gray",
+        justify='left',
+    ).grid(row=len(fields), column=0, columnspan=2, padx=10, pady=(2, 8))
+
+    def on_apply():
+        try:
+            new_offset = {key: int(var.get()) for key, var in vars_by_key.items()}
+        except ValueError:
+            messagebox.showerror("Error", "Offsets must be integers (µm).", parent=win)
+            return
+        save_connector_print_offset(new_offset)
+        reload_origins()
+        print(f"[Settings] Connector offset from print origin saved: {new_offset}")
+        win.destroy()
+
+    def on_clear():
+        """Remove the connector_print_offset key entirely so the absolute origin is used."""
+        existing = {}
+        if os.path.isfile(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, 'r') as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        existing.pop('connector_print_offset', None)
+        try:
+            with open(SETTINGS_FILE, 'w') as f:
+                json.dump(existing, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not clear connector offset: {e}")
+            return
+        save_connector_print_offset(None)
+        reload_origins()
+        print("[Settings] Connector offset cleared — absolute connector origin will be used.")
+        win.destroy()
+
+    btn_frame = tk.Frame(win)
+    btn_frame.grid(row=len(fields) + 1, column=0, columnspan=2, pady=8)
+    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=6)
+    tk.Button(btn_frame, text="Clear", command=on_clear).pack(side='left', padx=6)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=6)
+
+    win.grab_set()
+
+
 def open_pnp_offsets_window(root):
     """Popup to edit the PNP-to-nozzle axis offsets (µm), persisted to pcb_settings.json."""
     win = Toplevel(root)
@@ -876,29 +985,36 @@ def open_settings_window(root):
     tk.Button(
         win,
         text="Image Adjustments",
-        width=24,
+        width=34,
         command=lambda: open_image_adjustment_window(win)
     ).pack(pady=6)
 
     tk.Button(
         win,
         text="Camera Port Settings",
-        width=24,
+        width=34,
         command=lambda: open_camera_port_settings_window(root)
     ).pack(pady=6)
 
     tk.Button(
         win,
         text="Trace Routing Tuning",
-        width=24,
+        width=34,
         command=lambda: open_trace_tuning_window(root)
     ).pack(pady=6)
 
     tk.Button(
         win,
         text="PNP Offsets",
-        width=24,
+        width=34,
         command=lambda: open_pnp_offsets_window(root)
+    ).pack(pady=6)
+
+    tk.Button(
+        win,
+        text="Connector Offset from Print Origin",
+        width=34,
+        command=lambda: open_connector_offset_window(root)
     ).pack(pady=6)
 
     tk.Button(win, text="Close", command=win.destroy).pack(pady=(6, 14))
