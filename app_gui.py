@@ -82,6 +82,7 @@ import image_recognition
 from image_recognition import (
     open_camera,
     extrude,
+    center_on_visible_area,
     x_align,
     r_align,
     compute_angle_between,
@@ -275,6 +276,17 @@ def wait_for_x_align_done(poll_interval=0.1):
         time.sleep(poll_interval)
     return True
 
+def wait_for_center_on_visible_area_done(poll_interval=0.1):
+    """
+    Blocks until image_recognition.center_on_visible_area_done == True.
+    """
+    while not image_recognition.center_on_visible_area_done:
+        if is_emergency_stop_requested():
+            print("Emergency stop requested during visible-area centering wait.")
+            return False
+        time.sleep(poll_interval)
+    return True
+
 def _abort_if_emergency_stop():
     if is_emergency_stop_requested():
         raise RuntimeError("Emergency stop requested.")
@@ -325,52 +337,6 @@ def start_routine_thread(target, routine_name):
     routine_thread = threading.Thread(target=runner, daemon=True)
     routine_thread.start()
 
-def laser_cut():
-    try:
-        print("--- Starting Laser Cutting Sequence ---")
-        _abort_if_emergency_stop()
-        update_speed(1)
-        _abort_if_emergency_stop()
-        move_linear_stage("Z", "+", 2400, wait_for_stop=True, max_wait=30.0)
-        _abort_if_emergency_stop()
-        update_speed(30)
-        _abort_if_emergency_stop()
-        move_linear_stage("T", "+", 22700, wait_for_stop=True, max_wait=30.0)
-        _abort_if_emergency_stop()
-        laser_relay_on()
-        if laser_state_var is not None:
-            laser_state_var.set('On')
-        _abort_if_emergency_stop()
-        update_speed(1)
-        _abort_if_emergency_stop()
-        move_linear_stage("T", "+", 1800, wait_for_stop=True, max_wait=30.0)
-        _abort_if_emergency_stop()
-        laser_relay_off()
-        if laser_state_var is not None:
-            laser_state_var.set('Off')
-        _abort_if_emergency_stop()
-        update_speed(30)
-        _abort_if_emergency_stop()
-        move_linear_stage("T", "-", 40000, wait_for_stop=True, max_wait=30.0)
-        _abort_if_emergency_stop()
-        move_linear_stage("Z", "-", 2400, wait_for_stop=True, max_wait=30.0)
-        print("Laser cutting sequence completed.")
-    except RuntimeError as e:
-        if str(e) == "Emergency stop requested.":
-            print("Laser cutting sequence aborted by emergency stop.")
-            laser_relay_off()
-            if laser_state_var is not None:
-                laser_state_var.set('Off')
-            raise
-        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
-        print(f"Exception in laser_cut: {e}")
-    except Exception as e:
-        laser_relay_off()
-        if laser_state_var is not None:
-            laser_state_var.set('Off')
-        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
-        print(f"Exception in laser_cut: {e}")
-
 def run_full_assembly(run_calibration=True):
     try:
         full_sequence(run_calibration=run_calibration)
@@ -405,8 +371,6 @@ def run_full_manual_loop():
         _abort_if_emergency_stop()
         return_to_origin()
 
-        MAX_STAB_PASSES = 3       # max inner-loop iterations per pad
-        R_ALIGN_TOLERANCE = 0.5   # degrees — same as r_align default
         PAD1_SEARCH_STEPS = 20    # how many small X steps to search for pad
         PAD1_SEARCH_UM = 1500     # µm per search step
 
@@ -477,70 +441,26 @@ def run_full_manual_loop():
             time.sleep(1.5)
 
             # ── Initial extrude + r_align ─────────────────────────────────
-            # Capture the raw angle BEFORE the first r_align — this becomes the
-            # reference.  Every inner-loop correction is relative to this value:
-            #   e.g. first measurement +3° → r_align corrects → next reads +2.7°
-            #        delta = 2.7 - 3.0 = -0.3° → inner r_align moves -0.3°
-            #   e.g. first measurement -1° → r_align corrects → next reads +1°
-            #        delta = 1.0 - (-1.0) = +2.0° → inner r_align moves +2°
-            r_ref_angle = 0.0
-            if (image_recognition.last_cf_box is not None and
-                    image_recognition.last_gc_box is not None):
-                r_ref_angle = compute_angle_between(
-                    image_recognition.last_cf_box,
-                    image_recognition.last_gc_box,
-                )
-                print(f"[Loop] r_align reference angle (pre-correction): {r_ref_angle:.2f}°")
-
             _abort_if_emergency_stop()
             extrude(pad_num)
             if not wait_for_extrude_done():
                 raise RuntimeError("Emergency stop requested.")
+            # Record the target pad's Y-pixel position while it's fully in view,
+            # before r_align rotates it; r_align uses this to compute a calibrated
+            # Y correction afterward (not a motor-controller readout comparison).
+            _ref_box = image_recognition.pad_box_dict.get(f"pad{pad_num}")
+            image_recognition.target_pad_ref_y = (
+                image_recognition.center_of_bbox(_ref_box)[1] if _ref_box is not None else None)
             _abort_if_emergency_stop()
-            r_align()
+            r_align(target_pad_number=pad_num)
             if not wait_for_r_align_done():
                 raise RuntimeError("Emergency stop requested.")
-            # Compensate for the change in CF_Tip horizontal reach caused by
-            # rotating from r_ref_angle to ~0°.
-            # _apply_t_retraction(r_ref_angle, 0.0, pad_num)
 
-            target_pad_key = f"pad{pad_num}"
-
-            # ── Stabilisation loop (only when r_align moved padN out of view) ──
-            if image_recognition.pad_box_dict.get(target_pad_key) is None:
-                # _find_pad(target_pad_key)
-                for stab_iter in range(MAX_STAB_PASSES):
-                    _abort_if_emergency_stop()
-                    print(f"[Loop] Stabilisation pass {stab_iter + 1}/{MAX_STAB_PASSES}")
-
-                    extrude(pad_num, initial_extend=False)
-                    if not wait_for_extrude_done():
-                        raise RuntimeError("Emergency stop requested.")
-
-                    if (image_recognition.last_cf_box is not None and
-                            image_recognition.last_gc_box is not None):
-                        current_angle = compute_angle_between(
-                            image_recognition.last_cf_box,
-                            image_recognition.last_gc_box,
-                        )
-                        angle_delta = current_angle - r_ref_angle
-                        print(f"[Loop] Angle delta from reference: {angle_delta:.2f}°")
-                        if abs(angle_delta) <= R_ALIGN_TOLERANCE:
-                            print("[Loop] Angle stable — proceeding to x_align.")
-                            break
-                        _abort_if_emergency_stop()
-                        r_align(reference_angle=r_ref_angle)
-                        if not wait_for_r_align_done():
-                            raise RuntimeError("Emergency stop requested.")
-                        # _apply_t_retraction(current_angle, r_ref_angle, pad_num)
-                        # _find_pad(target_pad_key)
-                    else:
-                        print("[Loop] Warning: CF/GC tip missing, skipping angle re-check.")
-                        break
-                else:
-                    print(f"[Loop] Warning: stabilisation loop exhausted {MAX_STAB_PASSES} passes.")
-            else:
-                print(f"[Loop] {target_pad_key} still in view after r_align — skipping stabilisation.")
+            # ── Center on visible area, then re-check Y-axis alignment ─────
+            _abort_if_emergency_stop()
+            center_on_visible_area(target_pad_number=pad_num)
+            if not wait_for_center_on_visible_area_done():
+                raise RuntimeError("Emergency stop requested.")
 
             # ── x_align ───────────────────────────────────────────────────
             _abort_if_emergency_stop()
@@ -549,7 +469,7 @@ def run_full_manual_loop():
                 raise RuntimeError("Emergency stop requested.")
 
             _abort_if_emergency_stop()
-            update_speed(3)
+            update_speed(10)
             move_linear_stage("Z", "+", 1720, wait_for_stop=True, max_wait=30.0)
             print(f"Laser cutting on Pad #{pad_num}")
             _abort_if_emergency_stop()
@@ -580,6 +500,71 @@ def run_full_manual_loop():
                 nord_state_var.set('Off')
         except Exception as e:
             print(f"Warning: failed to force outputs off after run_full_manual_loop: {e}")
+
+# Absolute T-axis positions (µm) bounding the laser cut — the cut is run
+# back-and-forth _LASER_CUT_PASSES times to ensure a clean cut over the full length.
+_LASER_CUT_T_START = 2614212.500
+_LASER_CUT_T_END = 2614912.500
+_LASER_CUT_PASSES = 5
+
+def _move_t_to_absolute(target_um):
+    """Move the T axis to an absolute position (µm) using a relative displacement."""
+    current = get_current_position("T")
+    if current is None:
+        print(f"[laser_cut] Warning: could not read T position; skipping move to {target_um}.")
+        return
+    diff = target_um - current
+    if abs(diff) < 0.5:
+        return
+    direction = '+' if diff >= 0 else '-'
+    move_linear_stage("T", direction, abs(diff), wait_for_stop=True, max_wait=30.0)
+
+def laser_cut():
+    try:
+        print("--- Starting Laser Cutting Sequence ---")
+        _abort_if_emergency_stop()
+        update_speed(1)
+        _abort_if_emergency_stop()
+        move_linear_stage("Z", "+", 1800, wait_for_stop=True, max_wait=30.0)
+        _abort_if_emergency_stop()
+        #update_speed(30)
+        #_abort_if_emergency_stop()
+        _move_t_to_absolute(_LASER_CUT_T_START)
+        _abort_if_emergency_stop()
+        laser_relay_on()
+        if laser_state_var is not None:
+            laser_state_var.set('On')
+        _abort_if_emergency_stop()
+        update_speed(1)
+        # Alternate start<->end for _LASER_CUT_PASSES passes with the laser on.
+        _pass_targets = [_LASER_CUT_T_END, _LASER_CUT_T_START]
+        for _pass_num in range(_LASER_CUT_PASSES):
+            _abort_if_emergency_stop()
+            _move_t_to_absolute(_pass_targets[_pass_num % 2])
+        _abort_if_emergency_stop()
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        _abort_if_emergency_stop()
+        update_speed(10)
+        _abort_if_emergency_stop()
+        move_linear_stage("Z", "-", 1800, wait_for_stop=True, max_wait=30.0)
+        print("Laser cutting sequence completed.")
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("Laser cutting sequence aborted by emergency stop.")
+            laser_relay_off()
+            if laser_state_var is not None:
+                laser_state_var.set('Off')
+            raise
+        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
+        print(f"Exception in laser_cut: {e}")
+    except Exception as e:
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
+        print(f"Exception in laser_cut: {e}")
 
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
@@ -2260,6 +2245,16 @@ def launch_gui():
 
     def on_set_origin_clicked():
         mode = origin_mode_var.get()
+        if not messagebox.askyesno(
+            "Confirm Set Origin",
+            f"This will overwrite the saved '{mode}' origin with the machine's\n"
+            "current axis positions. This cannot be undone automatically.\n\n"
+            "Are you sure the machine is positioned correctly?",
+            icon='warning',
+            parent=root,
+        ):
+            print(f"[Origin] Set Origin for '{mode}' cancelled by user.")
+            return
         set_origin_to_current()       # keeps in-memory axis_origins in sync for automated routines
         save_named_origin(mode)        # persists to JSON and reloads print.py in-memory state
         confirm_origin_set()           # unblocks any waiting setup flow
