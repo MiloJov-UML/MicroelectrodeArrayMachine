@@ -128,7 +128,7 @@ def _already_at_origin(origin_dict, tolerance=10.0):
 def _navigate_to_saved_origin(origin_dict, axes):
     """Move to a saved origin with camera-fixture-safe axis ordering.
 
-    Arriving AT microwire:   Z drop 5000  → X → r → Z(target) → Y
+    Arriving AT microwire:   Z drop 5000  → Y → X → Z(target) → r
     Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
     All other moves:          Z drop 5000  → non-Z axes (given order) → Z(target)
     """
@@ -160,8 +160,8 @@ def _navigate_to_saved_origin(origin_dict, axes):
     move_linear_stage('Z', '-', z_drop, wait_for_stop=True, max_wait=30.0)
 
     if arriving_at_microwire:
-        # 2a) Arriving at microwire: X → r → Z → Y (Y last to clear camera fixturing)
-        for ax in ('X', 'r', 'Z', 'Y'):
+        # 2a) Arriving at microwire: Y → X → Z → r (Y first to clear camera fixturing)
+        for ax in ('Y', 'X', 'Z', 'r'):
             val = origin_dict.get(ax)
             if val is not None:
                 _move(ax, val)

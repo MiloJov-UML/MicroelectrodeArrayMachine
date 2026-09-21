@@ -50,6 +50,7 @@ x_align_done = False
 center_on_visible_area_done = False
 last_r_align_angle = 0.0  # signed angle of the most recent r_align rotation (0 = none)
 target_pad_ref_y = None  # target pad center Y-pixel position recorded before r_align rotates it
+cf_tip_ref_px = None  # CF_Tip center (px) captured post-extrude; fixed in frame thereafter
 
 auto_annotate = False
 ANNOTATION_DIR = r"D:\Labeled_images"
@@ -140,6 +141,18 @@ def get_pad_spacing():
     except Exception as e:
         print(f"Warning: Could not read pad_spacing from {SETTINGS_FILE}: {e}")
     return 1000.0  # Default value if file not found or error occurs
+
+# Function to get the pad count from settings
+def get_pad_count():
+    """Load pad count from the settings file, default to 8 if not found."""
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                data = json.load(f)
+                return int(data.get("pad_count", 8))
+    except Exception as e:
+        print(f"Warning: Could not read pad_count from {SETTINGS_FILE}: {e}")
+    return 8  # Default value if file not found or error occurs
 
 ########################################################
 # SOFTWARE-BASED IMAGE ADJUSTMENTS  (per-camera)
@@ -298,6 +311,43 @@ def custom_annotate(results, img, camera_index=0):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
     return annotated_img
+
+def draw_axis_compass(img):
+    """Overlay a compass showing which motor axis moves the stage each way.
+
+    Up=-X, Down=+X, Left=+Y, Right=-Y.
+    """
+    h, w = img.shape[:2]
+    arm = 60                 # arrow length in pixels
+    margin = 30              # gap from the frame edges
+    label_pad = 40           # extra room on the right for the "-Y" label
+    cx, cy = w - margin - arm - label_pad, margin + arm   # center in the top-right region
+    color = (0, 255, 255)    # yellow
+    thickness = 3
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fscale = 0.8
+
+    # (dx, dy, label) for each direction. dy is negative going up (screen coords).
+    directions = [
+        (0, -1, "-X"),   # up
+        (0,  1, "X"),    # down
+        (-1, 0, "Y"),    # left
+        (1,  0, "-Y"),   # right
+    ]
+
+    for dx, dy, label in directions:
+        end = (cx + dx * arm, cy + dy * arm)
+        cv2.arrowedLine(img, (cx, cy), end, color, thickness, tipLength=0.3)
+
+        (tw, th), _ = cv2.getTextSize(label, font, fscale, 2)
+        tx = end[0] + (8 if dx > 0 else -tw - 8 if dx < 0 else -tw // 2)
+        ty = end[1] + (th + 8 if dy > 0 else -8 if dy < 0 else th // 2)
+        # keep text inside the frame
+        tx = max(2, min(tx, w - tw - 2))
+        ty = max(th + 2, min(ty, h - 2))
+        cv2.putText(img, label, (tx, ty), font, fscale, color, 2, cv2.LINE_AA)
+
+    return img
 
 # Globals for bounding boxes
 last_cf_box = None
@@ -463,7 +513,11 @@ def open_camera(camera_index=0, model_path="best.pt"):
 
         # 5) Auto-annotation now runs inside the recording block above
 
-        cv2.imshow(f"Camera {camera_index}", annotated_frame)
+        display_frame = annotated_frame
+        if camera_index == 0:
+            display_frame = draw_axis_compass(annotated_frame.copy())
+
+        cv2.imshow(f"Camera {camera_index}", display_frame)
         if cv2.waitKey(1)&0xFF==ord('q'):
             break
 
@@ -485,31 +539,38 @@ def center_of_bbox(bbox):
     cy = (y1 + y2)/2
     return (cx,cy)
 
-def compute_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=None):
+# Cached pixel distance between adjacent calibration pads, measured once per pad
+# and reused across extrude/r_align/x_align/center_on_visible_area (see
+# get_steps_per_pixel).
+_pad_pixel_spacing = None
+
+def reset_pad_pixel_spacing():
+    """Clear the cached pad pixel-spacing so the next get_steps_per_pixel call
+    re-measures it. Called at the start of each pad."""
+    global _pad_pixel_spacing
+    _pad_pixel_spacing = None
+
+def get_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=None):
+    """Steps/pixel for `axis`, reusing a pad pixel-spacing measured once per pad.
+
+    Measures the pixel distance between two calibration bounding boxes on the
+    first call after a reset and caches it (a fixed camera-scale property), then
+    converts the known pad spacing to steps via µm_to_steps for the requested
+    axis: 1 px => returned value motor steps. X and Y share the same steps/µm,
+    while 't' uses different microstepping.
     """
-    1) Measures the pixel distance between two bounding boxes (bboxA, bboxB).
-    2) Uses the fact that physically they are 'known_µm' micrometers apart.
-    3) Converts that known_µm to steps (using µm_to_steps from motor_control).
-    4) Returns steps_per_pixel, i.e. how many motor steps correspond to 1 pixel.
-    
-    Example usage:
-        steps_pp = compute_steps_per_pixel(pad_box, cf_box, axis='X', known_µm=1000)
-        # 1 px => steps_pp motor steps
-    """
-    # If known_µm is not provided, get it from the settings file
+    global _pad_pixel_spacing
     if known_µm is None:
         known_µm = get_pad_spacing()
-
-    (cxA, cyA) = center_of_bbox(bboxA)
-    (cxB, cyB) = center_of_bbox(bboxB)
-    pixel_dist = math.hypot(cxB - cxA, cyB - cyA)
-    if pixel_dist < 0.01:
-        # Avoid division by zero if boxes are nearly the same center
-        return 0.0
-
-    steps_for_known_µm = µm_to_steps(known_µm, axis=axis)
-    steps_per_pixel = steps_for_known_µm / pixel_dist  # steps / px
-    return steps_per_pixel
+    if _pad_pixel_spacing is None:
+        (cxA, cyA) = center_of_bbox(bboxA)
+        (cxB, cyB) = center_of_bbox(bboxB)
+        dist = math.hypot(cxB - cxA, cyB - cyA)
+        if dist < 0.01:
+            # Avoid division by zero if boxes are nearly the same center
+            return 0.0
+        _pad_pixel_spacing = dist
+    return µm_to_steps(known_µm, axis=axis) / _pad_pixel_spacing
 
 def compute_angle_between(cf_box, gc_box):
     """
@@ -542,9 +603,9 @@ def analyze_cf_gc_angle():
     print(f"Angle CF->GC => {angle_degs:.2f}° (0° => horizontal)")
 
 # --------------------------------------------------------
-# EXTRUDE: measure distance in µm using compute_steps_per_pixel
+# EXTRUDE: measure distance in µm using get_steps_per_pixel
 # --------------------------------------------------------
-def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µm=250,
+def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µm=100,
             initial_extend=True):
     """
     Moves the 't' axis to align CF_Tip with a specific pad (default: pad1) horizontally
@@ -615,10 +676,10 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     # Check if CF Tip is missing
     if last_cf_box is None:
         print("[Extrude] No CF_Tip detected => let's move X by -300 and re-check...")
-        move_linear_stage("X", "+", 1200, wait_for_stop=True, max_wait=30.0)
-        time.sleep(2.0)
-        move_linear_stage("t", "+", 200, wait_for_stop=True, max_wait=30.0)
-        time.sleep(2.0)
+        # move_linear_stage("X", "+", 1200, wait_for_stop=True, max_wait=30.0)
+        # time.sleep(2.0)
+        # move_linear_stage("t", "+", 200, wait_for_stop=True, max_wait=30.0)
+        # time.sleep(2.0)
         # If we still don't have CF_Tip, abort
         if last_cf_box is None:
             print("[Extrude] Still no CF_Tip after moving => abort.")
@@ -637,8 +698,8 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
             extrude_done = True
             return
 
-        # 4) Calculate calibration - steps per pixel
-        steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
+        # 4) Calibration - steps per pixel (pad pixel-spacing cached once per pad)
+        steps_pp = get_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
         if steps_pp <= 0.0:
             print(f"[Extrude] Invalid calibration (steps_pp={steps_pp}) => skip this iteration.")
             continue
@@ -710,8 +771,11 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
 def center_on_visible_area(target_pad_number=1, known_µm=None,
                             visible_area_tolerance_µm=50, vertical_tolerance_µm=10):
     """
-    Step 1: Move 'X' so CF_Tip's center matches the VisibleArea box's center,
-    bringing CF_Tip back within the visible frame after r_align.
+    The CF_Tip is printhead-mounted and fixed in the camera frame; r_align
+    rotates the PCB, which swings the pads and the VisibleArea marker out of
+    view (the tip never moves).
+    Step 1: Move 'X' so the VisibleArea box's center lines back up with the
+    (fixed) CF_Tip center, bringing the pads/VisibleArea back into frame.
     Step 2: Re-check CF_Tip's alignment with the target pad's reference point
     (same bottom+33% point x_align uses) and correct via 'Y' if the move above
     left it out of tolerance — mirrors r_align's post-pad-search Y correction.
@@ -744,23 +808,23 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
         return
 
     update_speed(3)
-    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+    steps_pp = get_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
     if steps_pp <= 0.0:
         print("[center_on_visible_area] Invalid 'X' calibration — skipping.")
         center_on_visible_area_done = True
         return
 
-    # 1) Bring CF_Tip back within the visible area (via 'X' only)
+    # 1) Bring the VisibleArea/pads back under the fixed CF_Tip (via 'X' only)
     va_cy = (last_visible_area_box[1] + last_visible_area_box[3]) / 2
     cf_cy = center_of_bbox(last_cf_box)[1]
     delta_y_px = cf_cy - va_cy
     delta_µm = steps_to_µm(abs(delta_y_px * steps_pp), axis='X')
     if delta_µm <= visible_area_tolerance_µm:
-        print(f"[center_on_visible_area] CF_Tip already within visible area "
+        print(f"[center_on_visible_area] VisibleArea already centered under CF_Tip "
               f"(±{visible_area_tolerance_µm}µm).")
     else:
         direction = '-' if delta_y_px >= 0 else '+'
-        print(f"[center_on_visible_area] Centering in visible area: X {direction}{delta_µm:.1f}µm")
+        print(f"[center_on_visible_area] Recentering VisibleArea/pads under CF_Tip: X {direction}{delta_µm:.1f}µm")
         move_linear_stage('X', direction, delta_µm, wait_for_stop=True, max_wait=30.0)
         time.sleep(1.0)  # let YOLO refresh detections
 
@@ -772,7 +836,7 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
               "— skipping pad check.")
         center_on_visible_area_done = True
         return
-    steps_pp_y = compute_steps_per_pixel(cal_box1, cal_box2, axis='Y', known_µm=known_µm)
+    steps_pp_y = get_steps_per_pixel(cal_box1, cal_box2, axis='Y', known_µm=known_µm)
     if steps_pp_y <= 0.0:
         print("[center_on_visible_area] Invalid 'Y' calibration — skipping pad check.")
         center_on_visible_area_done = True
@@ -793,7 +857,7 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
     center_on_visible_area_done = True
 
 # --------------------------------------------------------
-# X-axis alignment: measure distance in µm using compute_steps_per_pixel
+# X-axis alignment: measure distance in µm using get_steps_per_pixel
 # --------------------------------------------------------
 def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
     """
@@ -853,6 +917,7 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
         print(f"[x_align] Missing {cal_pad1_key} or {cal_pad2_key} => no calibration => abort.")
         x_align_done = True
         return
+
     # Check if CF Tip is missing
     if last_cf_box is None:
         print("[x_align] No CF_Tip detected => let's move X by -300 and re-check...")
@@ -864,8 +929,8 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
             x_align_done = True
             return
       
-    # 2) Calculate calibration - steps per pixel
-    steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
+    # 2) Calibration - steps per pixel (pad pixel-spacing cached once per pad)
+    steps_pp = get_steps_per_pixel(cal_box1, cal_box2, axis='X', known_µm=known_µm)
     if steps_pp <= 0.0:
         print(f"[x_align] Invalid calibration (steps_pp={steps_pp}) => abort.")
         x_align_done = True
@@ -969,6 +1034,27 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         print(f"[r_align] Within ±{angle_tolerance}° of reference => no rotation needed.")
         r_align_done = True
         return
+
+    # Compute the Y pixel-to-step calibration NOW, before rotating — while the
+    # calibration pads are in the same view where target_pad_ref_y was recorded.
+    # Reused for the post-rotation Y correction below (pad_box_dict is cleared
+    # during the pad search, so it can't be recomputed reliably afterward).
+    _n1_cal = min(target_pad_number, 7)
+    _cal_box1_start = pad_box_dict.get(f"pad{_n1_cal}")
+    _cal_box2_start = pad_box_dict.get(f"pad{_n1_cal + 1}")
+    y_steps_pp = None
+    if _cal_box1_start is not None and _cal_box2_start is not None:
+        y_steps_pp = get_steps_per_pixel(_cal_box1_start, _cal_box2_start, axis='Y',
+                                         known_µm=get_pad_spacing())
+    else:
+        print("[r_align] Missing calibration pads at start — Y calibration unavailable.")
+
+    # Record the VisibleArea's area BEFORE rotating; after the rotation the box is
+    # often partially out of frame, so Step 2 steps X until its area recovers.
+    va_area_before = None
+    if last_visible_area_box is not None:
+        _va0 = last_visible_area_box
+        va_area_before = abs((_va0[2] - _va0[0]) * (_va0[3] - _va0[1]))
  
     # 3) Move the 'r' axis by the delta.
     # Sign convention: positive delta => '-', negative delta => '+' (motor direction is inverted).
@@ -979,10 +1065,11 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     move_linear_stage('r', direction, displacement, wait_for_stop=True, max_wait=30.0)
 
     # ── Pad re-acquisition after rotation ──────────────────────────────────
-    # Rotating the wire can shift pads out of frame. Step X in the direction
+    # Rotating the PCB swings pads out of frame. Step X in the direction
     # matching the rotation sign (negative angle → X+, positive angle → X-)
-    # in 1000µm increments until all 8 pads are visible again.
+    # in 1000µm increments until all pads are visible again.
     step_dir = '+' if last_r_align_angle < 0 else '-'
+    pad_count = get_pad_count()
     pad_box_dict.clear()  # force fresh detections so "visible" reflects the current view
     time.sleep(1.0)
     MAX_SEARCH_STEPS = 25
@@ -991,48 +1078,148 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
             print("[r_align] Emergency stop during pad search.")
             r_align_done = True
             return
-        if all(pad_box_dict.get(f"pad{i}") is not None for i in range(1, 9)):
-            print("[r_align] All 8 pads visible — proceeding.")
+        if all(pad_box_dict.get(f"pad{i}") is not None for i in range(1, pad_count + 1)):
+            print(f"[r_align] All {pad_count} pads visible — one more X {step_dir}1000µm for good measure.")
+            move_linear_stage("X", step_dir, 1000, wait_for_stop=True, max_wait=30.0)
+            time.sleep(1.0)  # let YOLO refresh detections
             break
         print(f"[r_align] Not all pads visible — stepping X {step_dir}1000µm...")
         move_linear_stage("X", step_dir, 1000, wait_for_stop=True, max_wait=30.0)
         time.sleep(1.0)  # let YOLO refresh detections
     else:
-        print("[r_align] Warning: not all 8 pads visible after search; continuing.")
+        print(f"[r_align] Warning: not all {pad_count} pads visible after search; continuing.")
 
-    # Once all pads are found, correct Y using pixel-to-step calibration (not the
-    # motor controller readout) so the target pad returns to the vertical frame
-    # position it had before this rotation — same approach as extrude/x_align.
+    # ── Step 1: restore the target pad to the Y-pixel it had before rotation ──
+    # Uses y_steps_pp (measured pre-rotation) so the pad returns to its original
+    # vertical frame position via the 'Y' stage.
     PIXEL_TOL_PX = 5
     ref_y = target_pad_ref_y
     tbox = pad_box_dict.get(f"pad{target_pad_number}")
     if ref_y is None:
-        print("[r_align] No reference pad Y-position recorded — skipping Y correction.")
+        print("[r_align] No reference pad Y-position recorded — skipping pad Y restore.")
     elif tbox is None:
-        print(f"[r_align] Target pad{target_pad_number} not detected — skipping Y correction.")
+        print(f"[r_align] Target pad{target_pad_number} not detected — skipping pad Y restore.")
+    elif y_steps_pp is None or y_steps_pp <= 0.0:
+        print("[r_align] Invalid/unavailable Y calibration — skipping pad Y restore.")
     else:
-        n1 = min(target_pad_number, 7)
-        cal_box1 = pad_box_dict.get(f"pad{n1}")
-        cal_box2 = pad_box_dict.get(f"pad{n1 + 1}")
-        if cal_box1 is None or cal_box2 is None:
-            print("[r_align] Missing calibration pads — skipping Y correction.")
+        cur_y = center_of_bbox(tbox)[1]
+        delta_y_px = cur_y - ref_y
+        if abs(delta_y_px) <= PIXEL_TOL_PX:
+            print(f"[r_align] Target pad Y within tolerance ({cur_y:.1f}px vs {ref_y:.1f}px).")
         else:
-            steps_pp = compute_steps_per_pixel(cal_box1, cal_box2, axis='Y',
-                                                known_µm=get_pad_spacing())
-            if steps_pp <= 0.0:
-                print("[r_align] Invalid Y calibration — skipping Y correction.")
+            delta_µm = steps_to_µm(abs(delta_y_px * y_steps_pp), axis='Y')
+            direction = '-' if delta_y_px >= 0 else '+'
+            print(f"[r_align] Restoring pad Y by {direction}{delta_µm:.1f}µm "
+                  f"(pad Y {cur_y:.1f}px -> {ref_y:.1f}px)")
+            move_linear_stage("Y", direction, delta_µm, wait_for_stop=True, max_wait=30.0)
+            time.sleep(1.0)
+
+    # ── Step 2: recover the VisibleArea back into frame ──────────────────────
+    # The rotation (and pad search / Step 1) often leaves the VisibleArea only
+    # partially in frame. Keep stepping X 1000µm in the rotation-decided direction
+    # until the live VisibleArea area is >=80% of its pre-rotation area (>100% is
+    # fine). This gets both objects visible for the fine alignment below.
+    VA_AREA_FRAC = 0.80
+    VA_MAX_STEPS = 25
+    if va_area_before is not None and va_area_before > 0:
+        for _ in range(VA_MAX_STEPS):
+            if is_emergency_stop_requested():
+                print("[r_align] Emergency stop during VisibleArea recovery.")
+                r_align_done = True
+                return
+            va = last_visible_area_box  # live detection
+            va_area_now = abs((va[2] - va[0]) * (va[3] - va[1])) if va is not None else 0.0
+            frac = va_area_now / va_area_before
+            if frac >= VA_AREA_FRAC:
+                print(f"[r_align] VisibleArea recovered ({frac * 100:.0f}% of pre-rotation area).")
+                break
+            print(f"[r_align] VisibleArea only {frac * 100:.0f}% of original — stepping X {step_dir}1000µm...")
+            move_linear_stage("X", step_dir, 1000, wait_for_stop=True, max_wait=30.0)
+            time.sleep(1.0)  # let YOLO refresh
+        else:
+            print(f"[r_align] Warning: VisibleArea below {VA_AREA_FRAC * 100:.0f}% after search; continuing.")
+    else:
+        print("[r_align] No pre-rotation VisibleArea area recorded — skipping VisibleArea recovery.")
+
+    # Now that the VisibleArea is roughly full-size, rough-center the CF_Tip in it
+    # along the X axis only (vertical). Use the live CF_Tip if it's detectable
+    # again, else the saved fixed pixel. Large tolerance — just get the tip into
+    # the detectable region. Compass: +X moves content down (+pixel-y), -X up.
+    VISIBLE_AREA_TOL_UM = 500
+    _n1v = min(target_pad_number, 7)
+    _cv1 = pad_box_dict.get(f"pad{_n1v}")
+    _cv2 = pad_box_dict.get(f"pad{_n1v + 1}")
+    steps_pp_v = get_steps_per_pixel(_cv1, _cv2, axis='X', known_µm=get_pad_spacing()) if (_cv1 and _cv2) else 0.0
+    cf_src = center_of_bbox(last_cf_box) if last_cf_box is not None else cf_tip_ref_px
+    if cf_src is not None and last_visible_area_box is not None and steps_pp_v > 0.0:
+        va = last_visible_area_box  # live detection
+        va_cy = (va[1] + va[3]) / 2
+        _src_lbl = "live" if last_cf_box is not None else "saved"
+
+        delta_y_px = cf_src[1] - va_cy
+        delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_v), axis='X')
+        if delta_y_µm > VISIBLE_AREA_TOL_UM:
+            dir_y = '+' if delta_y_px >= 0 else '-'
+            print(f"[r_align] Rough-centering CF_Tip ({_src_lbl}) in VisibleArea (vertical): X {dir_y}{delta_y_µm:.1f}µm")
+            update_speed(3)
+            move_linear_stage('X', dir_y, delta_y_µm, wait_for_stop=True, max_wait=30.0)
+            time.sleep(1.5)  # let YOLO refresh
+        else:
+            print(f"[r_align] CF_Tip vertically within VisibleArea center (±{VISIBLE_AREA_TOL_UM}µm).")
+    else:
+        print("[r_align] No CF_Tip ref / VisibleArea / calibration — skipping rough centering.")
+
+    # ── Step 3: fine-align CF_Tip to the live target pad center ──────────────
+    # Y align (vertical -> 'X' stage) first, using live detections. Then X align
+    # (horizontal -> 'Y' stage): snapshot the CF_Tip and target pad, compute the
+    # X pixel distance once, and move that distance open-loop — the CF_Tip leaves
+    # the view during this move so the loop can't be closed.
+    FINE_TOL_UM = 100
+    tbox = pad_box_dict.get(f"pad{target_pad_number}")
+    _n1c = min(target_pad_number, 7)
+    _c1 = pad_box_dict.get(f"pad{_n1c}")
+    _c2 = pad_box_dict.get(f"pad{_n1c + 1}")
+    steps_pp_f = get_steps_per_pixel(_c1, _c2, axis='X', known_µm=get_pad_spacing()) if (_c1 and _c2) else 0.0
+    if tbox is None:
+        print(f"[r_align] Target pad{target_pad_number} not detected — skipping fine pad alignment.")
+    elif steps_pp_f <= 0.0:
+        print("[r_align] Invalid calibration — skipping fine pad alignment.")
+    else:
+        # Y align (vertical) via 'X' stage — live, needs CF_Tip visible.
+        if last_cf_box is None:
+            print("[r_align] CF_Tip not detected — skipping vertical (Y) align.")
+        else:
+            pad_cy = center_of_bbox(tbox)[1]
+            cf_y = center_of_bbox(last_cf_box)[1]
+            delta_y_px = cf_y - pad_cy
+            delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_f), axis='X')
+            if delta_y_µm <= FINE_TOL_UM:
+                print(f"[r_align] CF_Tip Y-aligned with pad (±{FINE_TOL_UM}µm).")
             else:
-                cur_y = center_of_bbox(tbox)[1]
-                delta_y_px = cur_y - ref_y
-                if abs(delta_y_px) <= PIXEL_TOL_PX:
-                    print(f"[r_align] Target pad Y-position within tolerance "
-                          f"({cur_y:.1f}px vs {ref_y:.1f}px). No Y correction needed.")
-                else:
-                    delta_steps = delta_y_px * steps_pp
-                    delta_µm = steps_to_µm(abs(delta_steps), axis='Y')
-                    direction = '-' if delta_y_px >= 0 else '+'
-                    print(f"[r_align] Correcting Y by {direction}{delta_µm:.1f}µm "
-                          f"(pad Y {cur_y:.1f}px -> target {ref_y:.1f}px)")
-                    move_linear_stage("Y", direction, delta_µm, wait_for_stop=True, max_wait=30.0)
+                # Compass: +X moves content down (+pixel-y), -X up (matches Step 2).
+                dir_y = '+' if delta_y_px >= 0 else '-'
+                print(f"[r_align] Y-aligning CF_Tip to pad (vertical): X {dir_y}{delta_y_µm:.1f}µm")
+                update_speed(3)
+                move_linear_stage('X', dir_y, delta_y_µm, wait_for_stop=True, max_wait=30.0)
+                time.sleep(1.0)
+
+        # X align (horizontal) via 'Y' stage — snapshot then open-loop move.
+        # Snapshot CF_Tip live if visible, else use the saved fixed location.
+        tbox = pad_box_dict.get(f"pad{target_pad_number}")
+        cf_snap = center_of_bbox(last_cf_box) if last_cf_box is not None else cf_tip_ref_px
+        if tbox is None or cf_snap is None:
+            print("[r_align] Missing pad/CF_Tip snapshot — skipping horizontal (X) align.")
+        else:
+            pad_cx = center_of_bbox(tbox)[0]
+            delta_x_px = cf_snap[0] - pad_cx
+            delta_x_µm = steps_to_µm(abs(delta_x_px * steps_pp_f), axis='Y')
+            if delta_x_µm <= FINE_TOL_UM:
+                print(f"[r_align] CF_Tip X-aligned with pad (±{FINE_TOL_UM}µm).")
+            else:
+                # Reversed vs compass per hardware test (backwards otherwise).
+                dir_x = '+' if delta_x_px >= 0 else '-'
+                print(f"[r_align] X-aligning CF_Tip to pad (horizontal, open-loop): Y {dir_x}{delta_x_µm:.1f}µm")
+                update_speed(3)
+                move_linear_stage('Y', dir_x, delta_x_µm, wait_for_stop=True, max_wait=30.0)
 
     r_align_done = True

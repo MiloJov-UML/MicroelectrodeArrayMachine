@@ -346,6 +346,133 @@ def run_full_assembly(run_calibration=True):
         else:
             raise
 
+def _align_and_cut_pad(pad_num, skip_origin_return=False):
+    """Realign and laser-cut a single pad.
+
+    Returns to the microwire origin first (alignment must start from origin),
+    then extrudes, aligns, and laser-cuts. Does NOT return to origin afterward —
+    the next pad returns to origin before it begins. Contains the per-pad body
+    shared by the full routine and the single-pad recut feature. Pass
+    skip_origin_return=True when the head is already at the origin (e.g. the
+    first pad, right after the pre-loop return_to_origin). Raises
+    RuntimeError("Emergency stop requested.") if aborted.
+    """
+    _abort_if_emergency_stop()
+    print(f"--- Pad #{pad_num} ---")
+
+    # Return to origin before we start aligning this pad. Use the microwire
+    # named-origin navigation (same as the manual 'Return to Origin' button)
+    # so we truly return to the saved origin. Skipped when already at origin.
+    if not skip_origin_return:
+        _abort_if_emergency_stop()
+        _return_to_named_origin_thread('microwire')
+        time.sleep(1.0)  # settle before alignment
+
+    _abort_if_emergency_stop()
+    update_speed(3)
+    move_linear_stage("Z", "-", 1220, wait_for_stop=True, max_wait=30.0)
+    # Clear stale YOLO detections so alignment steps see the current camera view
+    image_recognition.pad_box_dict.clear()
+    image_recognition.last_cf_box = None
+    image_recognition.last_gc_box = None
+    # Re-measure the pad pixel-spacing calibration once for this pad; extrude
+    # seeds it and r_align/x_align reuse it.
+    image_recognition.reset_pad_pixel_spacing()
+    time.sleep(1.5)
+
+    # ── Initial extrude + r_align ─────────────────────────────────
+    _abort_if_emergency_stop()
+    """extrude(pad_num)
+    if not wait_for_extrude_done():
+        raise RuntimeError("Emergency stop requested.")"""
+    # Record the target pad's Y-pixel position while it's fully in view,
+    # before r_align rotates it; r_align uses this to compute a calibrated
+    # Y correction afterward (not a motor-controller readout comparison).
+    _ref_box = image_recognition.pad_box_dict.get(f"pad{pad_num}")
+    image_recognition.target_pad_ref_y = (
+        image_recognition.center_of_bbox(_ref_box)[1] if _ref_box is not None else None)
+    # CF_Tip is printhead-mounted (fixed in frame) once extruded; record its pixel
+    # location now — while it's visible and centered on the pad — so x_align can
+    # recenter it in the VisibleArea later even if poor contrast hides it.
+    _cf_ref_box = image_recognition.last_cf_box
+    image_recognition.cf_tip_ref_px = (
+        image_recognition.center_of_bbox(_cf_ref_box) if _cf_ref_box is not None else None)
+    _abort_if_emergency_stop()
+    r_align(target_pad_number=pad_num)
+    if not wait_for_r_align_done():
+        raise RuntimeError("Emergency stop requested.")
+
+    """# ── Center on visible area, then re-check Y-axis alignment ─────
+    _abort_if_emergency_stop()
+    center_on_visible_area(target_pad_number=pad_num)
+    if not wait_for_center_on_visible_area_done():
+        raise RuntimeError("Emergency stop requested.")"""
+
+    # ── x_align ───────────────────────────────────────────────────
+    # Disabled: r_align now does the full 2D CF_Tip↔pad-center alignment.
+    """
+    _abort_if_emergency_stop()
+    x_align(pad_num)
+    if not wait_for_x_align_done():
+        raise RuntimeError("Emergency stop requested.")
+    """
+
+    _abort_if_emergency_stop()
+    update_speed(10)
+    move_linear_stage("Z", "+", 1720, wait_for_stop=True, max_wait=30.0)
+    print(f"Laser cutting on Pad #{pad_num}")
+    _abort_if_emergency_stop()
+    laser_cut()
+
+
+def recut_pads(pad_numbers):
+    """Realign and recut a user-defined set of individual pads.
+
+    Sets up the microwire origin once (same as the full routine), then runs
+    the per-pad align+cut body only for the requested pad numbers.
+    """
+    try:
+        clear_emergency_stop()
+        laser_relay_off()
+        nordson_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        if nord_state_var is not None:
+            nord_state_var.set('Off')
+        print(f"--- Starting Pad Recut for pads {pad_numbers} ---")
+
+        # Navigate to (and fine-tune) the microwire / laser-alignment origin,
+        # then lock it in so return_to_origin() targets it between pads.
+        _abort_if_emergency_stop()
+        microwire_origin_setup()
+        set_origin_to_current()
+
+        _abort_if_emergency_stop()
+        return_to_origin()
+
+        for pad_num in pad_numbers:
+            _align_and_cut_pad(pad_num)
+
+        print("--- Pad Recut Completed ---")
+
+    except Exception as e:
+        if str(e) == "Emergency stop requested.":
+            print("Pad recut stopped by emergency stop.")
+        else:
+            messagebox.showerror("Error", f"An error occurred during recut_pads: {e}")
+            print(f"Exception in recut_pads: {e}")
+    finally:
+        try:
+            laser_relay_off()
+            nordson_off()
+            if laser_state_var is not None:
+                laser_state_var.set('Off')
+            if nord_state_var is not None:
+                nord_state_var.set('Off')
+        except Exception as e:
+            print(f"Warning: failed to force outputs off after recut_pads: {e}")
+
+
 def run_full_manual_loop():
     global PAD_COUNT, PAD_SPACING
 
@@ -412,7 +539,7 @@ def run_full_manual_loop():
         #         print("[Correction] Calibration pads not visible — skipping length correction.")
         #         return
         #     known = image_recognition.get_pad_spacing()
-        #     steps_pp = image_recognition.compute_steps_per_pixel(
+        #     steps_pp = image_recognition.get_steps_per_pixel(
         #         c1, c2, axis='t', known_µm=known)
         #     if steps_pp <= 0:
         #         return
@@ -430,57 +557,8 @@ def run_full_manual_loop():
         #                        wait_for_stop=True, max_wait=10.0)
 
         for pad_num in range(1, PAD_COUNT+1):
-            _abort_if_emergency_stop()
-            print(f"--- Pad #{pad_num} ---")
-            update_speed(3)
-            move_linear_stage("Z", "-", 1220, wait_for_stop=True, max_wait=30.0)
-            # Clear stale YOLO detections so alignment steps see the current camera view
-            image_recognition.pad_box_dict.clear()
-            image_recognition.last_cf_box = None
-            image_recognition.last_gc_box = None
-            time.sleep(1.5)
-
-            # ── Initial extrude + r_align ─────────────────────────────────
-            _abort_if_emergency_stop()
-            extrude(pad_num)
-            if not wait_for_extrude_done():
-                raise RuntimeError("Emergency stop requested.")
-            # Record the target pad's Y-pixel position while it's fully in view,
-            # before r_align rotates it; r_align uses this to compute a calibrated
-            # Y correction afterward (not a motor-controller readout comparison).
-            _ref_box = image_recognition.pad_box_dict.get(f"pad{pad_num}")
-            image_recognition.target_pad_ref_y = (
-                image_recognition.center_of_bbox(_ref_box)[1] if _ref_box is not None else None)
-            _abort_if_emergency_stop()
-            r_align(target_pad_number=pad_num)
-            if not wait_for_r_align_done():
-                raise RuntimeError("Emergency stop requested.")
-
-            # ── Center on visible area, then re-check Y-axis alignment ─────
-            _abort_if_emergency_stop()
-            center_on_visible_area(target_pad_number=pad_num)
-            if not wait_for_center_on_visible_area_done():
-                raise RuntimeError("Emergency stop requested.")
-
-            # ── x_align ───────────────────────────────────────────────────
-            _abort_if_emergency_stop()
-            x_align(pad_num)
-            if not wait_for_x_align_done():
-                raise RuntimeError("Emergency stop requested.")
-
-            _abort_if_emergency_stop()
-            update_speed(10)
-            move_linear_stage("Z", "+", 1720, wait_for_stop=True, max_wait=30.0)
-            print(f"Laser cutting on Pad #{pad_num}")
-            _abort_if_emergency_stop()
-            laser_cut()
-
-            # Return to origin after finishing this pad
-            _abort_if_emergency_stop()
-            # Use the microwire named-origin navigation (same as the manual
-            # 'Return to Origin' button) so we truly return to the saved origin.
-            _return_to_named_origin_thread('microwire')
-            time.sleep(1.0)  # settle before next pad
+            # Pad 1 is already at origin from the pre-loop return_to_origin().
+            _align_and_cut_pad(pad_num, skip_origin_return=(pad_num == 1))
 
         print("--- Automated Routine Completed ---")
 
@@ -504,7 +582,7 @@ def run_full_manual_loop():
 # Absolute T-axis positions (µm) bounding the laser cut — the cut is run
 # back-and-forth _LASER_CUT_PASSES times to ensure a clean cut over the full length.
 _LASER_CUT_T_START = 2614212.500
-_LASER_CUT_T_END = 2614912.500
+_LASER_CUT_T_END = 2615212.500
 _LASER_CUT_PASSES = 5
 
 def _move_t_to_absolute(target_um):
@@ -565,6 +643,45 @@ def laser_cut():
             laser_state_var.set('Off')
         messagebox.showerror("Error", f"An error occurred during laser_cut: {e}")
         print(f"Exception in laser_cut: {e}")
+
+def laser_cut_only():
+    """Run only the laser cut: T-axis back-and-forth passes, no Z moves."""
+    try:
+        print("--- Starting Laser-Cut-Only Sequence ---")
+        clear_emergency_stop()
+        _abort_if_emergency_stop()
+        _move_t_to_absolute(_LASER_CUT_T_START)
+        _abort_if_emergency_stop()
+        laser_relay_on()
+        if laser_state_var is not None:
+            laser_state_var.set('On')
+        _abort_if_emergency_stop()
+        update_speed(1)
+        # Alternate start<->end for _LASER_CUT_PASSES passes with the laser on.
+        _pass_targets = [_LASER_CUT_T_END, _LASER_CUT_T_START]
+        for _pass_num in range(_LASER_CUT_PASSES):
+            _abort_if_emergency_stop()
+            _move_t_to_absolute(_pass_targets[_pass_num % 2])
+        _abort_if_emergency_stop()
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        print("Laser-cut-only sequence completed.")
+    except RuntimeError as e:
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        if str(e) == "Emergency stop requested.":
+            print("Laser-cut-only sequence aborted by emergency stop.")
+            return
+        messagebox.showerror("Error", f"An error occurred during laser_cut_only: {e}")
+        print(f"Exception in laser_cut_only: {e}")
+    except Exception as e:
+        laser_relay_off()
+        if laser_state_var is not None:
+            laser_state_var.set('Off')
+        messagebox.showerror("Error", f"An error occurred during laser_cut_only: {e}")
+        print(f"Exception in laser_cut_only: {e}")
 
 def ask_pcb_info_popup(root, defaults):
     popup = tk.Toplevel(root)
@@ -1234,7 +1351,7 @@ def load_named_origin(name):
 def _return_to_named_origin_thread(name):
     """Move axes to the stored named origin with camera-fixture-safe axis ordering.
 
-    Arriving AT microwire:   Z drop 5000  → X → r → Z(target) → Y
+    Arriving AT microwire:   Z drop 5000  → Y → X → Z(target) → r
     Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
     All other moves:          Z drop 5000  → X → Y → r → Z(target)
     """
@@ -1287,8 +1404,8 @@ def _return_to_named_origin_thread(name):
         move_linear_stage('Z', '-', z_drop, wait_for_stop=True, max_wait=30.0)
 
         if arriving_at_microwire:
-            # 2a) Arriving at microwire: X → r → Z → Y (Y last)
-            for ax in ('X', 'r', 'Z', 'Y'):
+            # 2a) Arriving at microwire: Y → X → Z → r (Y first)
+            for ax in ('Y', 'X', 'Z', 'r'):
                 if not _move(ax):
                     return
         elif departing_microwire:
@@ -1532,6 +1649,13 @@ def open_settings_window(root):
 
     tk.Button(
         win,
+        text="Recut Pads",
+        width=34,
+        command=lambda: open_recut_window(root)
+    ).pack(pady=6)
+
+    tk.Button(
+        win,
         text="Test PNP Routine",
         width=34,
         command=lambda: open_pnp_test_window(root)
@@ -1630,6 +1754,58 @@ def open_reprint_window(root):
     btn_frame.pack(pady=(2, 12))
     tk.Button(btn_frame, text="Jog to Start", command=on_jog).pack(side='left', padx=10)
     tk.Button(btn_frame, text="Reprint", command=on_reprint).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
+
+
+def open_recut_window(root):
+    """Popup to realign and recut a user-defined set of individual pads.
+
+    Runs the same per-pad align+laser-cut body as the full routine, but only
+    for the pads the user selects."""
+    win = Toplevel(root)
+    win.title("Recut Pads")
+    win.resizable(False, False)
+
+    pad_count = PAD_COUNT if PAD_COUNT and PAD_COUNT > 0 else 8
+
+    tk.Label(win, text="Select pads to realign and recut:",
+             font=("Helvetica", 10, "bold")).pack(anchor='w', padx=12, pady=(12, 4))
+
+    pad_vars = {}
+    grid_frame = tk.Frame(win)
+    grid_frame.pack(anchor='w', padx=12)
+    for i in range(1, pad_count + 1):
+        var = tk.IntVar(value=0)
+        pad_vars[i] = var
+        row = (i - 1) // 4
+        col = (i - 1) % 4
+        tk.Checkbutton(grid_frame, text=f"Pad {i}", variable=var).grid(
+            row=row, column=col, sticky='w', padx=6, pady=2)
+
+    tk.Label(
+        win,
+        text=("The microwire origin is set up once, then each selected pad is\n"
+              "realigned (extrude → r/x align) and laser-cut in order."),
+        fg="gray",
+        justify='left'
+    ).pack(anchor='w', padx=12, pady=(8, 8))
+
+    def on_recut():
+        selected = [i for i in range(1, pad_count + 1) if pad_vars[i].get()]
+        if not selected:
+            messagebox.showerror("Error", "Select at least one pad.", parent=win)
+            return
+        win.destroy()
+        start_routine_thread(
+            lambda: recut_pads(selected),
+            "recut_pads"
+        )
+
+    btn_frame = tk.Frame(win)
+    btn_frame.pack(pady=(2, 12))
+    tk.Button(btn_frame, text="Recut Selected", command=on_recut).pack(side='left', padx=10)
     tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
 
     win.grab_set()
@@ -2332,6 +2508,9 @@ def launch_gui():
 
     # Full manual loop
     tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)
+
+    # Laser cut only (T-axis 5x passes, no Z moves)
+    tk.Button(root, text="Laser Cut Only", command=lambda: start_routine_thread(laser_cut_only, "laser_cut_only")).pack(side='bottom', pady=8)
 
     # Drain GUI requests queued by worker threads (origin popups, etc.) on the
     # GUI thread. Reschedules itself so it runs for the lifetime of the window.
