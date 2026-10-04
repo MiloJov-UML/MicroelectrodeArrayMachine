@@ -1,0 +1,45 @@
+20:15:13  [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:15:13  [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+20:15:19  [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1060.0µm).
+20:15:19  [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:15:19  [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (5943.6µm remaining)
+20:15:21  [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (5440.0µm remaining)
+20:15:22  [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (4857.7µm remaining)
+20:15:24  [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (4595.4µm remaining)
+20:15:26  [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (3509.5µm remaining)
+20:15:27  [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (2979.7µm remaining)
+20:15:29  [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (2303.0µm remaining)
+20:15:30  [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (1783.6µm remaining)
+20:15:32  [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad1 (1353.4µm remaining)
+20:15:34  [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad1 (897.1µm remaining)
+20:15:35  [extrude:ATTEMPT 11] MOVE t +100.0µm  —  close horizontal gap to pad1 (477.4µm remaining)
+20:15:37  [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 12 attempt(s).
+20:15:38  [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+20:15:38  [r_align:ANGLE] CF→GC -1.02° vs reference 0.00° (Δ-1.02°, tol ±0.5°).
+20:15:38  [r_align:ROTATE] MOVE r +1.02°  —  level CF→GC wire -1.02° → 0.00° (Δ-1.02°)
+20:15:41  [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+20:15:41  [r_align:PAD-SEARCH] MOVE X +1000µm  —  all 8 pads visible — one extra step for margin
+20:15:46  [r_align:STEP1 Y-RESTORE] MOVE Y -2990.2µm  —  return pad to its pre-rotation row (1125.5px → ref 840.5px)
+20:15:57  [r_align:STEP2 VA-RECOVER] stepping X + until VisibleArea returns to >=50% of its pre-rotation size.
+20:15:57  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 31% in frame (<50%) — stepping to bring it back
+20:16:01  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 31% in frame (<50%) — stepping to bring it back
+20:16:06  [r_align:STEP2 VA-RECOVER] VisibleArea back to 95% of pre-rotation area — recovered.
+20:16:06  [r_align:STEP2 ROUGH-CENTER] CF_Tip already at VisibleArea top-25% (±500µm) — no move.
+20:16:06  [r_align:STEP3 Y-ALIGN] MOVE Y +1500.0µm  —  match tip column to pad center (tip 629.0px vs pad 858.5px, live, off 2407.9µm)
+20:16:13  [r_align:STEP3 Y-ALIGN] MOVE Y +949.5µm  —  match tip column to pad center (tip 618.5px vs pad 709.0px, live, off 949.5µm)
+20:16:18  [r_align:STEP3 Y-ALIGN] CF_Tip on pad column within ±250µm (off by 94.4µm) — aligned.
+20:16:18  [r_align:STEP3 X-ALIGN] MOVE X -1720.7µm  —  open-loop final approach (live tip 1093.0px vs pad 929.0px); tip leaves view mid-move
+20:16:24  [r_align:DONE] pad1 alignment sequence complete.
+20:16:24  [laser-cut:SETUP] MOVE Z +1800  —  raise head clear before positioning T
+20:16:36  [laser-cut:T-MOVE] MOVE T -925.0µm  —  position T at cut start (target 2614212.5µm)
+20:16:42  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:16:47  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:16:47  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:16:50  [origin:MICROWIRE] MOVE Y +540.0  —  move to saved 'microwire' origin (Y -> 2381910.000)
+20:16:50  [origin:MICROWIRE] MOVE X -1280.0  —  move to saved 'microwire' origin (X -> 344247.500)
+20:16:52  [origin:MICROWIRE] MOVE r -1.0  —  move to saved 'microwire' origin (r -> 3059.000)
+20:16:52  [origin:MICROWIRE] MOVE Z +4420.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:18:47  [laser-cut:T-MOVE] MOVE T -52.5µm  —  position T at cut start (target 2614212.5µm)
+20:18:48  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:18:55  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:19:00  [origin:MICROWIRE] navigating to saved 'microwire' origin.

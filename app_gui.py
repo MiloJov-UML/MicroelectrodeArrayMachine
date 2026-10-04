@@ -411,7 +411,7 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
     if not wait_for_center_on_visible_area_done():
         raise RuntimeError("Emergency stop requested.")"""
 
-    # ── x_align ───────────────────────────────────────────────────
+    """# ── x_align ───────────────────────────────────────────────────
     # Disabled: r_align now does the full 2D CF_Tip↔pad-center alignment.
     _abort_if_emergency_stop()
     x_align(pad_num)
@@ -423,7 +423,7 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
     image_recognition.log_move("pad-loop", f"PAD {pad_num}", "Z", "+", "1720", "raise head to laser-cut height")
     move_linear_stage("Z", "+", 1720, wait_for_stop=True, max_wait=30.0)
     print(f"Laser cutting on Pad #{pad_num}")
-    _abort_if_emergency_stop()
+    _abort_if_emergency_stop()"""
     laser_cut()
 
 

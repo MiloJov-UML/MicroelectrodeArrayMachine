@@ -1232,10 +1232,10 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         _align_report("STEP2 ROUGH-CENTER", "no CF_Tip ref / VisibleArea / calibration — skipping.")
 
     # ── Step 3: fine-align CF_Tip to the live target pad center ──────────────
-    # Y align (vertical -> 'X' stage) first, using live detections. Then X align
-    # (horizontal -> 'Y' stage): snapshot the CF_Tip and target pad, compute the
-    # X pixel distance once, and move that distance open-loop — the CF_Tip leaves
-    # the view during this move so the loop can't be closed.
+    # Y align (horizontal pixels -> 'Y' stage) first, closed loop on live detections.
+    # Then X align (vertical pixels -> 'X' stage): snapshot the CF_Tip and target pad,
+    # compute the vertical pixel distance once, and move that distance open-loop — the
+    # CF_Tip leaves the view during this move so the loop can't be closed.
     FINE_TOL_UM = 100
     tbox = pad_box_dict.get(f"pad{target_pad_number}")
     _n1c = min(target_pad_number, 7)
@@ -1301,26 +1301,29 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         else:
             _align_report("STEP3 Y-ALIGN", f"WARNING: not within ±{Y_ALIGN_TOL_UM}µm after {Y_ALIGN_MAX_ITERS} steps; continuing.")
 
-        # X align (horizontal) via 'Y' stage — snapshot then open-loop move.
+        # X align via the 'X' stage (moves content up/down) — closes the VERTICAL pixel
+        # difference; snapshot then open-loop move.
         # Snapshot CF_Tip live if visible, else use the saved fixed location.
         tbox = pad_box_dict.get(f"pad{target_pad_number}")
         cf_snap = center_of_bbox(last_cf_box) if last_cf_box is not None else cf_tip_ref_px
         _snap_lbl = "live" if last_cf_box is not None else "saved"
         if tbox is None or cf_snap is None:
-            _align_report("STEP3 X-ALIGN", "missing pad/CF_Tip snapshot — skipping horizontal align.")
+            _align_report("STEP3 X-ALIGN", "missing pad/CF_Tip snapshot — skipping X align.")
         else:
-            pad_cx = center_of_bbox(tbox)[0]
-            delta_x_px = cf_snap[0] - pad_cx
-            delta_x_µm = steps_to_µm(abs(delta_x_px * steps_pp_f), axis='Y')
-            if delta_x_µm <= FINE_TOL_UM:
-                _align_report("STEP3 X-ALIGN", f"CF_Tip already on pad column (±{FINE_TOL_UM}µm) — no move.")
+            # Same target point and camera-offset correction as x_align(): 33% up from
+            # the pad's bottom edge, minus 250µm.
+            pad_cy = tbox[3] - 0.33 * (tbox[3] - tbox[1])
+            delta_y_px = cf_snap[1] - pad_cy
+            delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_f), axis='X') - 250
+            if abs(delta_y_µm) <= FINE_TOL_UM:
+                _align_report("STEP3 X-ALIGN", f"CF_Tip already on pad row (±{FINE_TOL_UM}µm) — no move.")
             else:
-                # Final wire approach is always '-' (the only direction the wire moves here).
-                dir_x = '-'
-                _align_move_report("STEP3 X-ALIGN", "X", dir_x, f"{delta_x_µm:.1f}µm",
-                                   f"open-loop final approach ({_snap_lbl} tip {cf_snap[0]:.1f}px vs pad {pad_cx:.1f}px); tip leaves view mid-move")
+                # Same convention as x_align(): tip below the pad -> '-X', above -> '+X'.
+                dir_x = '-' if delta_y_px >= 0 else '+'
+                _align_move_report("STEP3 X-ALIGN", "X", dir_x, f"{abs(delta_y_µm):.1f}µm",
+                                   f"open-loop final approach ({_snap_lbl} tip {cf_snap[1]:.1f}px vs pad target {pad_cy:.1f}px); tip leaves view mid-move")
                 update_speed(3)
-                move_linear_stage('X', dir_x, delta_x_µm, wait_for_stop=True, max_wait=30.0)
+                move_linear_stage('X', dir_x, abs(delta_y_µm), wait_for_stop=True, max_wait=30.0)
 
     _align_report("DONE", f"pad{target_pad_number} alignment sequence complete.")
     r_align_done = True
