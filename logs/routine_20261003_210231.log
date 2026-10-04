@@ -1,0 +1,44 @@
+21:02:31.722  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-10-03_6\camera0_20261003_210231.avi start=2026-10-03T21:02:31.721
+21:02:34.865  [cam0 f20 rec+3.14s] [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+21:02:34.919  [cam0 f20 rec+3.20s] [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+21:02:40.529  [cam0 f58 rec+8.81s] [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1060.0µm).
+21:02:40.580  [cam0 f59 rec+8.86s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+21:02:41.184  [cam0 f62 rec+9.46s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (1755.8µm remaining)
+21:02:42.788  [cam0 f72 rec+11.07s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (1481.6µm remaining)
+21:02:44.393  [cam0 f81 rec+12.67s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (1070.3µm remaining)
+21:02:45.997  [cam0 f91 rec+14.28s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (506.2µm remaining)
+21:02:47.602  [cam0 f101 rec+15.88s] [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 5 attempt(s).
+21:02:48.655  [cam0 f107 rec+16.93s] [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+21:02:48.655  [cam0 f107 rec+16.93s] [r_align:ANGLE] CF→GC -2.57° vs reference 0.00° (Δ-2.57°, tol ±0.5°).
+21:02:48.658  [cam0 f107 rec+16.94s] [r_align:ROTATE] MOVE r +2.57°  —  level CF→GC wire -2.57° → 0.00° (Δ-2.57°)
+21:02:54.273  [cam0 f141 rec+22.55s] [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+21:02:54.274  [cam0 f141 rec+22.55s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:02:58.885  [cam0 f169 rec+27.16s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:03:03.494  [cam0 f196 rec+31.77s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:03:08.109  [cam0 f223 rec+36.39s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:03:12.718  [cam0 f251 rec+41.00s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:03:17.324  [cam0 f279 rec+45.60s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+21:03:21.934  [cam0 f306 rec+50.21s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  all 8 pads visible — one extra step for margin
+21:03:26.543  [cam0 f333 rec+54.82s] [r_align:STEP1 Y-RESTORE] MOVE Y -3015.9µm  —  return pad to its pre-rotation row (1123.5px → ref 837.5px)
+21:03:37.664  [cam0 f399 rec+65.94s] [r_align:STEP2 VA-RECOVER] stepping X + until VisibleArea returns to >=50% of its pre-rotation size.
+21:03:37.665  [cam0 f399 rec+65.94s] [r_align:STEP2 VA-RECOVER] MOVE X +1600µm  —  VisibleArea only 28% in frame (<50%) — stepping to bring it back
+21:03:44.277  [cam0 f439 rec+72.56s] [r_align:STEP2 VA-RECOVER] MOVE X +1600µm  —  VisibleArea only 45% in frame (<50%) — stepping to bring it back
+21:03:50.888  [cam0 f478 rec+79.17s] [r_align:STEP2 VA-RECOVER] VisibleArea back to 95% of pre-rotation area — recovered.
+21:03:50.891  [cam0 f478 rec+79.17s] [r_align:STEP2 ROUGH-CENTER] MOVE X +880.5µm  —  bring live CF_Tip to VisibleArea top-25% so tip & pad are both detectable
+21:03:55.558  [cam0 f505 rec+83.84s] [r_align:STEP3 Y-ALIGN] MOVE Y +500.0µm  —  match tip column to pad center (tip 638.0px vs pad 761.5px, live, off 1302.3µm)
+21:03:59.214  [cam0 f526 rec+87.49s] [r_align:STEP3 Y-ALIGN] MOVE Y +500.0µm  —  match tip column to pad center (tip 635.0px vs pad 712.5px, live, off 817.3µm)
+21:04:02.870  [cam0 f548 rec+91.15s] [r_align:STEP3 Y-ALIGN] MOVE Y +258.4µm  —  match tip column to pad center (tip 637.5px vs pad 662.0px, live, off 258.4µm)
+21:04:05.533  [cam0 f562 rec+93.81s] [r_align:STEP3 Y-ALIGN] CF_Tip on pad column within ±250µm (off by 31.6µm) — aligned.
+21:04:05.534  [cam0 f562 rec+93.81s] [r_align:STEP3 X-ALIGN] MOVE X -3139.1µm  —  open-loop final approach (live tip 1064.0px vs pad target 742.6px); tip leaves view mid-move
+21:04:16.204  [cam0 f626 rec+104.48s] [r_align:DONE] pad1 alignment sequence complete.
+21:04:16.256  [cam0 f627 rec+104.54s] [laser-cut:SETUP] MOVE Z +1800  —  raise head clear before positioning T
+21:04:28.436  [cam0 f695 rec+116.72s] [laser-cut:T-MOVE] MOVE T -482.5µm  —  position T at cut start (target 2614212.5µm)
+21:04:32.171  [cam0 f716 rec+120.45s] [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+21:04:38.838  [cam0 f754 rec+127.12s] [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+21:04:44.300  [cam0 f785 rec+132.58s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+21:04:44.404  [cam0 f786 rec+132.68s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:04:47.061  [cam0 f800 rec+135.34s] [origin:MICROWIRE] MOVE Y +1757.5  —  move to saved 'microwire' origin (Y -> 2381910.000)
+21:04:48.215  [cam0 f807 rec+136.50s] [origin:MICROWIRE] MOVE X -7940.0  —  move to saved 'microwire' origin (X -> 344247.500)
+21:04:51.873  [cam0 f829 rec+140.15s] [origin:MICROWIRE] MOVE r -2.6  —  move to saved 'microwire' origin (r -> 3059.000)
+21:04:53.028  [cam0 f836 rec+141.31s] [origin:MICROWIRE] MOVE Z +4420.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+21:04:56.858  [camera0:RECORDING STOP] frames_written=858

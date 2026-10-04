@@ -42,7 +42,72 @@ video_writers = {0: None, 1: None, 2: None}
 run_timestamps = {0: None, 1: None, 2: None}
 
 frames_per_still = 30
+# Index of the next frame to be written to the current recording (0-based). Reset
+# when a new recording starts so it always equals the frame's position in the .avi
+# and the N in the still names (frame_N_...jpg).
 frame_counts = {0: 0, 1: 0, 2: 0}
+
+# Correlation with the routine log (logs/routine_*.log): while a camera records, a
+# per-frame CSV maps frame index -> wall-clock time, and log lines for camera 0 are
+# tagged with the last frame written plus seconds since the recording started.
+frame_time_files = {0: None, 1: None, 2: None}
+record_start_times = {0: None, 1: None, 2: None}  # datetime when each recording began
+
+def _recording_tag():
+    """Prefix for routine-log lines while camera 0 records, else ''.
+    'f' is the last frame written to the video; 'rec' is wall-clock seconds since the
+    recording started (the .avi plays at a nominal 20 fps, so use the frame number
+    rather than the video timestamp to seek)."""
+    start = record_start_times[0]
+    if video_writers[0] is None or start is None:
+        return ""
+    elapsed = (datetime.datetime.now() - start).total_seconds()
+    return f"[cam0 f{max(frame_counts[0] - 1, 0)} rec+{elapsed:.2f}s] "
+
+def _start_recording_correlation(camera_index, record_dir, video_path):
+    """Log the recording start, drop a recording_info.txt next to the video, and open
+    the per-frame timestamp CSV."""
+    now = datetime.datetime.now()
+    record_start_times[camera_index] = now
+    frame_counts[camera_index] = 0
+    _align_log_write(f"[camera{camera_index}:RECORDING START] video={video_path} start={now.isoformat(timespec='milliseconds')}")
+    try:
+        with open(os.path.join(record_dir, "recording_info.txt"), "w", encoding="utf-8") as f:
+            f.write(f"camera={camera_index}\n")
+            f.write(f"video={video_path}\n")
+            f.write(f"recording_start={now.isoformat(timespec='milliseconds')}\n")
+            f.write(f"routine_log={_align_log_path}\n")
+            f.write("frame_times=" + f"frame_times_camera{camera_index}.csv\n")
+        ft = open(os.path.join(record_dir, f"frame_times_camera{camera_index}.csv"), "w", encoding="utf-8")
+        ft.write("frame,wall_time,epoch_s\n")
+        frame_time_files[camera_index] = ft
+    except Exception as e:
+        print(f"Warning: could not start recording correlation files: {e}")
+        frame_time_files[camera_index] = None
+
+def _log_frame_time(camera_index, frame_index):
+    ft = frame_time_files[camera_index]
+    if ft is None:
+        return
+    try:
+        now = datetime.datetime.now()
+        ft.write(f"{frame_index},{now.strftime('%H:%M:%S.%f')[:-3]},{now.timestamp():.3f}\n")
+        if frame_index % 20 == 0:
+            ft.flush()
+    except Exception:
+        pass
+
+def _stop_recording_correlation(camera_index):
+    ft = frame_time_files[camera_index]
+    if ft is not None:
+        try:
+            ft.close()
+        except Exception:
+            pass
+        frame_time_files[camera_index] = None
+    if record_start_times[camera_index] is not None:
+        _align_log_write(f"[camera{camera_index}:RECORDING STOP] frames_written={frame_counts[camera_index]}")
+        record_start_times[camera_index] = None
 
 extrude_done = False
 r_align_done = False
@@ -477,11 +542,13 @@ def open_camera(camera_index=0, model_path="best.pt"):
                     record_dir2 = _create_unique_daily_record_dir("D:\\", "camera2_pcb2_CFmicrowire")
                     video_path = os.path.join(record_dir2, f"camera{camera_index}_{run_timestamps[camera_index]}.avi")
                 video_writers[camera_index] = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
+                _start_recording_correlation(camera_index, os.path.dirname(video_path), video_path)
                 print(f"[Camera {camera_index}] Recording started => {video_path}")
 
             # Video retains bounding-box overlay
             video_writers[camera_index].write(annotated_frame)
             fc = frame_counts[camera_index]
+            _log_frame_time(camera_index, fc)
             if fc % frames_per_still==0:
                 if run_timestamps[camera_index] is None:
                     run_timestamps[camera_index] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -509,6 +576,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
             if video_writers[camera_index] is not None:
                 video_writers[camera_index].release()
                 video_writers[camera_index]=None
+                _stop_recording_correlation(camera_index)
                 print(f"[Camera {camera_index}] Recording stopped.")
 
         # 5) Auto-annotation now runs inside the recording block above
@@ -528,6 +596,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
     if rec_flag and video_writers[camera_index]:
         video_writers[camera_index].release()
         video_writers[camera_index]=None
+        _stop_recording_correlation(camera_index)
         print(f"[Camera {camera_index}] Recording stopped at exit.")
 
 # --------------------------------------------------------
@@ -1013,9 +1082,9 @@ def _align_log_write(line):
             os.makedirs(log_dir, exist_ok=True)
             stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             _align_log_path = os.path.join(log_dir, f"routine_{stamp}.log")
-        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         with open(_align_log_path, "a", encoding="utf-8") as f:
-            f.write(f"{ts}  {line}\n")
+            f.write(f"{ts}  {_recording_tag()}{line}\n")
     except Exception as e:
         print(f"Warning: could not write routine log: {e}")
 
@@ -1256,16 +1325,16 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         Y_ALIGN_TOL_UM = 250
         Y_ALIGN_MAX_ITERS = 15
         Y_ALIGN_MAX_MISSES = 3
-        Y_ALIGN_MAX_STEP_UM = 1500   # cap per move so one bad reading can't fling the stage
+        Y_ALIGN_MAX_STEP_UM = 500    # small capped steps: re-check live after each so it can't overshoot
         Y_ALIGN_WORSE_UM = 100       # error growth that counts as "moved the wrong way"
-        sign_flip = 1                # +1: cf right of pad -> '+Y' (hardware-tested); -1: flipped by feedback
+        sign_flip = 1                # +1: cf right of pad -> '-Y' (hardware-tested); -1: flipped by feedback
         prev_err_µm = None
         prev_move_µm = 0.0
         misses = 0
         iters = 0
         while iters < Y_ALIGN_MAX_ITERS:
             if is_emergency_stop_requested():
-                print("[r_align] Emergency stop during Y align.")
+                _align_report("STEP3 Y-ALIGN", "emergency stop requested — aborting.")
                 r_align_done = True
                 return
             live_pad = pad_box_dict.get(f"pad{target_pad_number}")
@@ -1290,7 +1359,7 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
                 sign_flip = -sign_flip
                 _align_report("STEP3 Y-ALIGN", f"error grew {prev_err_µm:.1f}µm → {delta_x_µm:.1f}µm after last move — reversing direction.")
             move_µm = min(delta_x_µm, Y_ALIGN_MAX_STEP_UM)
-            dir_y = '+' if (delta_x_px >= 0) == (sign_flip > 0) else '-'
+            dir_y = '-' if (delta_x_px >= 0) == (sign_flip > 0) else '+'
             _align_move_report("STEP3 Y-ALIGN", "Y", dir_y, f"{move_µm:.1f}µm",
                                f"match tip column to pad center (tip {cf_x:.1f}px vs pad {pad_cx:.1f}px, live, off {delta_x_µm:.1f}µm)")
             update_speed(3)
