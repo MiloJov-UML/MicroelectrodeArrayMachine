@@ -123,7 +123,7 @@ def launch_gui():
             messagebox.showerror("Error", f"Invalid input: {e}")
 
     tk.Button(root, text="Move Stage", command=move_stage_gui).pack(pady=10)
-    tk.Button(root, text="Stop Motor Control", command=stop_motor_control).pack(pady=10)
+    tk.Button(root, text="Stop Motor Control", command=stop_motor_control, bg="red", fg="white", font=("Arial", 10, "bold")).pack(pady=10)
 
     # Keyboard control toggle
     kb_var = tk.IntVar(value=0)

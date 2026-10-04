@@ -100,7 +100,7 @@ def send_command(ser, command, device_name, retries=3, delay=0.125):
 
             for attempt in range(retries):
                 if ser.in_waiting > 0:
-                    response = ser.read(ser.in_waiting).decode().strip()
+                    response = ser.read(ser.in_waiting).decode('utf-8', errors='replace').strip()
                     print(f"{device_name} response: {response}")
                     return response
                 print(f"Retrying read ({attempt + 1}/{retries})...")
