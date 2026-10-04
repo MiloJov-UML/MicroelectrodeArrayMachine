@@ -1,6 +1,73 @@
 {
   "pad_count": 8,
-  "pad_spacing": 1000.0,
-  "offset": 2300.0,
-  "fixture_offset": 0.0
+  "pad_spacing": 1060.0,
+  "trace_tuning": {
+    "connector_cl_drop_mm": 2.5,
+    "corner_mm": 0.5,
+    "cs_clear_mm": 0.4
+  },
+  "camera_ports": {
+    "0": 0,
+    "1": 1,
+    "2": 2
+  },
+  "probe_origin": {
+    "X": 344517.5,
+    "Y": 2394450.0,
+    "r": 3146.15,
+    "Z": 2312042.5
+  },
+  "print_origin_coords": {
+    "X": 346767.5,
+    "Y": 2395340.0,
+    "Z": 2312412.5,
+    "r": 3146.15
+  },
+  "microwire_origin": {
+    "X": 344247.5,
+    "Y": 2381910.0,
+    "Z": 2315837.5,
+    "r": 3059.0
+  },
+  "connector_origin": {
+    "X": 350517.5,
+    "Y": 2391440.0,
+    "Z": 2312482.5,
+    "r": 3146.15
+  },
+  "camera_adjustments": {
+    "0": {
+      "alpha": 1.5,
+      "beta": -100.0,
+      "sat_factor": 1.2,
+      "gamma": 1.4,
+      "sharp_strength": 2.0
+    },
+    "1": {
+      "alpha": 1.5,
+      "beta": 0.0,
+      "sat_factor": 1.5,
+      "gamma": 1.6,
+      "sharp_strength": 1.9
+    },
+    "2": {
+      "alpha": 1.5,
+      "beta": -100.0,
+      "sat_factor": 1.2,
+      "gamma": 1.4,
+      "sharp_strength": 2.0
+    }
+  },
+  "pnp_offsets": {
+    "X": -29150,
+    "Y": -800,
+    "Z": 4500
+  },
+  "connector_print_offset": {
+    "X": 3750,
+    "Y": -3700,
+    "Z": 0,
+    "r": 0
+  },
+  "yolo_exe_path": "C:\\Users\\MINI Lab\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\Scripts\\yolo.exe"
 }

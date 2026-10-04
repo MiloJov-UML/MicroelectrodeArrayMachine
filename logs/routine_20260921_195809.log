@@ -1,0 +1,14 @@
+19:58:09  [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+19:58:09  [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+19:58:15  [extrude:START] pad1: extend 't' until CF_Tip is within ±300µm of pad center (calibration 1060.0µm).
+19:58:15  [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+19:58:15  [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (1728.7µm remaining)
+19:58:17  [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (1575.9µm remaining)
+19:58:18  [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (1249.1µm remaining)
+19:58:20  [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (790.6µm remaining)
+19:58:22  [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (6704.0µm remaining)
+19:58:23  [extrude:ATTEMPT 6] MOVE t -100.0µm  —  close horizontal gap to pad1 (358.4µm remaining)
+19:58:25  [extrude:DONE] pad1: CF_Tip within ±300µm of pad center after 7 attempt(s).
+19:58:26  [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+19:58:26  [pad-loop:PAD 1] MOVE Z +1720  —  raise head to laser-cut height
+19:58:29  [laser-cut:SETUP] MOVE Z +1800  —  raise head clear before positioning T

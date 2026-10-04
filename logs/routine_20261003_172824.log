@@ -1,0 +1,66 @@
+17:28:24  [origin:PRINT] navigating to saved 'print' origin.
+17:28:24  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+17:28:31  [origin:PRINT] MOVE Y +11430.0  —  move to saved 'print' origin (Y -> 2395340.000)
+17:28:36  [origin:PRINT] MOVE X +3020.0  —  move to saved 'print' origin (X -> 346767.500)
+17:28:38  [origin:PRINT] MOVE r +87.2  —  move to saved 'print' origin (r -> 3146.150)
+17:28:56  [origin:PRINT] MOVE Z +11575.0  —  move to saved 'print' origin (Z -> 2312412.500)
+17:29:04  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+17:29:04  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+17:29:07  [origin:MICROWIRE] MOVE Y -11430.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+17:29:12  [origin:MICROWIRE] MOVE X -3020.0  —  move to saved 'microwire' origin (X -> 343747.500)
+17:29:14  [origin:MICROWIRE] MOVE r -87.2  —  move to saved 'microwire' origin (r -> 3059.000)
+17:29:33  [origin:MICROWIRE] MOVE Z +8425.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+17:29:44  [origin:PROBE] navigating to saved 'probe' origin.
+17:29:44  [origin:PROBE] MOVE Z -15000  —  drop Z for clearance before XY/r move
+17:29:51  [origin:PROBE] MOVE Y +10540.0  —  move to saved 'probe' origin (Y -> 2394450.000)
+17:29:56  [origin:PROBE] MOVE X +770.0  —  move to saved 'probe' origin (X -> 344517.500)
+17:29:56  [origin:PROBE] MOVE r +87.2  —  move to saved 'probe' origin (r -> 3146.150)
+17:30:16  [origin:PROBE] MOVE Z +11205.0  —  move to saved 'probe' origin (Z -> 2312042.500)
+17:31:02  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+17:31:02  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+17:31:05  [origin:MICROWIRE] MOVE Y -10540.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+17:31:10  [origin:MICROWIRE] MOVE X -770.0  —  move to saved 'microwire' origin (X -> 343747.500)
+17:31:10  [origin:MICROWIRE] MOVE r -87.2  —  move to saved 'microwire' origin (r -> 3059.000)
+17:38:25  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+17:38:25  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+17:38:28  [origin:MICROWIRE] MOVE r -52.0  —  move to saved 'microwire' origin (r -> 3059.000)
+17:38:39  [origin:MICROWIRE] MOVE Z +13795.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+17:44:43  [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+17:44:43  [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+17:44:49  [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1060.0µm).
+17:44:49  [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+17:44:50  [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (6198.6µm remaining)
+17:44:51  [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (5727.1µm remaining)
+17:44:53  [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (5161.2µm remaining)
+17:44:54  [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (4474.8µm remaining)
+17:44:56  [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (3662.6µm remaining)
+17:44:58  [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (3206.7µm remaining)
+17:44:59  [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (2667.0µm remaining)
+17:45:01  [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (1902.0µm remaining)
+17:45:03  [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad1 (1524.8µm remaining)
+17:45:04  [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad1 (848.8µm remaining)
+17:45:06  [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 11 attempt(s).
+17:45:07  [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+17:45:07  [r_align:ANGLE] CF→GC -2.89° vs reference 0.00° (Δ-2.89°, tol ±0.5°).
+17:45:07  [r_align:ROTATE] MOVE r +2.89°  —  level CF→GC wire -2.89° → 0.00° (Δ-2.89°)
+17:45:13  [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+17:45:13  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:18  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:22  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:27  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:31  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:36  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:41  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:45  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+17:45:50  [r_align:PAD-SEARCH] MOVE X +1000µm  —  all 8 pads visible — one extra step for margin
+17:45:54  [r_align:STEP1 Y-RESTORE] MOVE Y -2143.1µm  —  return pad to its pre-rotation row (1099.5px → ref 895.0px)
+17:46:02  [r_align:STEP2 VA-RECOVER] stepping X + until VisibleArea returns to >=80% of its pre-rotation size.
+17:46:02  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 27% in frame (<80%) — stepping to bring it back
+17:46:07  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 37% in frame (<80%) — stepping to bring it back
+17:46:12  [r_align:STEP2 VA-RECOVER] VisibleArea back to 83% of pre-rotation area — recovered.
+17:46:12  [r_align:STEP2 ROUGH-CENTER] CF_Tip already at VisibleArea top-25% (±500µm) — no move.
+17:46:12  [r_align:STEP3 Y-ALIGN] MOVE Y +1629.6µm  —  match tip row to pad center (tip 1070.5px vs pad 915.0px, live)
+17:46:18  [r_align:STEP3 X-ALIGN] MOVE X -1891.6µm  —  open-loop final approach (live tip 686.0px vs pad 505.5px); tip leaves view mid-move
+17:46:25  [r_align:DONE] pad1 alignment sequence complete.
+17:46:28  [pad-loop:PAD 1] MOVE Z +1720  —  raise head to laser-cut height
+17:46:30  [laser-cut:SETUP] MOVE Z +1800  —  raise head clear before positioning T

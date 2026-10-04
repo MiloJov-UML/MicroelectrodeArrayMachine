@@ -4,30 +4,51 @@ import serial
 import time
 import re
 import serial.tools.list_ports
-from threading import Lock
+from threading import Lock, Event
 from tkinter import messagebox
 
 # Globals for motor
 motor_ser = None
 serial_lock = Lock()
+keyboard_pause = Event()  # set while a blocking GUI command is running; keyboard control suspends
+emergency_stop_event = Event()  # latched when GUI emergency stop is requested
+
+# Axis limit state set by relay_control monitor.
+# Maps axis -> the direction that is blocked (e.g. {'r': '+', 'Z': '+'}).
+# Moving in the OPPOSITE direction is always allowed so the axis can back out.
+_axis_at_limit = {}
+
+def set_axis_limit(axis, blocked_direction):
+    """Called by the relay monitor when an axis hits its limit switch."""
+    _axis_at_limit[axis] = blocked_direction
+    print(f"Axis {axis} limit set: '{blocked_direction}' direction blocked.")
+
+def clear_axis_limit(axis):
+    """Called by the relay monitor when the limit switch releases."""
+    if axis in _axis_at_limit:
+        del _axis_at_limit[axis]
+        print(f"Axis {axis} limit cleared — all directions allowed.")
 
 # Speed-related
-current_speed = 75  # default speed
-last_command_time = 0
-command_cooldown = 0.002
+current_speed = 30  # default speed
+last_command_time = {}   # per-axis key -> timestamp, avoids one axis blocking another
+command_cooldown = 0.015  # seconds — allows one full command to transmit at 9600 baud before the next
+last_any_write_time = 0.0  # timestamp of the most recent write to any axis
+last_written_axis = None   # which axis was written last
+inter_axis_delay = 0.025   # seconds to wait when switching between different axes
 
 # Hardcoded origin for each axis
-axis_origins = {
-    'X': 9530.000,
-    'Y': 27072.500,
-    'Z': 7432.500,
-    'r': 3240.210,
-    't': 1823980.000,
-    'T': 2610152.500
+axis_origins = { 
+    'X': 94127.500, 
+    'Y': 2564577.500, 
+    'Z': 2611352.500, 
+    'r': 4383.490, 
+    't': 3020520.000, 
+    'T': 2611552.500 
 }
 
 # For manual control
-base_displacement = 75     # degrees for linear axes
+base_displacement = 5     # degrees for linear axes
 r_displacement = 0.25      # degrees for rotary axis (r)
 
 def find_port(device_description: str):
@@ -72,70 +93,133 @@ def auto_connect_motor():
     else:
         messagebox.showerror("Error", "Motor control device not found.")
 
-def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retries=100, delay=0.125):
+def send_command(ser, command, device_name, axis=None, pos_tolerance=0.5, retries=100, delay=1.0, blocking=True):
     """
     Sends a command over serial and attempts to read a response.
     Includes:
       - A cooldown to avoid spamming commands.
-      - Up to 'retries' attempts to read data.
-      - If 'axis' is given, checks position each retry. If the axis 
-        hasn't moved more than 'pos_tolerance' between retries, 
-        we assume no response is coming and break early.
+      - reset_input_buffer() before each write to clear stale bytes.
+      - If blocking=False, writes the command and returns immediately —
+        used by keyboard control so X and Y pulses can interleave without
+        one axis blocking the thread while waiting for the other's response.
+      - If blocking=True, polls up to 'retries' times (delay seconds apart,
+        default 100 s total) to accommodate very slow moves.
+      - If 'axis' is given, polls position each retry and exits as soon as the
+        axis stops moving, so fast moves release the port early.
 
-    Returns the response if received, or None if no response after 
-    'retries' attempts or if the axis is no longer changing.
+    The lock covers only the write so that concurrent threads can still
+    send their own commands without waiting for a read to complete.
+
+    Returns the response if received, or None otherwise.
     """
 
-    global last_command_time
-    current_time = time.time()
+    global last_command_time, last_any_write_time, last_written_axis
 
-    # Cooldown check
-    if current_time - last_command_time < command_cooldown:
-        print(f"{device_name} command cooldown active. Skipping command '{command.strip()}'.")
+    # Derive a per-axis cooldown key from the first letter of the command.
+    # e.g. 'X+12\r' -> 'X', 'Y-8\r' -> 'Y', '?X\r' -> '?', 'V150\r' -> 'V'
+    # This lets X and Y each have their own independent cooldown so both
+    # axes can fire in the same keyboard loop iteration without blocking each other.
+    cmd_key = command[0] if command else 'general'
+
+    # Relay controller Arduino uses readStringUntil('\n') — each command must end
+    # with '\n' so the Arduino processes it immediately instead of waiting for a
+    # 1-second timeout.  Without this, rapid commands (e.g. stop turning off nordson
+    # right after a routine turned it on) arrive inside the same readStringUntil
+    # window and get concatenated into a garbage string that matches nothing.
+    if device_name == "Relay Controller" and not command.endswith('\n'):
+        command = command + '\n'
+
+    # During emergency stop, block all motor movement commands.
+    # Relay commands (laser, nordson, solenoid) are never blocked — routines abort
+    # via _abort_if_emergency_stop() and clean up in finally blocks; blocking relay
+    # commands here would break GUI toggles because the GUI runs in a non-main thread.
+    # "S" (stop) and "V" (speed) are always allowed: stop is safety-critical and
+    # speed is configuration-only, not motion.
+    # "?" (position query) is also always allowed so Query Position works after stop.
+    _cmd_stripped = command.strip()
+    if (emergency_stop_event.is_set()
+            and device_name == "Motor Controller"
+            and _cmd_stripped != "S"
+            and not _cmd_stripped.startswith("V")
+            and not _cmd_stripped.startswith("?")):
+        print(f"Emergency stop active. Skipping motor command: {_cmd_stripped}")
         return None
 
-    # Send the command
     with serial_lock:
+        now = time.time()
+        if now - last_command_time.get(cmd_key, 0) < command_cooldown:
+            print(f"{device_name} cooldown active ({cmd_key}). Skipping '{command.strip()}'.")
+            return None
+
+        # If switching to a different axis, wait for the inter-axis gap so the
+        # controller has time to finish processing the previous axis command.
+        if last_written_axis is not None and cmd_key != last_written_axis:
+            elapsed = time.time() - last_any_write_time
+            if elapsed < inter_axis_delay:
+                time.sleep(inter_axis_delay - elapsed)
+
+        # Only clear the input buffer for blocking commands (queries/slow moves).
+        # Non-blocking keyboard writes must NOT clear it — a concurrent blocking
+        # read may be waiting for a response that would be wiped.
+        if blocking:
+            ser.reset_input_buffer()
+
         ser.write(command.encode())
         print(f"Sent command to {device_name}: {command.strip()}")
-        last_command_time = current_time
+        now = time.time()
+        last_command_time[cmd_key] = now
+        last_any_write_time = now
+        last_written_axis = cmd_key
 
-    # Small initial pause before reading
-    time.sleep(0.2)
+    # Non-blocking: fire-and-forget — used by keyboard control so rapid
+    # X/Y pulses can interleave without one axis stalling the thread.
+    if not blocking:
+        return None
 
-    # If we want to track position changes, capture the old position
+    # Short initial wait — at 9600 baud a typical response arrives in ~15 ms,
+    # so we check quickly first before falling into the slower polling loop.
+    time.sleep(0.05)
+    if ser.in_waiting > 0:
+        response = ser.read(ser.in_waiting).decode('utf-8', errors='replace').strip()
+        print(f"{device_name} response: {response}")
+        return response
+
+    # Capture initial position for early-exit detection on slow moves
     old_pos = None
     if axis:
-        old_pos = get_current_position(axis)  # or your function for reading axis pos
+        old_pos = get_current_position(axis)
         if old_pos is None:
             print(f"Warning: Cannot read initial position for axis {axis}. Position check skipped.")
 
-    # Retry logic
+    # Polling loop — 1 s between checks, up to 100 s total
     for attempt in range(retries):
-        # Check if there's incoming data
+        _stripped = command.strip()
+        if (emergency_stop_event.is_set()
+                and _stripped != "S"
+                and not _stripped.startswith("V")
+                and not _stripped.startswith("?")):
+            print(f"Emergency stop active. Aborting wait for '{_stripped}'.")
+            return None
+
         if ser.in_waiting > 0:
-            response = ser.read(ser.in_waiting).decode().strip()
+            response = ser.read(ser.in_waiting).decode('utf-8', errors='replace').strip()
             print(f"{device_name} response: {response}")
             return response
-        
-        # No incoming data, so let's see if the axis is done moving
+
+        # Exit early once the axis has stopped moving
         if axis and old_pos is not None:
-            new_pos = get_current_position(axis)  # read position again
+            new_pos = get_current_position(axis)
             if new_pos is not None:
-                # If it hasn't changed much, break out (no real response is coming)
                 if abs(new_pos - old_pos) < pos_tolerance:
                     print(f"{device_name}: position stable on axis {axis}, no serial response.")
                     return None
-                # Otherwise, update old_pos for next check
                 old_pos = new_pos
             else:
                 print(f"Warning: lost position feedback for axis {axis}.")
 
-        # If we got here, no data yet, axis not stable => wait then retry
         print(f"Retrying read ({attempt + 1}/{retries})... No response yet.")
-        time.sleep(1)
+        time.sleep(delay)
 
-    # If we finish all retries, return None
     print(f"Warning: No response from {device_name} after {retries} attempts.")
     return None
 
@@ -190,6 +274,19 @@ def steps_to_µm(steps, axis, screw_pitch=2.0, steps_per_rev=200):
     µm_per_step = (screw_pitch * 2000) / (steps_per_rev * microstepping)
     return steps * µm_per_step
 
+def mm_to_um(mm_value):
+    
+    # Validate input type
+    if not isinstance(mm_value, (int, float)):
+        raise TypeError("Input must be an integer or float representing millimeters.")
+
+    # Check for invalid numeric values
+    if mm_value != mm_value or mm_value in (float("inf"), float("-inf")):
+        raise ValueError("Input must be a finite number.")
+
+    # Conversion: 1 mm = 1000 µm
+    return mm_value * 1000
+
 def convert_degrees_to_pulses(deg):
     stepper_angle_deg = 1.8
     transmission_ratio = 180
@@ -231,6 +328,9 @@ def get_current_position(axis):
         return steps_to_µm(steps, axis)
 
 def wait_for_axis_stop(axis, max_wait=None):
+    if max_wait is None:
+        max_wait = 30.0
+
     start_time = time.time()
     old_pos = get_current_position(axis)
     if old_pos is None:
@@ -238,6 +338,10 @@ def wait_for_axis_stop(axis, max_wait=None):
 
     time.sleep(0.01)
     while time.time() - start_time < max_wait:
+        if emergency_stop_event.is_set():
+            print(f"Emergency stop active while waiting for axis {axis} to stop.")
+            return False
+
         new_pos = get_current_position(axis)
         if new_pos is None:
             return False
@@ -250,13 +354,25 @@ def wait_for_axis_stop(axis, max_wait=None):
 def move_linear_stage(axis, direction, displacement_µm,
                       wait_for_stop=False, max_wait=15.0):
     global motor_ser
+
+    if emergency_stop_event.is_set():
+        print(f"Emergency stop active. Ignoring move request {axis}{direction}{displacement_µm}.")
+        return False
+
+    # Directional limit guard: block moves further into a triggered limit switch
+    # but always allow backing out in the opposite direction.
+    blocked_dir = _axis_at_limit.get(axis)
+    if blocked_dir and direction == blocked_dir:
+        print(f"Axis {axis} is at its limit ('{blocked_dir}' blocked). Move skipped — back out with '{'-' if blocked_dir == '+' else '+'}' first.")
+        return False
+
     if not motor_ser:
         messagebox.showerror("Error", "Not connected to motor control device.")
-        return
+        return False
 
     if axis not in ['X','Y','Z','r','t','T'] or direction not in ['+','-']:
         messagebox.showerror("Error", f"Invalid axis '{axis}' or direction '{direction}'.")
-        return
+        return False
 
     try:
         if axis == 'r':
@@ -265,8 +381,14 @@ def move_linear_stage(axis, direction, displacement_µm,
             steps = µm_to_steps(displacement_µm, axis)
 
         cmd = f"{axis}{direction}{int(steps)}\r"
-        resp = send_command(motor_ser, cmd, "Motor Controller")
-        if not resp:
+
+        if wait_for_stop:
+            # Suspend keyboard control for the full duration of this blocking
+            # command so keyboard pulses don't corrupt the serial read loop.
+            keyboard_pause.set()
+
+        resp = send_command(motor_ser, cmd, "Motor Controller", blocking=wait_for_stop)
+        if not resp and wait_for_stop:
             print(f"Warning: No response for movement on axis {axis}.")
 
         if wait_for_stop:
@@ -275,17 +397,52 @@ def move_linear_stage(axis, direction, displacement_µm,
                 print(f"Warning: axis {axis} may still be moving after {max_wait}s.")
             else:
                 print(f"Axis {axis} move complete.")
+        return True
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
         print(f"Exception: {e}")
+        return False
+    finally:
+        # Always clear the pause flag, even if an exception occurred.
+        if wait_for_stop:
+            keyboard_pause.clear()
+
+def flush_serial():
+    """Clear both serial buffers. Call when switching between keyboard and GUI modes."""
+    global motor_ser
+    if motor_ser:
+        with serial_lock:
+            motor_ser.reset_input_buffer()
+            motor_ser.reset_output_buffer()
+        print("Serial buffers flushed.")
 
 def stop_motor_control():
     global motor_ser
     if motor_ser:
-        send_command(motor_ser, "STOP", "Motor Controller")
+        # Controller stop command is "S\r" (not "STOP") per the manufacturer example.
+        # Use blocking=False so it fires immediately without waiting for a response.
+        send_command(motor_ser, "S\r", "Motor Controller", blocking=False)
+        # Clear any pause state and flush buffers so the port is clean after stop.
+        keyboard_pause.clear()
+        flush_serial()
         print("Motor control stopped.")
     else:
         messagebox.showerror("Error", "Not connected to motor control device.")
+
+def emergency_stop_motors():
+    """Latch emergency stop state and send immediate stop to motor controller."""
+    emergency_stop_event.set()
+    stop_motor_control()
+    print("Emergency stop latched.")
+
+def clear_emergency_stop():
+    """Clear latched emergency stop state so routines can run again."""
+    if emergency_stop_event.is_set():
+        emergency_stop_event.clear()
+        print("Emergency stop cleared.")
+
+def is_emergency_stop_requested():
+    return emergency_stop_event.is_set()
 
 def query_all_axes_positions():
     axes_list = ['X','Y','Z','r','t','T']
@@ -298,6 +455,22 @@ def query_all_axes_positions():
             print(f"Axis {ax}: {pos:.3f}")
     print("--- End of Query ---\n")
 
+def set_origin_to_current():
+    """
+    Sets the origin values in axis_origins dictionary to the current position of each axis.
+    """
+    global axis_origins
+    axes_list = ['X','Y','Z','r','t','T']
+    print("\n--- Setting New Origin Values ---")
+    for ax in axes_list:
+        pos = get_current_position(ax)
+        if pos is None:
+            print(f"Axis {ax}: position unknown, origin not updated")
+        else:
+            axis_origins[ax] = pos
+            print(f"Axis {ax}: origin set to {pos:.3f}")
+    print("--- Origin Values Updated ---\n")
+
 def return_to_origin():
     axes_to_move = ['X','Y','Z','r','T']  # skip 't'
     print("\n--- Moving All Axes to Stored Origins ---")
@@ -308,8 +481,11 @@ def return_to_origin():
             continue
         origin_pos = axis_origins[ax]
         diff = origin_pos - current_pos
-        direction = '+' if diff >= 0 else '-'
         displacement = abs(diff)
+        if displacement < 10.0:
+            print(f"Axis {ax}: already at origin ({current_pos:.3f}), skipping.")
+            continue
+        direction = '+' if diff >= 0 else '-'
         print(f"Moving axis {ax} from {current_pos:.3f} to {origin_pos:.3f}...")
         move_linear_stage(ax, direction, displacement, wait_for_stop=True, max_wait=30.0)
     print("--- Finished Moving All Axes ---\n")

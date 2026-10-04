@@ -1,0 +1,97 @@
+20:07:35  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:07:35  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:07:38  [origin:MICROWIRE] MOVE X +6000.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:07:41  [origin:MICROWIRE] MOVE Z +9800.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:11:53  [laser-cut:T-MOVE] MOVE T -382.5µm  —  position T at cut start (target 2614212.5µm)
+20:11:53  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:12:00  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:12:08  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:12:08  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:12:11  [origin:MICROWIRE] MOVE X +3900.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:12:13  [origin:MICROWIRE] MOVE Z +3400.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:12:15  [origin:MICROWIRE] MOVE r +0.5  —  move to saved 'microwire' origin (r -> 3059.000)
+20:14:25  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:14:26  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:14:28  [origin:MICROWIRE] MOVE Y -6100.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+20:14:31  [origin:MICROWIRE] MOVE Z +5000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:15:34  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:15:34  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:15:36  [origin:MICROWIRE] MOVE Y -12000.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+20:15:42  [origin:MICROWIRE] MOVE Z +7000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:17:15  [laser-cut:T-MOVE] MOVE T -382.5µm  —  position T at cut start (target 2614212.5µm)
+20:17:15  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:17:22  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:17:29  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+20:17:35  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 4/5 (target 2614212.5µm)
+20:17:41  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:17:41  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:17:44  [origin:MICROWIRE] MOVE X +1700.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:17:45  [origin:MICROWIRE] MOVE Z +3400.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:20:28  [laser-cut:T-MOVE] MOVE T -545.0µm  —  position T at cut start (target 2614212.5µm)
+20:20:28  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:20:35  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:20:42  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:20:42  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:20:45  [origin:MICROWIRE] MOVE X +3000.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:20:47  [origin:MICROWIRE] MOVE Z +2877.5  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:22:13  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:22:13  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:22:16  [origin:MICROWIRE] MOVE Y -12000.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+20:22:22  [origin:MICROWIRE] MOVE Z +6000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:23:13  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:23:13  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:23:16  [origin:MICROWIRE] MOVE Z +6000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:23:19  [origin:MICROWIRE] MOVE r -1.0  —  move to saved 'microwire' origin (r -> 3059.000)
+20:23:40  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:23:40  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:23:43  [origin:MICROWIRE] MOVE Z +5000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:23:45  [origin:MICROWIRE] MOVE r -1.0  —  move to saved 'microwire' origin (r -> 3059.000)
+20:25:25  [laser-cut:T-MOVE] MOVE T -427.5µm  —  position T at cut start (target 2614212.5µm)
+20:25:26  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:25:32  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:25:37  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:25:37  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:25:40  [origin:MICROWIRE] MOVE Y +1700.0  —  move to saved 'microwire' origin (Y -> 2383910.000)
+20:25:41  [origin:MICROWIRE] MOVE X -9200.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:25:45  [origin:MICROWIRE] MOVE Z +3500.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:25:47  [origin:MICROWIRE] MOVE r -3.3  —  move to saved 'microwire' origin (r -> 3059.000)
+20:30:29  [laser-cut:T-MOVE] MOVE T -820.0µm  —  position T at cut start (target 2614212.5µm)
+20:30:30  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:30:37  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:30:43  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+20:30:50  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 4/5 (target 2614212.5µm)
+20:30:57  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 5/5 (target 2615212.5µm)
+20:31:13  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  position T at cut start (target 2614212.5µm)
+20:31:19  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:31:26  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:31:33  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+20:31:39  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 4/5 (target 2614212.5µm)
+20:31:46  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 5/5 (target 2615212.5µm)
+20:32:36  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  position T at cut start (target 2614212.5µm)
+20:32:42  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:32:49  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:32:56  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+20:33:02  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 4/5 (target 2614212.5µm)
+20:33:09  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 5/5 (target 2615212.5µm)
+20:33:30  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:33:30  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:33:33  [origin:MICROWIRE] MOVE X +5000.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:33:36  [origin:MICROWIRE] MOVE Z +3400.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:46:27  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:46:27  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:46:30  [origin:MICROWIRE] MOVE Z +6000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:46:33  [origin:MICROWIRE] MOVE r -30.0  —  move to saved 'microwire' origin (r -> 3059.000)
+20:52:11  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  position T at cut start (target 2614212.5µm)
+20:52:13  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+20:52:20  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+20:52:26  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+20:52:29  [laser-cut:T-MOVE] MOVE T -402.5µm  —  cut pass 4/5 (target 2614212.5µm)
+20:52:32  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:52:32  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:52:35  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 5/5 (target 2615212.5µm)
+20:52:36  [origin:MICROWIRE] MOVE Z +5100.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+20:52:39  [origin:MICROWIRE] MOVE r -0.8  —  move to saved 'microwire' origin (r -> 3059.000)
+20:53:11  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:53:11  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:53:14  [origin:MICROWIRE] MOVE X +3000.0  —  move to saved 'microwire' origin (X -> 343747.500)
+20:53:16  [origin:MICROWIRE] MOVE Z +5000.0  —  move to saved 'microwire' origin (Z -> 2315837.500)

@@ -1,0 +1,4 @@
+19:53:45  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+19:53:45  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+19:53:48  [origin:MICROWIRE] MOVE Z +11220.0  —  move to saved 'microwire' origin (Z -> 2315837.500)
+19:53:53  [origin:MICROWIRE] MOVE r -4.0  —  move to saved 'microwire' origin (r -> 3059.000)

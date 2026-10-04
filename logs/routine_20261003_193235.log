@@ -1,0 +1,37 @@
+19:32:35  [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+19:32:35  [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+19:32:41  [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1060.0µm).
+19:32:41  [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+19:32:41  [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (3278.3µm remaining)
+19:32:43  [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (3246.8µm remaining)
+19:32:45  [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (3042.2µm remaining)
+19:32:46  [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (2774.7µm remaining)
+19:32:48  [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (2328.9µm remaining)
+19:32:49  [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (1841.1µm remaining)
+19:32:51  [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (1232.6µm remaining)
+19:32:53  [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (545.5µm remaining)
+19:32:54  [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 9 attempt(s).
+19:32:55  [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+19:32:55  [r_align:ANGLE] CF→GC -3.30° vs reference 0.00° (Δ-3.30°, tol ±0.5°).
+19:32:55  [r_align:ROTATE] MOVE r +3.30°  —  level CF→GC wire -3.30° → 0.00° (Δ-3.30°)
+19:33:02  [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+19:33:02  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:07  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:11  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:16  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:20  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:25  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:30  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:34  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:39  [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+19:33:43  [r_align:PAD-SEARCH] MOVE X +1000µm  —  all 8 pads visible — one extra step for margin
+19:33:48  [r_align:STEP1 Y-RESTORE] MOVE Y -2869.1µm  —  return pad to its pre-rotation row (1107.0px → ref 833.5px)
+19:33:59  [r_align:STEP2 VA-RECOVER] stepping X + until VisibleArea returns to >=50% of its pre-rotation size.
+19:33:59  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 12% in frame (<50%) — stepping to bring it back
+19:34:03  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 19% in frame (<50%) — stepping to bring it back
+19:34:08  [r_align:STEP2 VA-RECOVER] MOVE X +1000µm  —  VisibleArea only 43% in frame (<50%) — stepping to bring it back
+19:34:12  [r_align:STEP2 VA-RECOVER] VisibleArea back to 62% of pre-rotation area — recovered.
+19:34:12  [r_align:STEP2 ROUGH-CENTER] MOVE X +778.9µm  —  bring live CF_Tip to VisibleArea top-25% so tip & pad are both detectable
+19:34:17  [r_align:STEP3 Y-ALIGN] MOVE Y +3194.3µm  —  match tip row to pad center (tip 1051.0px vs pad 746.5px, live)
+19:34:29  [r_align:STEP3 Y-ALIGN] MOVE Y +3383.2µm  —  match tip row to pad center (tip 1049.5px vs pad 727.0px, live)
+19:34:43  [r_align:STEP3 Y-ALIGN] MOVE Y +3608.7µm  —  match tip row to pad center (tip 1049.5px vs pad 705.5px, live)
