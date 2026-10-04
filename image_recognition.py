@@ -1174,10 +1174,11 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
 
     # ── Step 2: recover the VisibleArea back into frame ──────────────────────
     # The rotation (and pad search / Step 1) often leaves the VisibleArea only
-    # partially in frame. Keep stepping X 1000µm in the rotation-decided direction
+    # partially in frame. Keep stepping X 1600µm in the rotation-decided direction
     # until the live VisibleArea area is >=50% of its pre-rotation area (>100% is
     # fine). This gets both objects visible for the fine alignment below.
     VA_AREA_FRAC = 0.50
+    VA_STEP_UM = 1600
     VA_MAX_STEPS = 25
     if va_area_before is not None and va_area_before > 0:
         _align_report("STEP2 VA-RECOVER", f"stepping X {step_dir} until VisibleArea returns to >={VA_AREA_FRAC * 100:.0f}% of its pre-rotation size.")
@@ -1192,9 +1193,9 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
             if frac >= VA_AREA_FRAC:
                 _align_report("STEP2 VA-RECOVER", f"VisibleArea back to {frac * 100:.0f}% of pre-rotation area — recovered.")
                 break
-            _align_move_report("STEP2 VA-RECOVER", "X", step_dir, "1000µm",
+            _align_move_report("STEP2 VA-RECOVER", "X", step_dir, f"{VA_STEP_UM}µm",
                                f"VisibleArea only {frac * 100:.0f}% in frame (<{VA_AREA_FRAC * 100:.0f}%) — stepping to bring it back")
-            move_linear_stage("X", step_dir, 1000, wait_for_stop=True, max_wait=30.0)
+            move_linear_stage("X", step_dir, VA_STEP_UM, wait_for_stop=True, max_wait=30.0)
             time.sleep(1.0)  # let YOLO refresh
         else:
             _align_report("STEP2 VA-RECOVER", f"WARNING: VisibleArea below {VA_AREA_FRAC * 100:.0f}% after {VA_MAX_STEPS} steps; continuing.")
@@ -1257,7 +1258,7 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         Y_ALIGN_MAX_MISSES = 3
         Y_ALIGN_MAX_STEP_UM = 1500   # cap per move so one bad reading can't fling the stage
         Y_ALIGN_WORSE_UM = 100       # error growth that counts as "moved the wrong way"
-        sign_flip = 1                # +1: cf right of pad -> '-Y' ; -1: flipped by feedback
+        sign_flip = 1                # +1: cf right of pad -> '+Y' (hardware-tested); -1: flipped by feedback
         prev_err_µm = None
         prev_move_µm = 0.0
         misses = 0
@@ -1289,7 +1290,7 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
                 sign_flip = -sign_flip
                 _align_report("STEP3 Y-ALIGN", f"error grew {prev_err_µm:.1f}µm → {delta_x_µm:.1f}µm after last move — reversing direction.")
             move_µm = min(delta_x_µm, Y_ALIGN_MAX_STEP_UM)
-            dir_y = '-' if (delta_x_px >= 0) == (sign_flip > 0) else '+'
+            dir_y = '+' if (delta_x_px >= 0) == (sign_flip > 0) else '-'
             _align_move_report("STEP3 Y-ALIGN", "Y", dir_y, f"{move_µm:.1f}µm",
                                f"match tip column to pad center (tip {cf_x:.1f}px vs pad {pad_cx:.1f}px, live, off {delta_x_µm:.1f}µm)")
             update_speed(3)
