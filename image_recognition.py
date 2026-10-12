@@ -1325,7 +1325,7 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         Y_ALIGN_TOL_UM = 250
         Y_ALIGN_MAX_ITERS = 15
         Y_ALIGN_MAX_MISSES = 3
-        Y_ALIGN_MAX_STEP_UM = 500    # small capped steps: re-check live after each so it can't overshoot
+        Y_ALIGN_MAX_STEP_UM = 1000   # small capped steps: re-check live after each so it can't overshoot
         Y_ALIGN_WORSE_UM = 100       # error growth that counts as "moved the wrong way"
         sign_flip = 1                # +1: cf right of pad -> '-Y' (hardware-tested); -1: flipped by feedback
         prev_err_µm = None

@@ -337,9 +337,9 @@ def start_routine_thread(target, routine_name):
     routine_thread = threading.Thread(target=runner, daemon=True)
     routine_thread.start()
 
-def run_full_assembly(run_calibration=True):
+def run_full_assembly(run_calibration=True, run_sacrificial=True):
     try:
-        full_sequence(run_calibration=run_calibration)
+        full_sequence(run_calibration=run_calibration, run_sacrificial=run_sacrificial)
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("Metal ink routine stopped by emergency stop.")
@@ -2509,16 +2509,27 @@ def launch_gui():
 
     # Button: Full Assembly
     calib_var = tk.IntVar(value=0)
+    sac_var = tk.IntVar(value=0)
+    print_opts_frame = tk.Frame(root)
+    print_opts_frame.pack(pady=(5, 0))
     tk.Checkbutton(
-        root,
+        print_opts_frame,
         text="Run Calibration Before Printing",
         variable=calib_var
-    ).pack(pady=(5, 0))
+    ).pack(side='left')
+    tk.Checkbutton(
+        print_opts_frame,
+        text="Sacrificial Print",
+        variable=sac_var
+    ).pack(side='left', padx=(10, 0))
     tk.Button(
         root,
         text="Print Metal Ink Traces/Pads",
         command=lambda: start_routine_thread(
-            lambda: run_full_assembly(run_calibration=bool(calib_var.get())),
+            lambda: run_full_assembly(
+                run_calibration=bool(calib_var.get()),
+                run_sacrificial=bool(sac_var.get()),
+            ),
             "run_full_assembly"
         )
     ).pack(pady=5)

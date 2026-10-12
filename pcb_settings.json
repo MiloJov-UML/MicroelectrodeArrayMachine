@@ -1,6 +1,6 @@
 {
   "pad_count": 8,
-  "pad_spacing": 1060.0,
+  "pad_spacing": 1000.0,
   "trace_tuning": {
     "connector_cl_drop_mm": 2.5,
     "corner_mm": 0.5,
@@ -18,10 +18,10 @@
     "Z": 2312042.5
   },
   "print_origin_coords": {
-    "X": 346767.5,
-    "Y": 2395340.0,
-    "Z": 2312412.5,
-    "r": 3146.15
+    "X": 343362.5,
+    "Y": 2396040.0,
+    "r": 3146.15,
+    "Z": 2311662.5
   },
   "microwire_origin": {
     "X": 344247.5,

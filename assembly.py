@@ -1266,7 +1266,7 @@ def microwire_origin_setup():
     _microwire_origin_saved = {k: v for k, v in pos.items() if v is not None}
     _save_origin('microwire_origin', _microwire_origin_saved)
 
-def full_sequence(run_calibration=True):
+def full_sequence(run_calibration=True, run_sacrificial=True):
     global _has_calibrated
     clear_emergency_stop()
     # Flush the PC-side serial buffer so any bytes left over from a previous
@@ -1287,12 +1287,17 @@ def full_sequence(run_calibration=True):
                 print("Skipping calibration (already calibrated this session).")
         else:
             print("Calibration skipped by user.")
-            # Navigate to probe origin so the sacrificial print is in the right place
-            if _probe_origin:
-                print("Navigating to probe origin for sacrificial print...")
+            # The probe origin is only needed as the starting point for the
+            # sacrificial print or the print-origin fallback offsets; otherwise
+            # go straight to the saved print origin.
+            if _probe_origin and (run_sacrificial or not _print_origin_saved):
+                print("Navigating to probe origin...")
                 _navigate_to_saved_origin(_probe_origin, ['X', 'Y', 'r', 'Z'])
         _abort_if_emergency_stop()
-        sacrificial_print()
+        if run_sacrificial:
+            sacrificial_print()
+        else:
+            print("Sacrificial print skipped by user.")
         _abort_if_emergency_stop()
         print_origin()
         print_pcb()
