@@ -1,0 +1,47 @@
+20:03:52.862  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-10-19\camera2_20261019_200352.avi start=2026-10-19T20:03:52.862
+20:04:45.373  [origin:PRINT] navigating to saved 'print' origin.
+20:04:45.528  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:04:52.198  [origin:PRINT] MOVE Y -900.0  —  move to saved 'print' origin (Y -> 2398850.000)
+20:06:57.433  [origin:PRINT] navigating to saved 'print' origin.
+20:06:57.587  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:07:00.242  [origin:PRINT] MOVE X +22.5  —  move to saved 'print' origin (X -> 340717.500)
+20:07:00.949  [origin:PRINT] MOVE r +23.3  —  move to saved 'print' origin (r -> 3146.150)
+20:07:06.615  [origin:PRINT] MOVE Z +20000.0  —  move to saved 'print' origin (Z -> 2311342.500)
+20:07:08.398  [camera2:RECORDING STOP] frames_written=1297
+20:11:08.592  [origin:PRINT] navigating to saved 'print' origin.
+20:11:08.799  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:11:15.459  [origin:PRINT] MOVE Y +4447.5  —  move to saved 'print' origin (Y -> 2398850.000)
+20:13:07.675  [origin:PRINT] navigating to saved 'print' origin.
+20:13:07.880  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:13:10.589  [origin:PRINT] MOVE Y +3167.5  —  move to saved 'print' origin (Y -> 2398850.000)
+20:13:12.244  [origin:PRINT] MOVE r +30.0  —  move to saved 'print' origin (r -> 3146.150)
+20:13:18.909  [origin:PRINT] MOVE Z +20000.0  —  move to saved 'print' origin (Z -> 2311042.500)
+20:16:25.826  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-10-19_1\camera2_20261019_201625.avi start=2026-10-19T20:16:25.826
+20:20:31.323  [origin:PRINT] navigating to saved 'print' origin.
+20:20:31.478  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:20:38.139  [origin:PRINT] MOVE Y -887.5  —  move to saved 'print' origin (Y -> 2398850.000)
+20:20:38.794  [origin:PRINT] MOVE X -1750.0  —  move to saved 'print' origin (X -> 340717.500)
+20:22:19.401  [origin:PRINT] navigating to saved 'print' origin.
+20:22:19.556  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:22:22.214  [origin:PRINT] MOVE X -817.5  —  move to saved 'print' origin (X -> 340717.500)
+20:22:22.923  [origin:PRINT] MOVE r +30.0  —  move to saved 'print' origin (r -> 3146.150)
+20:22:29.585  [origin:PRINT] MOVE Z +20000.0  —  move to saved 'print' origin (Z -> 2310942.500)
+20:23:24.957  [camera2:RECORDING STOP] frames_written=2777
+20:28:39.929  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-10-19_2\camera2_20261019_202839.avi start=2026-10-19T20:28:39.929
+20:44:06.407  [origin:PRINT] navigating to saved 'print' origin.
+20:44:06.563  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:44:09.219  [origin:PRINT] MOVE X -3827.5  —  move to saved 'print' origin (X -> 340717.500)
+20:44:11.390  [origin:PRINT] MOVE Y +4700.0  —  move to saved 'print' origin (Y -> 2398850.000)
+20:44:14.048  [origin:PRINT] MOVE r +30.0  —  move to saved 'print' origin (r -> 3146.150)
+20:44:20.707  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2311322.500)
+20:44:47.802  [origin:PRINT] navigating to saved 'print' origin.
+20:44:48.271  [origin:PRINT] MOVE Z +7860.0  —  move to saved 'print' origin (Z -> 2311322.500)
+20:45:14.054  [camera2:RECORDING STOP] frames_written=6579
+20:46:08.106  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-10-19_3\camera2_20261019_204608.avi start=2026-10-19T20:46:08.106
+21:00:04.450  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+21:00:04.553  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:00:07.208  [origin:MICROWIRE] MOVE Y -12240.0  —  move to saved 'microwire' origin (Y -> 2381910.000)
+21:00:10.936  [camera2:RECORDING STOP] frames_written=5576
+21:00:12.872  [origin:MICROWIRE] MOVE X -297.5  —  move to saved 'microwire' origin (X -> 344247.500)
+21:00:13.526  [origin:MICROWIRE] MOVE r -87.2  —  move to saved 'microwire' origin (r -> 3059.000)
+21:00:32.713  [origin:MICROWIRE] MOVE Z +19515.0  —  move to saved 'microwire' origin (Z -> 2315837.500)

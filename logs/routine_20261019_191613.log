@@ -1,0 +1,6 @@
+19:16:13.194  [origin:PROBE] navigating to saved 'probe' origin.
+19:16:13.351  [origin:PROBE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+19:16:16.011  [origin:PROBE] MOVE X +1155.0  —  move to saved 'probe' origin (X -> 344517.500)
+19:16:17.166  [origin:PROBE] MOVE Y -1590.0  —  move to saved 'probe' origin (Y -> 2394450.000)
+19:16:18.320  [origin:PROBE] MOVE r +40.0  —  move to saved 'probe' origin (r -> 3146.150)
+19:16:27.482  [origin:PROBE] MOVE Z +15380.0  —  move to saved 'probe' origin (Z -> 2312042.500)

@@ -1266,6 +1266,72 @@ def microwire_origin_setup():
     _microwire_origin_saved = {k: v for k, v in pos.items() if v is not None}
     _save_origin('microwire_origin', _microwire_origin_saved)
 
+# PRINT LEVELING
+LEVEL_X_SWEEP_UM = 7000   # X sweep length used to check/adjust roll
+LEVEL_Y_SWEEP_UM = 9000   # Y sweep length used to check/adjust pitch
+
+_level_choice_event = threading.Event()
+_level_is_level = False
+_level_ask_callback = None  # callable(axis_label: str, adjust_name: str) registered by the GUI
+
+def register_level_ask_callback(callback):
+    """Register a GUI callable(axis_label, adjust_name) that asks the user whether the axis is level."""
+    global _level_ask_callback
+    _level_ask_callback = callback
+
+def notify_level_choice(is_level: bool):
+    """Called by the GUI with the user's answer: True = level, False = adjusted/not level yet."""
+    global _level_is_level
+    _level_is_level = is_level
+    _level_choice_event.set()
+
+def _ask_if_level(axis_label, adjust_name):
+    """Block until the user says whether the axis is level."""
+    if _level_ask_callback is None:
+        raise RuntimeError("No print-leveling prompt registered.")
+    _level_choice_event.clear()
+    _level_ask_callback(axis_label, adjust_name)
+    while not _level_choice_event.wait(0.1):
+        _abort_if_emergency_stop()
+    return _level_is_level
+
+def _level_axis(axis_label, adjust_name, sweep_fn, return_fn, length):
+    """Sweep out, let the user adjust, sweep back; repeat until the user reports level."""
+    while True:
+        _abort_if_emergency_stop()
+        print(f"[Leveling] {axis_label}: sweeping {length} µm")
+        sweep_fn(length)
+        level = _ask_if_level(axis_label, adjust_name)
+        _abort_if_emergency_stop()
+        return_fn(length)
+        if level:
+            print(f"[Leveling] {axis_label} confirmed level.")
+            return
+        print(f"[Leveling] {axis_label} not level yet — repeating sweep.")
+
+def print_leveling():
+    """Go to the print origin (with fine-tune), level X (roll) then Y (pitch)
+    by repeated sweeps, then run a rectangular move as a final check."""
+    prev_speed = get_current_speed()
+    try:
+        _abort_if_emergency_stop()
+        print("--- Print leveling ---")
+        print_origin()
+        _abort_if_emergency_stop()
+        update_speed(30)
+
+        _level_axis("X axis (roll)", "roll", right, left, LEVEL_X_SWEEP_UM)
+        _level_axis("Y axis (pitch)", "pitch", front, back, LEVEL_Y_SWEEP_UM)
+
+        print("[Leveling] Final rectangular check...")
+        for move, length in ((front, LEVEL_Y_SWEEP_UM), (right, LEVEL_X_SWEEP_UM),
+                             (back, LEVEL_Y_SWEEP_UM), (left, LEVEL_X_SWEEP_UM)):
+            _abort_if_emergency_stop()
+            move(length)
+        print("--- Print leveling complete ---")
+    finally:
+        update_speed(prev_speed)
+
 def full_sequence(run_calibration=True, run_sacrificial=True):
     global _has_calibrated
     clear_emergency_stop()

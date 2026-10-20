@@ -377,10 +377,11 @@ def custom_annotate(results, img, camera_index=0):
 
     return annotated_img
 
-def draw_axis_compass(img):
+def draw_axis_compass(img, rotate_ccw_90=False):
     """Overlay a compass showing which motor axis moves the stage each way.
 
-    Up=-X, Down=+X, Left=+Y, Right=-Y.
+    Up=+X, Down=-X, Left=+Y, Right=-Y. With rotate_ccw_90 the compass is rotated
+    90 degrees counter-clockwise: Left=+X, Right=-X, Down=+Y, Up=-Y.
     """
     h, w = img.shape[:2]
     arm = 60                 # arrow length in pixels
@@ -394,13 +395,15 @@ def draw_axis_compass(img):
 
     # (dx, dy, label) for each direction. dy is negative going up (screen coords).
     directions = [
-        (0, -1, "-X"),   # up
-        (0,  1, "X"),    # down
+        (0, -1, "X"),    # up
+        (0,  1, "-X"),   # down
         (-1, 0, "Y"),    # left
         (1,  0, "-Y"),   # right
     ]
 
     for dx, dy, label in directions:
+        if rotate_ccw_90:
+            dx, dy = dy, -dx   # 90 deg CCW on screen (y axis points down)
         end = (cx + dx * arm, cy + dy * arm)
         cv2.arrowedLine(img, (cx, cy), end, color, thickness, tipLength=0.3)
 
@@ -584,6 +587,8 @@ def open_camera(camera_index=0, model_path="best.pt"):
         display_frame = annotated_frame
         if camera_index == 0:
             display_frame = draw_axis_compass(annotated_frame.copy())
+        elif camera_index == 2:
+            display_frame = draw_axis_compass(annotated_frame.copy(), rotate_ccw_90=True)
 
         cv2.imshow(f"Camera {camera_index}", display_frame)
         if cv2.waitKey(1)&0xFF==ord('q'):
@@ -1025,7 +1030,7 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
  
     # Convert to physical distance
     delta_steps = delta_y_px * steps_pp
-    delta_µm = steps_to_µm(abs(delta_steps), axis='X') - 250 # Adjust for camera offset 
+    delta_µm = steps_to_µm(abs(delta_steps), axis='X')
  
     # Determine movement direction
     direction = '-' if delta_y_px >= 0 else '+'
@@ -1380,11 +1385,10 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         if tbox is None or cf_snap is None:
             _align_report("STEP3 X-ALIGN", "missing pad/CF_Tip snapshot — skipping X align.")
         else:
-            # Same target point and camera-offset correction as x_align(): 33% up from
-            # the pad's bottom edge, minus 250µm.
+            # Same target point as x_align(): 33% up from the pad's bottom edge.
             pad_cy = tbox[3] - 0.33 * (tbox[3] - tbox[1])
             delta_y_px = cf_snap[1] - pad_cy
-            delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_f), axis='X') - 250
+            delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_f), axis='X')
             if abs(delta_y_µm) <= FINE_TOL_UM:
                 _align_report("STEP3 X-ALIGN", f"CF_Tip already on pad row (±{FINE_TOL_UM}µm) — no move.")
             else:

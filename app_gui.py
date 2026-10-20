@@ -68,6 +68,9 @@ from assembly import (
     notify_fine_tune_choice,
     register_origin_prompt_callback,
     register_origin_ask_callback,
+    register_level_ask_callback,
+    notify_level_choice,
+    print_leveling,
     microwire_origin_setup,
     reload_origins,
     save_connector_print_offset,
@@ -2433,6 +2436,84 @@ def launch_gui():
     register_origin_ask_callback(show_origin_ask)
     register_origin_prompt_callback(show_origin_prompt)
 
+    def show_level_ask(axis_label, adjust_name):
+        """Non-modal prompt (so the main window and keyboard controls stay usable)
+        with Z jog buttons for adjusting height while the PCB holder is leveled."""
+        def _do_ask():
+            win = Toplevel(root)
+            win.title(f"Print Leveling — {axis_label}")
+            win.resizable(False, False)
+            win.attributes('-topmost', True)
+            answered = [False]
+
+            tk.Label(
+                win,
+                text=(f"The stage is at the end of the {axis_label} sweep.\n"
+                      f"Adjust the PCB holder {adjust_name} and/or Z height if needed."),
+                justify='left',
+            ).pack(padx=14, pady=(12, 6))
+
+            z_frame = tk.LabelFrame(win, text="Z adjust")
+            z_frame.pack(padx=14, pady=6)
+            tk.Label(z_frame, text="Step (µm):").grid(row=0, column=0, padx=6, pady=6)
+            step_entry = tk.Entry(z_frame, width=7)
+            step_entry.insert(0, "100")
+            step_entry.grid(row=0, column=1, padx=6, pady=6)
+
+            def jog_z(direction):
+                try:
+                    step = abs(float(step_entry.get().strip()))
+                except ValueError:
+                    messagebox.showerror("Error", "Invalid Z step.", parent=win)
+                    return
+                z_up_btn.config(state='disabled')
+                z_down_btn.config(state='disabled')
+
+                def worker():
+                    try:
+                        move_linear_stage('Z', direction, step, wait_for_stop=True, max_wait=30.0)
+                    except Exception as e:
+                        print(f"[Leveling] Z jog failed: {e}")
+                    finally:
+                        def _reenable():
+                            if win.winfo_exists():
+                                z_up_btn.config(state='normal')
+                                z_down_btn.config(state='normal')
+                        root.after(0, _reenable)
+                threading.Thread(target=worker, daemon=True).start()
+
+            z_up_btn = tk.Button(z_frame, text="Z Up", width=8, command=lambda: jog_z('+'))
+            z_up_btn.grid(row=0, column=2, padx=6, pady=6)
+            z_down_btn = tk.Button(z_frame, text="Z Down", width=8, command=lambda: jog_z('-'))
+            z_down_btn.grid(row=0, column=3, padx=6, pady=6)
+
+            def answer(is_level):
+                answered[0] = True
+                win.destroy()
+                notify_level_choice(is_level)
+
+            tk.Label(win, text=f"Is the {axis_label} level?").pack(pady=(6, 2))
+            btns = tk.Frame(win)
+            btns.pack(pady=(2, 12))
+            tk.Button(btns, text="Yes — level, continue", command=lambda: answer(True)).pack(side='left', padx=8)
+            tk.Button(btns, text="No — sweep again", command=lambda: answer(False)).pack(side='left', padx=8)
+
+            # Treat closing the window as "not level yet"; close it if the routine was stopped.
+            win.protocol("WM_DELETE_WINDOW", lambda: answer(False))
+
+            def _close_if_stopped():
+                if answered[0] or not win.winfo_exists():
+                    return
+                if is_emergency_stop_requested():
+                    answered[0] = True
+                    win.destroy()
+                    return
+                win.after(200, _close_if_stopped)
+            win.after(200, _close_if_stopped)
+        _gui_request_queue.put(_do_ask)
+
+    register_level_ask_callback(show_level_ask)
+
     # Named-origin controls
     origin_mode_var = tk.StringVar(value='probe')
 
@@ -2506,6 +2587,23 @@ def launch_gui():
     tk.Button(root, text="Settings", command=lambda: open_settings_window(root)).pack(pady=5)
 
     tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
+
+    # Button: Print Leveling
+    def run_print_leveling():
+        clear_emergency_stop()
+        flush_serial()
+        try:
+            print_leveling()
+        except RuntimeError as e:
+            if str(e) == "Emergency stop requested.":
+                print("Print leveling stopped by emergency stop.")
+            else:
+                raise
+
+    tk.Button(
+        root, text="Print Leveling",
+        command=lambda: start_routine_thread(run_print_leveling, "print_leveling")
+    ).pack(pady=5)
 
     # Button: Full Assembly
     calib_var = tk.IntVar(value=0)
