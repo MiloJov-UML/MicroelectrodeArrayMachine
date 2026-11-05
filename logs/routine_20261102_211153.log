@@ -1,0 +1,153 @@
+21:11:53.898  [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:11:54.053  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:12:00.713  [origin:CONNECTOR] MOVE Y -1450.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+21:12:01.869  [origin:CONNECTOR] MOVE X +27650.0  —  move to saved 'connector' origin (X -> 342467.500)
+21:12:14.090  [origin:CONNECTOR] MOVE Z +9800.0  —  move to saved 'connector' origin (Z -> 2311285.000)
+21:19:18.230  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-02\camera2_20261102_211918.avi start=2026-11-02T21:19:18.230
+21:19:18.231  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-02\camera0_20261102_211918.avi start=2026-11-02T21:19:18.231
+21:19:18.232  [cam0 f0 rec+0.00s] [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-02\camera1_20261102_211918.avi start=2026-11-02T21:19:18.232
+21:21:00.661  [camera0:RECORDING STOP] frames_written=667
+21:21:00.662  [camera2:RECORDING STOP] frames_written=667
+21:21:00.667  [camera1:RECORDING STOP] frames_written=667
+21:21:09.719  [origin:PRINT] navigating to saved 'print' origin.
+21:21:09.925  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:21:16.593  [origin:PRINT] MOVE Y +3315.0  —  move to saved 'print' origin (Y -> 2397650.000)
+21:21:18.850  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2311252.500)
+21:22:26.541  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+21:22:26.645  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:22:29.301  [origin:MICROWIRE] MOVE Y -13100.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+21:22:35.469  [origin:MICROWIRE] MOVE X -1100.0  —  move to saved 'microwire' origin (X -> 338517.500)
+21:22:36.623  [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+21:26:38.905  [origin:PRINT] navigating to saved 'print' origin.
+21:26:39.062  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:26:41.722  [origin:PRINT] MOVE X +100.0  —  move to saved 'print' origin (X -> 338617.500)
+21:26:42.377  [origin:PRINT] MOVE Y +13100.0  —  move to saved 'print' origin (Y -> 2397650.000)
+21:26:43.837  [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:26:48.538  [origin:PRINT] MOVE r +29.7  —  move to saved 'print' origin (r -> 3146.150)
+21:26:55.200  [origin:PRINT] MOVE Z +10000.0  —  move to saved 'print' origin (Z -> 2311252.500)
+21:27:08.914  [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:27:09.068  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:27:15.730  [origin:CONNECTOR] MOVE Y -6800.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+21:27:18.892  [origin:CONNECTOR] MOVE X +3935.0  —  move to saved 'connector' origin (X -> 342467.500)
+21:27:21.099  [origin:CONNECTOR] MOVE Z +15032.5  —  move to saved 'connector' origin (Z -> 2311285.000)
+21:28:02.917  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+21:28:03.020  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:28:05.684  [origin:MICROWIRE] MOVE Y -6300.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+21:28:08.842  [origin:MICROWIRE] MOVE X -3950.0  —  move to saved 'microwire' origin (X -> 338517.500)
+21:28:11.001  [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+21:31:07.378  [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:31:07.533  [origin:CONNECTOR] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:31:10.192  [origin:CONNECTOR] MOVE X +3950.0  —  move to saved 'connector' origin (X -> 342467.500)
+21:31:12.347  [origin:CONNECTOR] MOVE Y +6300.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+21:31:15.505  [origin:CONNECTOR] MOVE r +23.7  —  move to saved 'connector' origin (r -> 3146.150)
+21:31:21.165  [origin:CONNECTOR] MOVE Z +10000.0  —  move to saved 'connector' origin (Z -> 2311285.000)
+21:37:53.120  [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:37:53.279  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:37:59.939  [origin:CONNECTOR] MOVE Y -6800.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+21:38:03.101  [origin:CONNECTOR] MOVE X +4350.0  —  move to saved 'connector' origin (X -> 342467.500)
+21:38:05.308  [origin:CONNECTOR] MOVE Z +14972.5  —  move to saved 'connector' origin (Z -> 2311285.000)
+21:39:28.816  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-02_1\camera1_20261102_213928.avi start=2026-11-02T21:39:28.816
+21:39:28.817  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-02_1\camera0_20261102_213928.avi start=2026-11-02T21:39:28.817
+21:39:28.818  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-02_1\camera2_20261102_213928.avi start=2026-11-02T21:39:28.818
+21:54:43.885  [cam0 f5970 rec+915.07s] [origin:CONNECTOR] navigating to saved 'connector' origin.
+21:54:44.039  [cam0 f5971 rec+915.22s] [origin:CONNECTOR] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:54:46.699  [cam0 f5988 rec+917.88s] [origin:CONNECTOR] MOVE X +122.5  —  move to saved 'connector' origin (X -> 342067.500)
+21:54:47.354  [cam0 f5993 rec+918.54s] [origin:CONNECTOR] MOVE Y -2100.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+21:54:49.059  [cam0 f6004 rec+920.24s] [origin:CONNECTOR] MOVE Z +15022.5  —  move to saved 'connector' origin (Z -> 2311335.000)
+21:56:34.250  [cam0 f6690 rec+1025.43s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+21:56:34.353  [cam0 f6691 rec+1025.54s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+21:56:37.012  [cam0 f6708 rec+1028.20s] [origin:MICROWIRE] MOVE Y -6300.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+21:56:40.171  [cam0 f6729 rec+1031.35s] [origin:MICROWIRE] MOVE X -3150.0  —  move to saved 'microwire' origin (X -> 338517.500)
+21:56:41.827  [cam0 f6740 rec+1033.01s] [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+22:04:51.042  [cam0 f9967 rec+1522.23s] [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:04:51.201  [cam0 f9968 rec+1522.38s] [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:04:57.865  [cam0 f10011 rec+1529.05s] [origin:CONNECTOR] MOVE Y +6300.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+22:05:01.020  [cam0 f10032 rec+1532.20s] [origin:CONNECTOR] MOVE X +3150.0  —  move to saved 'connector' origin (X -> 341667.500)
+22:05:02.677  [cam0 f10043 rec+1533.86s] [origin:CONNECTOR] MOVE r +28.6  —  move to saved 'connector' origin (r -> 3146.150)
+22:05:09.338  [cam0 f10086 rec+1540.52s] [origin:CONNECTOR] MOVE Z +20000.0  —  move to saved 'connector' origin (Z -> 2311335.000)
+22:06:58.807  [cam0 f10797 rec+1649.99s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:06:58.909  [cam0 f10798 rec+1650.09s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:07:01.568  [cam0 f10815 rec+1652.75s] [origin:MICROWIRE] MOVE Y -11032.5  —  move to saved 'microwire' origin (Y -> 2384550.000)
+22:07:06.728  [cam0 f10849 rec+1657.91s] [origin:MICROWIRE] MOVE X +400.0  —  move to saved 'microwire' origin (X -> 338517.500)
+22:07:07.383  [cam0 f10854 rec+1658.57s] [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+22:08:58.027  [cam0 f11584 rec+1769.21s] [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:08:58.182  [cam0 f11585 rec+1769.36s] [origin:CONNECTOR] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:09:00.837  [cam0 f11602 rec+1772.02s] [origin:CONNECTOR] MOVE X +3150.0  —  move to saved 'connector' origin (X -> 341667.500)
+22:09:02.492  [cam0 f11613 rec+1773.67s] [origin:CONNECTOR] MOVE Y +6300.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+22:09:05.650  [cam0 f11634 rec+1776.83s] [origin:CONNECTOR] MOVE r +32.1  —  move to saved 'connector' origin (r -> 3146.150)
+22:09:12.811  [cam0 f11682 rec+1783.99s] [origin:CONNECTOR] MOVE Z +10022.5  —  move to saved 'connector' origin (Z -> 2311335.000)
+22:09:40.604  [cam0 f11863 rec+1811.79s] [origin:PRINT] navigating to saved 'print' origin.
+22:09:40.758  [cam0 f11864 rec+1811.94s] [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:09:47.418  [cam0 f11908 rec+1818.60s] [origin:PRINT] MOVE Y +6800.0  —  move to saved 'print' origin (Y -> 2397650.000)
+22:09:50.575  [cam0 f11929 rec+1821.76s] [origin:PRINT] MOVE X -3550.0  —  move to saved 'print' origin (X -> 338117.500)
+22:09:52.780  [cam0 f11943 rec+1823.96s] [origin:PRINT] MOVE Z +14977.5  —  move to saved 'print' origin (Z -> 2311312.500)
+22:11:43.018  [cam0 f12655 rec+1934.20s] [camera2:RECORDING STOP] frames_written=12645
+22:11:43.030  [cam0 f12656 rec+1934.21s] [camera1:RECORDING STOP] frames_written=12661
+22:11:43.185  [camera0:RECORDING STOP] frames_written=12657
+22:11:47.732  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-02_2\camera1_20261102_221147.avi start=2026-11-02T22:11:47.732
+22:11:47.733  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-02_2\camera0_20261102_221147.avi start=2026-11-02T22:11:47.733
+22:11:47.734  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-02_2\camera2_20261102_221147.avi start=2026-11-02T22:11:47.734
+22:12:29.704  [cam0 f274 rec+41.97s] [origin:PRINT] navigating to saved 'print' origin.
+22:12:29.859  [cam0 f275 rec+42.13s] [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:12:36.527  [cam0 f319 rec+48.79s] [origin:PRINT] MOVE Y -477.5  —  move to saved 'print' origin (Y -> 2397650.000)
+22:12:37.181  [cam0 f323 rec+49.45s] [origin:PRINT] MOVE X +250.0  —  move to saved 'print' origin (X -> 338117.500)
+22:12:37.892  [cam0 f328 rec+50.16s] [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2311382.500)
+22:13:23.492  [cam0 f627 rec+95.76s] [camera1:RECORDING STOP] frames_written=627
+22:13:23.498  [cam0 f627 rec+95.76s] [camera2:RECORDING STOP] frames_written=626
+22:13:23.501  [camera0:RECORDING STOP] frames_written=628
+22:13:25.754  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-02_3\camera1_20261102_221325.avi start=2026-11-02T22:13:25.754
+22:13:25.757  [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-02_3\camera2_20261102_221325.avi start=2026-11-02T22:13:25.757
+22:13:25.759  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-02_3\camera0_20261102_221325.avi start=2026-11-02T22:13:25.759
+22:17:38.599  [cam0 f1637 rec+252.84s] [origin:PRINT] navigating to saved 'print' origin.
+22:17:38.753  [cam0 f1638 rec+252.99s] [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:17:45.464  [cam0 f1682 rec+259.71s] [origin:PRINT] MOVE X -2415.0  —  move to saved 'print' origin (X -> 338117.500)
+22:17:47.170  [cam0 f1693 rec+261.41s] [origin:PRINT] MOVE Z +16000.0  —  move to saved 'print' origin (Z -> 2311492.500)
+22:20:04.419  [cam0 f2596 rec+398.66s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:20:04.525  [cam0 f2597 rec+398.77s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:20:07.183  [cam0 f2614 rec+401.42s] [origin:MICROWIRE] MOVE Y -13100.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+22:20:13.341  [cam0 f2655 rec+407.58s] [origin:MICROWIRE] MOVE X +400.0  —  move to saved 'microwire' origin (X -> 338517.500)
+22:20:13.995  [cam0 f2659 rec+408.24s] [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+22:20:27.875  [cam0 f2750 rec+422.12s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:20:28.080  [cam0 f2752 rec+422.32s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:20:30.838  [cam0 f2769 rec+425.08s] [origin:MICROWIRE] MOVE r -65.3  —  move to saved 'microwire' origin (r -> 3059.450)
+22:24:38.474  [cam0 f4401 rec+672.72s] [origin:PRINT] navigating to saved 'print' origin.
+22:24:38.628  [cam0 f4402 rec+672.87s] [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:24:41.284  [cam0 f4420 rec+675.53s] [origin:PRINT] MOVE X -400.0  —  move to saved 'print' origin (X -> 338117.500)
+22:24:41.938  [cam0 f4424 rec+676.18s] [origin:PRINT] MOVE Y +13100.0  —  move to saved 'print' origin (Y -> 2397650.000)
+22:24:48.098  [cam0 f4465 rec+682.34s] [origin:PRINT] MOVE r +35.3  —  move to saved 'print' origin (r -> 3146.150)
+22:24:56.268  [cam0 f4518 rec+690.51s] [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2311492.500)
+22:33:53.360  [cam0 f8011 rec+1227.60s] [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:33:53.515  [cam0 f8012 rec+1227.76s] [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:34:00.184  [cam0 f8055 rec+1234.43s] [origin:CONNECTOR] MOVE Y -6800.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+22:34:03.342  [cam0 f8076 rec+1237.58s] [origin:CONNECTOR] MOVE X +2350.0  —  move to saved 'connector' origin (X -> 341667.500)
+22:34:05.051  [cam0 f8087 rec+1239.29s] [origin:CONNECTOR] MOVE Z +14992.5  —  move to saved 'connector' origin (Z -> 2311335.000)
+22:40:02.725  [cam0 f10412 rec+1596.97s] [camera2:RECORDING STOP] frames_written=10408
+22:40:02.730  [camera0:RECORDING STOP] frames_written=10413
+22:40:02.730  [camera1:RECORDING STOP] frames_written=10414
+22:41:17.780  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:41:17.884  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:41:20.540  [origin:MICROWIRE] MOVE Y -6300.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+22:41:23.701  [origin:MICROWIRE] MOVE X -4550.0  —  move to saved 'microwire' origin (X -> 338517.500)
+22:41:26.358  [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+22:44:01.755  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:44:08.164  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:44:08.318  [origin:CONNECTOR] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:44:10.974  [origin:CONNECTOR] MOVE X +4550.0  —  move to saved 'connector' origin (X -> 343067.500)
+22:44:13.631  [origin:CONNECTOR] MOVE Y +6300.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+22:44:16.794  [origin:CONNECTOR] MOVE r +38.3  —  move to saved 'connector' origin (r -> 3146.150)
+22:44:25.456  [origin:CONNECTOR] MOVE Z +10000.0  —  move to saved 'connector' origin (Z -> 2311275.000)
+22:44:55.435  [origin:PRINT] navigating to saved 'print' origin.
+22:44:55.590  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:45:02.251  [origin:PRINT] MOVE Y +6800.0  —  move to saved 'print' origin (Y -> 2397650.000)
+22:45:05.416  [origin:PRINT] MOVE X -3750.0  —  move to saved 'print' origin (X -> 339317.500)
+22:45:07.622  [origin:PRINT] MOVE Z +14717.5  —  move to saved 'print' origin (Z -> 2311342.500)
+22:47:33.400  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:47:33.556  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:47:40.216  [origin:CONNECTOR] MOVE Y -6800.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+22:47:43.376  [origin:CONNECTOR] MOVE X +3750.0  —  move to saved 'connector' origin (X -> 343067.500)
+22:47:45.582  [origin:CONNECTOR] MOVE Z +14962.5  —  move to saved 'connector' origin (Z -> 2311625.000)
+22:49:10.742  [origin:PRINT] navigating to saved 'print' origin.
+22:49:10.897  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:49:17.560  [origin:PRINT] MOVE Y +6800.0  —  move to saved 'print' origin (Y -> 2397650.000)
+22:49:20.716  [origin:PRINT] MOVE X -3750.0  —  move to saved 'print' origin (X -> 339317.500)
+22:49:22.922  [origin:PRINT] MOVE Z +15077.5  —  move to saved 'print' origin (Z -> 2311662.500)

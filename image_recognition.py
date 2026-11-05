@@ -1,6 +1,7 @@
 # image_recognition.py
 
 import math
+import time as _time
 import threading
 import cv2
 import os
@@ -111,6 +112,7 @@ def _stop_recording_correlation(camera_index):
 
 extrude_done = False
 r_align_done = False
+r_align_failed = False  # set when r_align gave up (unreliable detection / travel limit); callers must not cut
 x_align_done = False
 center_on_visible_area_done = False
 last_r_align_angle = 0.0  # signed angle of the most recent r_align rotation (0 = none)
@@ -420,6 +422,10 @@ def draw_axis_compass(img, rotate_ccw_90=False):
 # Globals for bounding boxes
 last_cf_box = None
 last_gc_box = None
+# last_cf_box / last_gc_box are sticky (kept when the object is lost), so the time
+# each was last actually detected is tracked to tell fresh detections from stale ones.
+last_cf_time = 0.0
+last_gc_time = 0.0
 last_pad_box= None  # We'll store one "Pad" bounding box for extrude reference
 last_visible_area_box = None  # Camera's usable field-of-view box
 last_clog_box = None  # Exclusively updated by camera 2
@@ -429,6 +435,7 @@ def open_camera(camera_index=0, model_path="best.pt"):
     global video_writers, run_timestamps
     global frames_per_still, frame_counts
     global last_cf_box, last_gc_box, last_pad_box, last_visible_area_box, last_clog_box
+    global last_cf_time, last_gc_time
     global record_dir0, record_dir1, record_dir2
 
     desired_width = 1600
@@ -501,8 +508,10 @@ def open_camera(camera_index=0, model_path="best.pt"):
 
             if cf_found is not None:
                 last_cf_box = cf_found
+                last_cf_time = _time.time()
             if gc_found is not None:
                 last_gc_box = gc_found
+                last_gc_time = _time.time()
             if pad_found is not None:
                 last_pad_box = pad_found
             if visible_area_found is not None:
@@ -1120,6 +1129,85 @@ def log_move(category, phase, axis, direction, amount, reason):
     print(line)
     _align_log_write(line)
 
+########################################################
+# Detection-reliability helpers for r_align
+# last_cf_box / last_gc_box are sticky, so a "live" read can silently be an old
+# detection. These helpers only trust detections seen within FRESH_DETECTION_AGE_S
+# and wait for several consecutive agreeing samples before a value is acted on.
+########################################################
+FRESH_DETECTION_AGE_S = 1.5
+R_ALIGN_SANE_ANGLE_DEG = 10.0   # |CF→GC angle Δ| beyond this is treated as a bad detection, not a real tilt
+
+def _fresh_cf_box():
+    """CF_Tip box only if it was detected within FRESH_DETECTION_AGE_S, else None."""
+    if last_cf_box is None or _time.time() - last_cf_time > FRESH_DETECTION_AGE_S:
+        return None
+    return last_cf_box
+
+def _fresh_gc_box():
+    """GC_Tip box only if it was detected within FRESH_DETECTION_AGE_S, else None."""
+    if last_gc_box is None or _time.time() - last_gc_time > FRESH_DETECTION_AGE_S:
+        return None
+    return last_gc_box
+
+def _median(values):
+    s = sorted(values)
+    return s[len(s) // 2]
+
+def _acquire_stable_cf_gc_angle(timeout_s=20.0, samples=3, interval=0.5, spread_deg=1.5):
+    """Pause until fresh CF_Tip and GC_Tip detections give `samples` consecutive
+    CF→GC angles that agree within `spread_deg`. Returns the median angle, or None
+    on timeout / emergency stop."""
+    from motor_control import is_emergency_stop_requested
+    window = []
+    deadline = _time.time() + timeout_s
+    while _time.time() < deadline:
+        if is_emergency_stop_requested():
+            return None
+        cf, gc = _fresh_cf_box(), _fresh_gc_box()
+        if cf is None or gc is None:
+            window.clear()
+        else:
+            window.append(compute_angle_between(cf, gc))
+            window = window[-samples:]
+            if len(window) == samples and max(window) - min(window) <= spread_deg:
+                return _median(window)
+        _time.sleep(interval)
+    return None
+
+def _stable_pad_column(target_pad_number, samples=3, interval=0.5, tol_px=6, timeout_s=10.0):
+    """Pause until the target pad's horizontal center (px) agrees over `samples`
+    consecutive fresh detections (the pad entry is cleared before every sample so
+    only a re-detection counts). Returns the median pad x, or None on timeout /
+    emergency stop."""
+    from motor_control import is_emergency_stop_requested
+    key = f"pad{target_pad_number}"
+    window = []
+    deadline = _time.time() + timeout_s
+    while _time.time() < deadline:
+        if is_emergency_stop_requested():
+            return None
+        pad_box_dict.pop(key, None)
+        _time.sleep(interval)
+        pad = pad_box_dict.get(key)
+        if pad is None:
+            window.clear()
+            continue
+        window.append(center_of_bbox(pad)[0])
+        window = window[-samples:]
+        if len(window) == samples and max(window) - min(window) <= tol_px:
+            return _median(window)
+    return None
+
+R_ALIGN_REACQUIRE_ATTEMPTS = 3
+
+def _r_align_fail(msg):
+    """Abort r_align without moving further and flag it so the caller skips the cut."""
+    global r_align_done, r_align_failed
+    _align_report("FAILED", msg)
+    r_align_failed = True
+    r_align_done = True
+
 def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     """
     Rotates the 'r' axis to bring the CF→GC angle within `angle_tolerance` degrees
@@ -1133,9 +1221,10 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     import time
     from motor_control import update_speed, move_linear_stage, steps_to_µm, is_emergency_stop_requested
     global last_cf_box, last_gc_box, pad_box_dict
-    global r_align_done
+    global r_align_done, r_align_failed
     global last_r_align_angle
     r_align_done = False # reset at start of function
+    r_align_failed = False
     last_r_align_angle = 0.0  # reset; set to the signed delta only when we rotate
  
     update_speed(3)  # Set speed
@@ -1143,24 +1232,38 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     _align_report("START", f"pad{target_pad_number}: level wire → re-acquire pads → restore pad Y → "
                             f"recover VisibleArea → rough-center tip → fine Y then X align.")
 
-    if last_cf_box is None:
-        print("[r_align] No CF_Tip bounding box stored yet. Cannot align r-axis.")
-        r_align_done = True
+    # 1) Get a trustworthy CF→GC angle. CF_Tip/GC_Tip detection can be spotty and the
+    # stored boxes go stale, so wait for fresh, agreeing detections; if the value is
+    # clearly out of the norm, pause and re-acquire before acting on it.
+    initial_angle_degs = None
+    for attempt in range(1, R_ALIGN_REACQUIRE_ATTEMPTS + 1):
+        angle = _acquire_stable_cf_gc_angle()
+        if is_emergency_stop_requested():
+            print("[r_align] Emergency stop while acquiring CF_Tip/GC_Tip.")
+            r_align_done = True
+            return
+        if angle is None:
+            _align_report("ANGLE", f"attempt {attempt}/{R_ALIGN_REACQUIRE_ATTEMPTS}: no stable fresh CF_Tip/GC_Tip detection — re-acquiring.")
+            continue
+        if abs(angle - reference_angle) > R_ALIGN_SANE_ANGLE_DEG:
+            _align_report("ANGLE", f"attempt {attempt}/{R_ALIGN_REACQUIRE_ATTEMPTS}: CF→GC {angle:.2f}° is out of the norm "
+                                   f"(>±{R_ALIGN_SANE_ANGLE_DEG:.0f}° from reference) — pausing to re-acquire CF_Tip before acting.")
+            time.sleep(2.0)
+            continue
+        initial_angle_degs = angle
+        break
+    if initial_angle_degs is None:
+        _r_align_fail("could not get a stable, plausible CF→GC angle — not rotating or cutting this pad.")
         return
-    if last_gc_box is None:
-        print("[r_align] No GC_Tip bounding box stored yet. Cannot align r-axis.")
-        r_align_done = True
-        return
-      
-    # 1) Compute current angle and delta from reference
-    initial_angle_degs = compute_angle_between(last_cf_box, last_gc_box)
+
+    # Compute delta from reference
     angle_delta = initial_angle_degs - reference_angle
     _align_report("ANGLE", f"CF→GC {initial_angle_degs:.2f}° vs reference {reference_angle:.2f}° (Δ{angle_delta:.2f}°, tol ±{angle_tolerance}°).")
  
     # 2) Check tolerance against delta
     if abs(angle_delta) <= angle_tolerance:
-        _align_report("ANGLE", "within tolerance — no rotation needed; skipping the rest of r_align.")
-        r_align_done = True
+        _align_report("ANGLE", "within tolerance — no rotation needed; skipping rotation/pad recovery and going straight to fine Y/X align.")
+        _fine_align(target_pad_number)
         return
 
     # Compute the Y pixel-to-step calibration NOW, before rotating — while the
@@ -1285,12 +1388,13 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     _cv1 = pad_box_dict.get(f"pad{_n1v}")
     _cv2 = pad_box_dict.get(f"pad{_n1v + 1}")
     steps_pp_v = get_steps_per_pixel(_cv1, _cv2, axis='X', known_µm=get_pad_spacing()) if (_cv1 and _cv2) else 0.0
-    cf_src = center_of_bbox(last_cf_box) if last_cf_box is not None else cf_tip_ref_px
+    _cf_rough = _fresh_cf_box()
+    cf_src = center_of_bbox(_cf_rough) if _cf_rough is not None else cf_tip_ref_px
     if cf_src is not None and last_visible_area_box is not None and steps_pp_v > 0.0:
         va = last_visible_area_box  # live detection
         # Target the top 25% of the VisibleArea (a quarter down), not the center.
         va_cy = va[1] + 0.25 * (va[3] - va[1])
-        _src_lbl = "live" if last_cf_box is not None else "saved"
+        _src_lbl = "live" if _cf_rough is not None else "saved"
 
         delta_y_px = cf_src[1] - va_cy
         delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_v), axis='X')
@@ -1305,6 +1409,16 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
             _align_report("STEP2 ROUGH-CENTER", f"CF_Tip already at VisibleArea top-25% (±{VISIBLE_AREA_TOL_UM}µm) — no move.")
     else:
         _align_report("STEP2 ROUGH-CENTER", "no CF_Tip ref / VisibleArea / calibration — skipping.")
+
+    _fine_align(target_pad_number)
+
+def _fine_align(target_pad_number):
+    """Step 3 of r_align: fine-align CF_Tip to the target pad (closed-loop Y, then
+    open-loop X). Also run directly when the wire needs no rotation, so the pad is
+    still aligned in Y and X before cutting."""
+    import time
+    from motor_control import update_speed, move_linear_stage, steps_to_µm, is_emergency_stop_requested
+    global r_align_done
 
     # ── Step 3: fine-align CF_Tip to the live target pad center ──────────────
     # Y align (horizontal pixels -> 'Y' stage) first, closed loop on live detections.
@@ -1324,17 +1438,19 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
     else:
         # Y align via the 'Y' stage, which moves content left/right in the image (compass:
         # Left=+Y, Right=-Y), so it closes the HORIZONTAL pixel difference between the live
-        # CF_Tip and the live target pad. Closed loop: re-read both after every move until
+        # CF_Tip (fixed in frame after extrude, so its saved column) and the live target pad. Closed loop: re-read the pad after every move until
         # within tolerance. The move direction is verified against the measured result; if
         # a move makes the error worse, the sign is flipped.
         Y_ALIGN_TOL_UM = 250
         Y_ALIGN_MAX_ITERS = 15
         Y_ALIGN_MAX_MISSES = 3
-        Y_ALIGN_MAX_STEP_UM = 1000   # small capped steps: re-check live after each so it can't overshoot
+        Y_ALIGN_MAX_STEP_UM = 500    # small capped steps: re-check live after each so it can't overshoot
+        Y_ALIGN_MAX_NET_UM = 2000    # max net Y travel in this step — protects the extruder from a runaway/bad reading
         Y_ALIGN_WORSE_UM = 100       # error growth that counts as "moved the wrong way"
         sign_flip = 1                # +1: cf right of pad -> '-Y' (hardware-tested); -1: flipped by feedback
         prev_err_µm = None
         prev_move_µm = 0.0
+        net_y_µm = 0.0               # signed net Y travel so far in this step
         misses = 0
         iters = 0
         while iters < Y_ALIGN_MAX_ITERS:
@@ -1342,36 +1458,56 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
                 _align_report("STEP3 Y-ALIGN", "emergency stop requested — aborting.")
                 r_align_done = True
                 return
-            live_pad = pad_box_dict.get(f"pad{target_pad_number}")
-            live_cf = last_cf_box
-            if live_pad is None or live_cf is None:
+            # The CF_Tip is fixed in frame after extrude, so its column is the position last
+            # seen (no live detection needed); only the target pad is re-detected. Pause to
+            # re-acquire the pad until its reading is stable.
+            _cf_ref = cf_tip_ref_px if cf_tip_ref_px is not None else (
+                center_of_bbox(last_cf_box) if last_cf_box is not None else None)
+            if _cf_ref is None:
+                _r_align_fail("no CF_Tip reference position recorded — cannot Y align; not cutting this pad.")
+                return
+            cf_x = _cf_ref[0]
+            pad_cx = _stable_pad_column(target_pad_number)
+            if pad_cx is None:
                 misses += 1
                 if misses >= Y_ALIGN_MAX_MISSES:
-                    _align_report("STEP3 Y-ALIGN", "live CF_Tip / target pad not detected — stopping Y align.")
-                    break
-                _align_report("STEP3 Y-ALIGN", "live CF_Tip / target pad not detected — waiting for a fresh detection.")
-                time.sleep(1.0)
+                    _r_align_fail("could not re-acquire a stable target pad reading for Y align — stopping without cutting this pad.")
+                    return
+                _align_report("STEP3 Y-ALIGN", "no stable target pad reading — pausing to re-acquire.")
                 continue
             misses = 0
-            pad_cx = center_of_bbox(live_pad)[0]
-            cf_x = center_of_bbox(live_cf)[0]
             delta_x_px = cf_x - pad_cx
             delta_x_µm = steps_to_µm(abs(delta_x_px * steps_pp_f), axis='Y')
             if delta_x_µm <= Y_ALIGN_TOL_UM:
                 _align_report("STEP3 Y-ALIGN", f"CF_Tip on pad column within ±{Y_ALIGN_TOL_UM}µm (off by {delta_x_µm:.1f}µm) — aligned.")
                 break
+            if iters == 0 and delta_x_µm > Y_ALIGN_MAX_NET_UM + Y_ALIGN_TOL_UM:
+                _r_align_fail(f"initial Y offset {delta_x_µm:.1f}µm exceeds the {Y_ALIGN_MAX_NET_UM}µm Y-align travel limit "
+                              f"(tip {cf_x:.1f}px vs pad {pad_cx:.1f}px) — detection or rotation is likely wrong; not moving.")
+                return
             if prev_err_µm is not None and prev_move_µm > 0 and delta_x_µm > prev_err_µm + Y_ALIGN_WORSE_UM:
                 sign_flip = -sign_flip
                 _align_report("STEP3 Y-ALIGN", f"error grew {prev_err_µm:.1f}µm → {delta_x_µm:.1f}µm after last move — reversing direction.")
             move_µm = min(delta_x_µm, Y_ALIGN_MAX_STEP_UM)
             dir_y = '-' if (delta_x_px >= 0) == (sign_flip > 0) else '+'
+            signed_move = move_µm if dir_y == '+' else -move_µm
+            if abs(net_y_µm + signed_move) > abs(net_y_µm):
+                # Moving further from where Y align started: respect the net travel limit.
+                room = Y_ALIGN_MAX_NET_UM - abs(net_y_µm)
+                if room < 50:
+                    _r_align_fail(f"Y-align travel limit of {Y_ALIGN_MAX_NET_UM}µm reached with the tip still off by "
+                                  f"{delta_x_µm:.1f}µm — stopping without cutting this pad.")
+                    return
+                if move_µm > room:
+                    move_µm = room
+                    signed_move = move_µm if dir_y == '+' else -move_µm
             _align_move_report("STEP3 Y-ALIGN", "Y", dir_y, f"{move_µm:.1f}µm",
-                               f"match tip column to pad center (tip {cf_x:.1f}px vs pad {pad_cx:.1f}px, live, off {delta_x_µm:.1f}µm)")
+                               f"match tip column to pad center (tip {cf_x:.1f}px vs pad {pad_cx:.1f}px, off {delta_x_µm:.1f}µm, net so far {net_y_µm:+.1f}µm)")
             update_speed(3)
             move_linear_stage('Y', dir_y, move_µm, wait_for_stop=True, max_wait=30.0)
+            net_y_µm += signed_move
             prev_err_µm = delta_x_µm
             prev_move_µm = move_µm
-            time.sleep(1.5)  # let YOLO refresh before re-checking
             iters += 1
         else:
             _align_report("STEP3 Y-ALIGN", f"WARNING: not within ±{Y_ALIGN_TOL_UM}µm after {Y_ALIGN_MAX_ITERS} steps; continuing.")
@@ -1380,8 +1516,9 @@ def r_align(angle_tolerance=0.5, reference_angle=0.0, target_pad_number=1):
         # difference; snapshot then open-loop move.
         # Snapshot CF_Tip live if visible, else use the saved fixed location.
         tbox = pad_box_dict.get(f"pad{target_pad_number}")
-        cf_snap = center_of_bbox(last_cf_box) if last_cf_box is not None else cf_tip_ref_px
-        _snap_lbl = "live" if last_cf_box is not None else "saved"
+        _cf_x_box = _fresh_cf_box()
+        cf_snap = center_of_bbox(_cf_x_box) if _cf_x_box is not None else cf_tip_ref_px
+        _snap_lbl = "live" if _cf_x_box is not None else "saved"
         if tbox is None or cf_snap is None:
             _align_report("STEP3 X-ALIGN", "missing pad/CF_Tip snapshot — skipping X align.")
         else:

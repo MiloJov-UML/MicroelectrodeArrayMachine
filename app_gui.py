@@ -57,6 +57,7 @@ from relay_control import (
 )
 
 from assembly import (
+    get_pnp_offsets,
     glue_sequence,
     print_tester,
     calibrate,
@@ -74,8 +75,11 @@ from assembly import (
     microwire_origin_setup,
     reload_origins,
     save_connector_print_offset,
+    get_connector_print_offset,
+    get_connector_origin,
     full_sequence,
     reprint_feature,
+    reprint_all_me_pads,
     jog_to_feature_start,
     jog_to_trace_start,
     jog_to_connector_pad,
@@ -324,6 +328,15 @@ def on_stop_motors():
     except Exception as e:
         print(f"Warning: could not turn Nordson off during stop: {e}")
 
+    # Turn recording off if it is on (this also stops auto-annotate).
+    try:
+        rv = globals().get('record_var')
+        if rv is not None and rv.get() == 'On':
+            rv.set('Off')
+            toggle_recording()
+    except Exception as e:
+        print(f"Warning: could not turn recording off during stop: {e}")
+
 def start_routine_thread(target, routine_name):
     global routine_thread
 
@@ -407,6 +420,12 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
     r_align(target_pad_number=pad_num)
     if not wait_for_r_align_done():
         raise RuntimeError("Emergency stop requested.")
+    _abort_if_emergency_stop()
+    if image_recognition.r_align_failed:
+        # Don't cut a wire that isn't confirmed aligned; use Settings > Realign/Recut Pads to retry.
+        raise RuntimeError(f"Alignment failed on pad {pad_num} (unreliable CF_Tip detection or "
+                           f"Y-align travel limit) — skipped the laser cut. Check the wire/pad "
+                           f"position, then retry with Realign/Recut Pads.")
 
     """# ── Center on visible area, then re-check Y-axis alignment ─────
     _abort_if_emergency_stop()
@@ -610,8 +629,8 @@ def laser_cut():
         _abort_if_emergency_stop()
         update_speed(1)
         _abort_if_emergency_stop()
-        image_recognition.log_move("laser-cut", "SETUP", "Z", "+", "1800", "raise head clear before positioning T")
-        move_linear_stage("Z", "+", 1800, wait_for_stop=True, max_wait=30.0)
+        image_recognition.log_move("laser-cut", "SETUP", "Z", "+", "2100", "raise head clear before positioning T")
+        move_linear_stage("Z", "+", 2600, wait_for_stop=True, max_wait=30.0)
         _abort_if_emergency_stop()
         #update_speed(30)
         #_abort_if_emergency_stop()
@@ -634,8 +653,8 @@ def laser_cut():
         _abort_if_emergency_stop()
         update_speed(10)
         _abort_if_emergency_stop()
-        image_recognition.log_move("laser-cut", "TEARDOWN", "Z", "-", "1800", "lower head after cut")
-        move_linear_stage("Z", "-", 1800, wait_for_stop=True, max_wait=30.0)
+        image_recognition.log_move("laser-cut", "TEARDOWN", "Z", "-", "2100", "lower head after cut")
+        move_linear_stage("Z", "-", 2600, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
@@ -1343,7 +1362,24 @@ def save_named_origin(name):
     reload_origins()
 
 def load_named_origin(name):
-    """Return the saved axis-position dict for 'name', or None if not found."""
+    """Return the saved axis-position dict for 'name', or None if not found.
+
+    'pnp' is derived, not stored: the saved connector origin shifted by the PNP
+    offsets (X/Y/Z); r is taken from the connector origin unchanged."""
+    if name == 'pnp':
+        connector = load_named_origin('connector')
+        if not connector:
+            return None
+        offsets = get_pnp_offsets()
+        derived = dict(connector)
+        for ax in ('X', 'Y', 'Z'):
+            if ax in derived:
+                derived[ax] = derived[ax] + offsets[ax]
+        return derived
+    if name == 'connector':
+        # Effective position: print origin + connector offset (falls back to the absolute origin).
+        reload_origins()
+        return get_connector_origin()
     cfg = _ORIGIN_CONFIG.get(name)
     if not cfg:
         return None
@@ -1357,6 +1393,53 @@ def load_named_origin(name):
         print(f"Warning: Could not load named origin '{name}': {e}")
     return None
 
+def update_connector_offset_from_current(old_offset):
+    """Set the connector origin relative to the print origin: store
+    (current position - saved print origin) as the connector-from-print offset.
+
+    The PNP origin is also referenced to the print origin, so the PNP offsets
+    (relative to the connector origin) are adjusted to keep the PNP position
+    unchanged relative to the print origin. `old_offset` is the connector-from-print
+    offset saved before this update (None if there was none)."""
+    print_origin = load_named_origin('print')
+    if not print_origin:
+        print("[Origin] No saved Print origin — connector origin saved as an absolute position only. "
+              "Set the Print origin, then re-set the Connector origin so it follows the Print origin.")
+        return
+    new_offset = {}
+    for ax in ('X', 'Y', 'Z', 'r'):
+        pos = get_current_position(ax)
+        if pos is not None and ax in print_origin:
+            new_offset[ax] = int(round(pos - print_origin[ax]))
+    if not new_offset:
+        print("[Origin] Could not compute the connector offset from the print origin.")
+        return
+    pnp_offsets = get_pnp_offsets()
+    save_connector_print_offset(new_offset)
+    if old_offset:
+        adjusted = {ax: int(round(old_offset.get(ax, 0) + pnp_offsets[ax] - new_offset.get(ax, 0)))
+                    for ax in ('X', 'Y', 'Z')}
+        save_pnp_offsets(adjusted)
+    print(f"[Origin] Connector offset from print origin saved: {new_offset}")
+
+def set_pnp_origin_from_current():
+    """Set the PNP origin: store (current X/Y/Z - connector origin) as the PNP
+    offsets, so 'pnp' = connector origin + offsets reproduces this position. The
+    connector origin itself follows the print origin, so the PNP origin does too."""
+    connector = load_named_origin('connector')
+    if not connector:
+        messagebox.showerror("Error", "No Connector origin. Set the Print and Connector origins first.")
+        return
+    new_offsets = {}
+    for ax in ('X', 'Y', 'Z'):
+        pos = get_current_position(ax)
+        if pos is None or ax not in connector:
+            messagebox.showerror("Error", f"Could not compute the {ax} offset (position or connector origin missing).")
+            return
+        new_offsets[ax] = int(round(pos - connector[ax]))
+    save_pnp_offsets(new_offsets)
+    print(f"[Origin] PNP origin set. Offsets from connector origin: {new_offsets}")
+
 def _return_to_named_origin_thread(name):
     """Move axes to the stored named origin with camera-fixture-safe axis ordering.
 
@@ -1368,12 +1451,15 @@ def _return_to_named_origin_thread(name):
     All other moves:          Z drop 5000  → X → Y → r → Z(target)
     """
     cfg = _ORIGIN_CONFIG.get(name)
-    if not cfg:
+    if not cfg and name != 'pnp':
         print(f"[Origin] Unknown origin name '{name}'")
         return
     positions = load_named_origin(name)
     if not positions:
-        print(f"[Origin] No saved origin for '{name}'. Use 'Set Origin' first.")
+        if name == 'pnp':
+            print("[Origin] No saved connector origin. Set the Connector origin first (PNP origin = connector origin + PNP offsets).")
+        else:
+            print(f"[Origin] No saved origin for '{name}'. Use 'Set Origin' first.")
         return
     print(f"\n--- Moving to '{name}' origin ---")
     image_recognition.log_report("origin", name.upper(), f"navigating to saved '{name}' origin.")
@@ -1489,9 +1575,10 @@ def open_trace_tuning_window(root):
 def open_connector_offset_window(root):
     """Popup to edit the connector origin offset relative to the print origin (µm).
 
-    When set, goto_pnp_origin() derives the connector position as
-    print_origin + this offset instead of using the saved absolute connector_origin.
-    Set all axes to 0 and click Clear to revert to the absolute connector origin.
+    When set, the connector origin is print_origin + this offset instead of the
+    saved absolute connector_origin. The offset is updated automatically whenever
+    the Connector origin is set via the main window's Set Origin button.
+    Click Clear to revert to the absolute connector origin.
     """
     win = Toplevel(root)
     win.title("Connector Offset from Print Origin")
@@ -1669,9 +1756,20 @@ def open_settings_window(root):
 
     tk.Button(
         win,
-        text="Recut Pads",
+        text="Realign/Recut Pads",
         width=34,
         command=lambda: open_recut_window(root)
+    ).pack(pady=6)
+
+    def _run_laser_cut_only():
+        win.destroy()
+        start_routine_thread(laser_cut_only, "laser_cut_only")
+
+    tk.Button(
+        win,
+        text="Laser Cut Only",
+        width=34,
+        command=_run_laser_cut_only
     ).pack(pady=6)
 
     tk.Button(
@@ -1785,7 +1883,7 @@ def open_recut_window(root):
     Runs the same per-pad align+laser-cut body as the full routine, but only
     for the pads the user selects."""
     win = Toplevel(root)
-    win.title("Recut Pads")
+    win.title("Realign/Recut Pads")
     win.resizable(False, False)
 
     pad_count = PAD_COUNT if PAD_COUNT and PAD_COUNT > 0 else 8
@@ -2402,12 +2500,19 @@ def launch_gui():
     tk.Radiobutton(nord_frame, text="Off", variable=nord_state_var, value='Off', command=set_nord).pack(side='left')
 
     # Query & origin
+    def _select_origin_for_label(label):
+        # Pre-select the matching origin radio so 'Set Origin' saves the right one.
+        mode = label.split()[0].lower()
+        if mode in ('probe', 'print', 'connector', 'pnp', 'microwire'):
+            origin_mode_var.set(mode)
+
     def show_origin_ask(label):
         """Ask the user whether to fine-tune this origin.
         Called from the routine worker thread, so the actual dialog is queued
         to run on the GUI thread via _poll_gui_requests()."""
         def _do_ask():
             root.lift()
+            _select_origin_for_label(label)
             result = messagebox.askyesno(
                 f"{label} — Fine-tune?",
                 f"The machine is now at the {label} position.\n\n"
@@ -2519,6 +2624,20 @@ def launch_gui():
 
     def on_set_origin_clicked():
         mode = origin_mode_var.get()
+        if mode == 'pnp':
+            if not messagebox.askyesno(
+                "Confirm Set PNP Origin",
+                "This will overwrite the saved PNP offsets with the difference between\n"
+                "the machine's current X/Y/Z position and the saved Connector origin.\n\n"
+                "Is the machine positioned at the PNP origin?",
+                icon='warning',
+                parent=root,
+            ):
+                print("[Origin] Set Origin for 'pnp' cancelled by user.")
+                return
+            set_pnp_origin_from_current()
+            confirm_origin_set()           # unblocks a waiting fine-tune prompt (PNP full routine)
+            return
         if not messagebox.askyesno(
             "Confirm Set Origin",
             f"This will overwrite the saved '{mode}' origin with the machine's\n"
@@ -2530,7 +2649,13 @@ def launch_gui():
             print(f"[Origin] Set Origin for '{mode}' cancelled by user.")
             return
         set_origin_to_current()       # keeps in-memory axis_origins in sync for automated routines
+        old_connector_offset = None
+        if mode == 'connector':
+            reload_origins()
+            old_connector_offset = get_connector_print_offset()
         save_named_origin(mode)        # persists to JSON and reloads print.py in-memory state
+        if mode == 'connector':
+            update_connector_offset_from_current(old_connector_offset)
         confirm_origin_set()           # unblocks any waiting setup flow
 
     def on_return_to_origin_clicked():
@@ -2549,7 +2674,7 @@ def launch_gui():
     origin_radio_frame = tk.Frame(root)
     origin_radio_frame.pack(pady=(0, 4))
     tk.Label(origin_radio_frame, text="Origin:").pack(side='left', padx=(0, 6))
-    for _mode in ('Probe', 'Print', 'Connector', 'Microwire'):
+    for _mode in ('Probe', 'Print', 'Connector', 'PNP', 'Microwire'):
         tk.Radiobutton(
             origin_radio_frame,
             text=_mode,
@@ -2633,10 +2758,13 @@ def launch_gui():
     ).pack(pady=5)
 
     # Full manual loop
-    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)
+    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(pady=8)
 
-    # Laser cut only (T-axis 5x passes, no Z moves)
-    tk.Button(root, text="Laser Cut Only", command=lambda: start_routine_thread(laser_cut_only, "laser_cut_only")).pack(side='bottom', pady=8)
+    # Reprint all ME pads
+    tk.Button(root, text="Reprint All ME Pads", command=lambda: start_routine_thread(reprint_all_me_pads, "reprint_all_me_pads")).pack(pady=8)
+
+    # PNP full routine (same sequence as Settings > Test PNP Routine > Run Full Sequence)
+    tk.Button(root, text="PNP Full Routine", command=lambda: start_routine_thread(print_tester, "print_tester")).pack(side='bottom', pady=8)
 
     # Drain GUI requests queued by worker threads (origin popups, etc.) on the
     # GUI thread. Reschedules itself so it runs for the lifetime of the window.

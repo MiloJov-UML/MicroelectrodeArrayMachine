@@ -1,0 +1,5 @@
+20:48:32.220  [origin:PNP] navigating to saved 'pnp' origin.
+20:48:32.379  [origin:PNP] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:48:39.050  [origin:PNP] MOVE Y -7600.0  —  move to saved 'pnp' origin (Y -> 2390050.000)
+20:48:42.717  [origin:PNP] MOVE X -25300.0  —  move to saved 'pnp' origin (X -> 313317.500)
+20:48:53.944  [origin:PNP] MOVE Z +19682.5  —  move to saved 'pnp' origin (Z -> 2315935.000)

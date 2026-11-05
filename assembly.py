@@ -108,6 +108,19 @@ def get_connector_print_offset():
     """Return the saved connector-from-print offset dict, or None if not configured."""
     return _connector_print_offset
 
+def get_connector_origin():
+    """Return the effective connector origin: the saved print origin plus the
+    connector-from-print offset when both exist (so setting only the print origin
+    is enough on later runs), otherwise the saved absolute connector origin.
+    Call reload_origins() first to pick up values just saved by the GUI."""
+    if _connector_print_offset is not None and _print_origin_saved is not None:
+        return {
+            ax: _print_origin_saved[ax] + _connector_print_offset.get(ax, 0)
+            for ax in ('X', 'Y', 'Z', 'r')
+            if ax in _print_origin_saved
+        }
+    return _connector_origin_saved
+
 def save_connector_print_offset(offset_dict):
     """Persist the connector-from-print offset to pcb_settings.json and update in-memory state."""
     global _connector_print_offset
@@ -348,34 +361,19 @@ def get_pnp_offsets():
     return defaults
 
 def goto_pnp_origin():
-    """Navigate the PNP head to the center of the connector pad array.
-
-    Target position = connector origin + PNP offsets (X, Y, Z).
-    Rotation (r) is taken directly from the connector origin unchanged.
-
-    Connector origin is determined in priority order:
-      1. print_origin + connector_print_offset  (if both are saved)
-      2. saved absolute connector_origin
+    """Navigate the PNP head to the PNP origin: the connector origin (print origin
+    + connector offset, or the saved absolute connector origin as a fallback) plus
+    the PNP offsets (X, Y, Z). Rotation (r) is taken directly from the connector
+    origin unchanged.
 
     Move order: drop Z -5000 µm first (clearance) → move XY (and r) → move Z to final target.
     """
     reload_origins()
 
-    # Prefer print_origin + connector_print_offset when both are available.
-    if _connector_print_offset is not None and _print_origin_saved is not None:
-        origin = {
-            ax: _print_origin_saved[ax] + _connector_print_offset.get(ax, 0)
-            for ax in ('X', 'Y', 'Z', 'r')
-            if ax in _print_origin_saved
-        }
-        print(f"[PNP] Connector position derived from print origin + connector offset: {_connector_print_offset}")
-    else:
-        origin = _connector_origin_saved
-
+    origin = get_connector_origin()
     if not origin or 'X' not in origin or 'Y' not in origin:
-        print("[PNP] No connector position available. Set the Connector origin or configure a connector offset from Print Origin in Settings.")
-        return
-
+        print("[PNP] No connector origin available. Set the Print and Connector origins first.")
+        return False
     offsets = get_pnp_offsets()
     target_x = origin['X'] + offsets['X']
     target_y = origin['Y'] + offsets['Y']
@@ -418,13 +416,32 @@ def goto_pnp_origin():
             _abort_if_emergency_stop()
             move_to('Z', target_z)
         print("[PNP] At PNP origin.")
+        return True
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("[PNP] Stopped by emergency stop.")
+            return False
         else:
             raise
     finally:
         update_speed(prev_speed)
+
+def save_pnp_offsets_from_current():
+    """Save the current X/Y/Z position as the PNP origin by storing its offsets
+    from the connector origin (the same offsets goto_pnp_origin() applies)."""
+    reload_origins()
+    origin = get_connector_origin()
+    if not origin:
+        print("[PNP] No connector origin available — PNP offsets not saved.")
+        return
+    offsets = {}
+    for ax in ('X', 'Y', 'Z'):
+        pos = get_current_position(ax)
+        if pos is None or ax not in origin:
+            print(f"[PNP] Could not read {ax} — PNP offsets not saved.")
+            return
+        offsets[ax] = int(round(pos - origin[ax]))
+    _save_origin('pnp_offsets', offsets)
 
 # Connector grid, 4x2 with no gaps (all directions in PCB view, but note the
 # stage moves the PCB under a still printhead, so machine moves are mirrored;
@@ -675,6 +692,51 @@ def reprint_feature(index, component="full"):
     update_speed(50)
     down(8000)
 
+def reprint_all_me_pads():
+    """Reprint the ME pad of every feature (1..pad_count) from the saved 'print'
+    origin, then one final ME pad at the connector origin. The user is first
+    offered the chance to fine-tune the print origin. Each pad is reached with an
+    automatic jog (Z touches down last)."""
+    clear_emergency_stop()
+    pad_count = get_pad_count()
+    reload_origins()
+    if not _print_origin_saved:
+        print("[reprint] No saved Print origin. Set the Print origin first.")
+        return
+    print(f"[reprint] Reprinting ME pads for {pad_count} feature(s) + connector origin")
+    try:
+        # Go to the saved print origin and let the user fine-tune it (the fine-tuned
+        # position is saved) before any printing; all pad positions derive from it.
+        print_origin()
+        _abort_if_emergency_stop()
+        for n in range(1, pad_count + 1):
+            _abort_if_emergency_stop()
+            jog_to_feature_start(n)
+            _abort_if_emergency_stop()  # jog swallows e-stop but leaves the flag set
+            update_speed(1)
+            print_pad(pad_types, "me", 8)
+            nordson_off()
+
+        _abort_if_emergency_stop()
+        if jog_to_connector_origin():
+            _abort_if_emergency_stop()
+            update_speed(1)
+            print_pad(pad_types, "me", 8)
+            nordson_off()
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[reprint] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        nordson_off()
+        update_speed(50)
+    print("[reprint] Finished reprinting ME pads")
+
+    # Lower the PCB (effectively lifting the printhead clear) after reprinting.
+    update_speed(50)
+    down(8000)
+
 # Z clearance (in stage units) held above the print height while jogging XY, so
 # the pen never drags across the PCB before touching down.
 JOG_Z_CLEARANCE_UM = 1000
@@ -696,10 +758,12 @@ def _jog_to_print_point(index, y_offset_um, label):
 
     clear_emergency_stop()
     me_pitch_um = get_pad_spacing_um()
-    target_x = origin['X'] + (index - 1) * me_pitch_um
-    target_y = origin['Y'] + y_offset_um
-    print_z = origin.get('Z')
+    _jog_to_target(origin['X'] + (index - 1) * me_pitch_um, origin['Y'] + y_offset_um,
+                   origin.get('Z'), origin.get('r'), f"{label} for feature {index}")
 
+def _jog_to_target(target_x, target_y, print_z, rot, label):
+    """Jog to absolute (target_x, target_y[, rot]) with the pen held clear below
+    `print_z`, then touch down by lowering Z LAST."""
     def move_axis_to(ax, target):
         cur = get_current_position(ax)
         if cur is None:
@@ -711,7 +775,7 @@ def _jog_to_print_point(index, y_offset_um, label):
         direction = '+' if diff >= 0 else '-'
         move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
 
-    print(f"[jog] Jogging to {label} for feature {index} "
+    print(f"[jog] Jogging to {label} "
           f"(X={target_x:.1f}, Y={target_y:.1f})")
     try:
         update_speed(30)
@@ -724,14 +788,14 @@ def _jog_to_print_point(index, y_offset_um, label):
         move_axis_to(x, target_x)
         _abort_if_emergency_stop()
         move_axis_to(y, target_y)
-        if 'r' in origin:
+        if rot is not None:
             _abort_if_emergency_stop()
-            move_axis_to('r', origin['r'])
+            move_axis_to('r', rot)
         # 3) Touch down: lower Z onto the board LAST
         if print_z is not None:
             _abort_if_emergency_stop()
             move_axis_to(z, print_z)
-        print(f"[jog] At {label} for feature {index}.")
+        print(f"[jog] At {label}.")
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("[jog] Stopped by emergency stop.")
@@ -739,6 +803,20 @@ def _jog_to_print_point(index, y_offset_um, label):
             raise
     finally:
         update_speed(50)
+
+def jog_to_connector_origin():
+    """Jog to the connector origin (print origin + connector offset, or the saved
+    absolute connector origin as a fallback), touching Z down LAST. Returns True
+    if the jog was started."""
+    reload_origins()
+    origin = get_connector_origin()
+    if not origin or 'X' not in origin or 'Y' not in origin:
+        print("[jog] No connector origin available. Set the Print and Connector origins first.")
+        return False
+
+    clear_emergency_stop()
+    _jog_to_target(origin['X'], origin['Y'], origin.get('Z'), origin.get('r'), "connector origin")
+    return True
 
 def jog_to_feature_start(index):
     """Automatically jog to feature `index`'s start (the ME-pad start point),
@@ -1200,8 +1278,14 @@ def print_tester():
     time.sleep(5.0)
     servo_to(15)
     time.sleep(0.2)
-    goto_pnp_origin()
+    if not goto_pnp_origin():
+        print("[print_tester] Did not reach the PNP origin — leaving the vacuum on and stopping.")
+        return
     time.sleep(0.2)
+    # Let the user fine-tune the PNP origin while the part is still held; the final
+    # position is saved as the PNP offsets before the vacuum is released.
+    _maybe_fine_tune_origin("PNP Origin")
+    save_pnp_offsets_from_current()
     solenoid_relay_off()
     time.sleep(10)
           

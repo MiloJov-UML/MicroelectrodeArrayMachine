@@ -1,0 +1,10 @@
+20:52:56.387  [origin:CONNECTOR] navigating to saved 'connector' origin.
+20:52:56.542  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:53:03.205  [origin:CONNECTOR] MOVE Y -1450.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+20:53:04.364  [origin:CONNECTOR] MOVE X +28700.0  —  move to saved 'connector' origin (X -> 342467.500)
+20:53:17.094  [origin:CONNECTOR] MOVE Z +10500.0  —  move to saved 'connector' origin (Z -> 2311435.000)
+20:56:17.510  [origin:CONNECTOR] navigating to saved 'connector' origin.
+20:56:17.665  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:56:24.333  [origin:CONNECTOR] MOVE Y -4550.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+20:56:26.990  [origin:CONNECTOR] MOVE X +28800.0  —  move to saved 'connector' origin (X -> 342467.500)
+20:56:39.716  [origin:CONNECTOR] MOVE Z +10532.5  —  move to saved 'connector' origin (Z -> 2311285.000)
