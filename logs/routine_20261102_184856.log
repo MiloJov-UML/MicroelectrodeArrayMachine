@@ -1,0 +1,32 @@
+18:48:56.659  [origin:PRINT] navigating to saved 'print' origin.
+18:48:56.818  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+18:49:03.482  [origin:PRINT] MOVE Y +14300.0  —  move to saved 'print' origin (Y -> 2398850.000)
+18:49:10.142  [origin:PRINT] MOVE X +2600.0  —  move to saved 'print' origin (X -> 341117.500)
+18:49:11.798  [origin:PRINT] MOVE r +86.7  —  move to saved 'print' origin (r -> 3146.150)
+18:58:58.121  [origin:PRINT] navigating to saved 'print' origin.
+18:58:58.377  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+18:59:01.134  [origin:PRINT] MOVE r +53.8  —  move to saved 'print' origin (r -> 3146.150)
+18:59:12.811  [origin:PRINT] MOVE Z +16370.0  —  move to saved 'print' origin (Z -> 2311472.500)
+19:46:57.894  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+19:47:09.479  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+19:49:03.865  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+19:49:03.967  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+19:49:06.624  [origin:MICROWIRE] MOVE Y -13300.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+19:49:12.784  [origin:MICROWIRE] MOVE X -100.0  —  move to saved 'microwire' origin (X -> 338517.500)
+19:49:13.440  [origin:MICROWIRE] MOVE r -86.7  —  move to saved 'microwire' origin (r -> 3059.450)
+19:50:02.294  [origin:PRINT] navigating to saved 'print' origin.
+19:50:02.450  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:50:09.111  [origin:PRINT] MOVE Y +13300.0  —  move to saved 'print' origin (Y -> 2397850.000)
+19:50:15.270  [origin:PRINT] MOVE X +100.0  —  move to saved 'print' origin (X -> 338617.500)
+19:50:15.924  [origin:PRINT] MOVE r +69.1  —  move to saved 'print' origin (r -> 3146.150)
+19:50:47.323  [origin:PRINT] navigating to saved 'print' origin.
+19:50:47.578  [origin:PRINT] MOVE Z -5000  —  drop Z for clearance before XY/r move
+19:50:49.839  [origin:PRINT] MOVE r +47.6  —  move to saved 'print' origin (r -> 3146.150)
+19:51:00.507  [origin:PRINT] MOVE Z +24170.0  —  move to saved 'print' origin (Z -> 2311522.500)
+19:53:21.686  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+19:53:21.789  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+19:53:24.448  [origin:MICROWIRE] MOVE Y -6300.0  —  move to saved 'microwire' origin (Y -> 2384550.000)
+19:55:06.718  [origin:CONNECTOR] navigating to saved 'connector' origin.
+19:55:06.928  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:55:13.601  [origin:CONNECTOR] MOVE Y +420.0  —  move to saved 'connector' origin (Y -> 2390850.000)
+19:55:14.356  [origin:CONNECTOR] MOVE Z +17000.0  —  move to saved 'connector' origin (Z -> 2310615.000)

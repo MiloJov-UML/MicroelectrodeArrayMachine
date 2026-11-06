@@ -1,0 +1,10 @@
+22:59:23.079  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:59:23.340  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:59:30.005  [origin:CONNECTOR] MOVE Y -350.0  —  move to saved 'connector' origin (Y -> 2389000.000)
+22:59:30.661  [origin:CONNECTOR] MOVE X +30550.0  —  move to saved 'connector' origin (X -> 358050.000)
+22:59:44.382  [origin:CONNECTOR] MOVE Z +9970.0  —  move to saved 'connector' origin (Z -> 2311512.500)
+22:59:57.881  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:59:58.034  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+23:00:00.689  [origin:MICROWIRE] MOVE Y -3450.0  —  move to saved 'microwire' origin (Y -> 2385550.000)
+23:00:02.848  [origin:MICROWIRE] MOVE X -24032.5  —  move to saved 'microwire' origin (X -> 334017.500)
+23:00:13.519  [origin:MICROWIRE] MOVE r -91.6  —  move to saved 'microwire' origin (r -> 3058.450)

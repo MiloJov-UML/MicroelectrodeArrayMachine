@@ -1,0 +1,28 @@
+23:26:19.236  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-04_3\camera0_20261104_232619.avi start=2026-11-04T23:26:19.235
+23:26:19.273  [cam0 f0 rec+0.04s] [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-04_3\camera1_20261104_232619.avi start=2026-11-04T23:26:19.273
+23:26:22.093  [cam0 f17 rec+2.86s] [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+23:26:22.145  [cam0 f17 rec+2.91s] [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+23:26:27.757  [cam0 f53 rec+8.52s] [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+23:26:27.808  [cam0 f53 rec+8.57s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+23:26:28.412  [cam0 f57 rec+9.18s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (8041.7µm remaining)
+23:26:30.017  [cam0 f68 rec+10.78s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (7438.9µm remaining)
+23:26:31.620  [cam0 f78 rec+12.39s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (6806.8µm remaining)
+23:26:33.231  [cam0 f88 rec+14.00s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (6306.9µm remaining)
+23:26:34.835  [cam0 f99 rec+15.60s] [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (5758.1µm remaining)
+23:26:36.445  [cam0 f109 rec+17.21s] [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (5307.2µm remaining)
+23:26:38.054  [cam0 f119 rec+18.82s] [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (4974.0µm remaining)
+23:26:39.657  [cam0 f129 rec+20.42s] [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (4974.0µm remaining)
+23:26:41.266  [cam0 f140 rec+22.03s] [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad1 (3959.6µm remaining)
+23:26:42.869  [cam0 f150 rec+23.63s] [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad1 (3440.1µm remaining)
+23:26:44.478  [cam0 f161 rec+25.24s] [extrude:ATTEMPT 11] MOVE t +100.0µm  —  close horizontal gap to pad1 (2940.3µm remaining)
+23:26:46.083  [cam0 f171 rec+26.85s] [extrude:ATTEMPT 12] MOVE t +100.0µm  —  close horizontal gap to pad1 (2332.6µm remaining)
+23:26:47.691  [cam0 f181 rec+28.46s] [extrude:ATTEMPT 13] MOVE t +100.0µm  —  close horizontal gap to pad1 (1676.0µm remaining)
+23:26:49.295  [cam0 f191 rec+30.06s] [extrude:ATTEMPT 14] MOVE t +100.0µm  —  close horizontal gap to pad1 (1151.6µm remaining)
+23:26:50.900  [cam0 f201 rec+31.67s] [extrude:ATTEMPT 15] MOVE t +100.0µm  —  close horizontal gap to pad1 (573.4µm remaining)
+23:26:52.504  [cam0 f211 rec+33.27s] [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 16 attempt(s).
+23:26:53.556  [cam0 f218 rec+34.32s] [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+23:26:54.558  [cam0 f224 rec+35.32s] [r_align:ANGLE] CF→GC 0.12° vs reference 0.00° (Δ0.12°, tol ±0.5°).
+23:26:54.559  [cam0 f224 rec+35.32s] [r_align:ANGLE] within tolerance — no rotation needed; skipping the rest of r_align.
+23:26:54.610  [cam0 f225 rec+35.38s] [laser-cut:SETUP] MOVE Z +1800  —  raise head clear before positioning T
+23:27:06.312  [cam0 f299 rec+47.08s] [camera1:RECORDING STOP] frames_written=308
+23:27:06.328  [camera0:RECORDING STOP] frames_written=300

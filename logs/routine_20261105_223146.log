@@ -1,0 +1,26 @@
+22:31:46.274  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+22:31:46.377  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+22:31:49.033  [origin:MICROWIRE] MOVE Y -3800.0  —  move to saved 'microwire' origin (Y -> 2385550.000)
+22:31:51.192  [origin:MICROWIRE] MOVE X +6517.5  —  move to saved 'microwire' origin (X -> 334017.500)
+22:31:54.350  [origin:MICROWIRE] MOVE r -91.6  —  move to saved 'microwire' origin (r -> 3058.450)
+22:32:57.137  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:32:57.295  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:33:03.960  [origin:CONNECTOR] MOVE Y +3550.0  —  move to saved 'connector' origin (Y -> 2389100.000)
+22:33:06.116  [origin:CONNECTOR] MOVE X +24332.5  —  move to saved 'connector' origin (X -> 358350.000)
+22:33:16.795  [origin:CONNECTOR] MOVE r +31.5  —  move to saved 'connector' origin (r -> 3150.050)
+22:33:23.955  [origin:CONNECTOR] MOVE Z +15070.0  —  move to saved 'connector' origin (Z -> 2311612.500)
+22:42:52.013  [origin:PRINT] navigating to saved 'print' origin.
+22:42:52.172  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:42:58.840  [origin:PRINT] MOVE Y +7500.0  —  move to saved 'print' origin (Y -> 2396500.000)
+22:43:02.498  [origin:PRINT] MOVE X -3350.0  —  move to saved 'print' origin (X -> 354700.000)
+22:43:04.708  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2311612.500)
+22:51:42.941  [origin:CONNECTOR] navigating to saved 'connector' origin.
+22:51:43.098  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:51:49.760  [origin:CONNECTOR] MOVE Y -7500.0  —  move to saved 'connector' origin (Y -> 2389000.000)
+22:51:53.423  [origin:CONNECTOR] MOVE X +3350.0  —  move to saved 'connector' origin (X -> 357850.000)
+22:51:55.638  [origin:CONNECTOR] MOVE Z +15000.0  —  move to saved 'connector' origin (Z -> 2311512.500)
+22:52:31.716  [origin:PNP] navigating to saved 'pnp' origin.
+22:52:31.871  [origin:PNP] MOVE Z -15000  —  drop Z for clearance before XY/r move
+22:52:38.533  [origin:PNP] MOVE Y +350.0  —  move to saved 'pnp' origin (Y -> 2389350.000)
+22:52:39.188  [origin:PNP] MOVE X -30550.0  —  move to saved 'pnp' origin (X -> 327500.000)
+22:52:52.913  [origin:PNP] MOVE Z +20030.0  —  move to saved 'pnp' origin (Z -> 2316542.500)

@@ -1,6 +1,6 @@
 {
   "pad_count": 8,
-  "pad_spacing": 1060.0,
+  "pad_spacing": 1000.0,
   "trace_tuning": {
     "connector_cl_drop_mm": 2.5,
     "corner_mm": 0.5,
@@ -15,25 +15,25 @@
     "X": 344517.5,
     "Y": 2394450.0,
     "r": 3146.15,
-    "Z": 2312042.5
+    "Z": 2311042.5
   },
   "print_origin_coords": {
-    "X": 346767.5,
-    "Y": 2395340.0,
-    "Z": 2312412.5,
-    "r": 3146.15
+    "X": 354500.0,
+    "Y": 2396500.0,
+    "Z": 2311512.5,
+    "r": 3150.05
   },
   "microwire_origin": {
-    "X": 344247.5,
-    "Y": 2381910.0,
-    "Z": 2315837.5,
-    "r": 3059.0
+    "X": 334017.5,
+    "Y": 2385550.0,
+    "Z": 2316322.5,
+    "r": 3058.4500000000003
   },
   "connector_origin": {
-    "X": 350517.5,
-    "Y": 2391440.0,
-    "Z": 2312482.5,
-    "r": 3146.15
+    "X": 358050.0,
+    "Y": 2389000.0,
+    "Z": 2311512.5,
+    "r": 3150.05
   },
   "camera_adjustments": {
     "0": {
@@ -58,16 +58,17 @@
       "sharp_strength": 2.0
     }
   },
-  "pnp_offsets": {
-    "X": -29150,
-    "Y": -800,
-    "Z": 4500
+  "yolo_exe_path": "C:\\Users\\MINI Lab\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\Scripts\\yolo.exe",
+  "pnp_origin": {
+    "X": 327500.0,
+    "Y": 2389350.0,
+    "Z": 2316542.5,
+    "r": 3150.05
   },
   "connector_print_offset": {
-    "X": 3750,
-    "Y": -3700,
-    "Z": 0,
-    "r": 0
-  },
-  "yolo_exe_path": "C:\\Users\\MINI Lab\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\Scripts\\yolo.exe"
+    "X": 3550.0,
+    "Y": -7500.0,
+    "Z": 0.0,
+    "r": 0.0
+  }
 }

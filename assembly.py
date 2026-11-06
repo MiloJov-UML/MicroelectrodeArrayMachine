@@ -52,7 +52,7 @@ pcb_z_coord = None # Z coordinate for printing, set after probing
 _has_calibrated = False  # Set True after first successful calibrate(); skipped on reruns
 
 # ---------------------------------------------------------------------------
-# Four-origin system: probe, print, microwire, connector
+# Origin system: probe, microwire, and the PNP -> connector -> print chain.
 # Each is persisted to pcb_settings.json so every confirmed position becomes
 # the starting point for the next run, making the system more accurate over time.
 # ---------------------------------------------------------------------------
@@ -63,56 +63,216 @@ _probe_origin    = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _print_origin_saved   = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _microwire_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...}
 _connector_origin_saved = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — center of 4x2 connector pad array
-_connector_print_offset = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — offset from print origin to connector origin (overrides absolute if set)
+_pnp_origin_saved = None        # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — fixed machine location, independent of the board
+_connector_print_offset = None  # {'X': ..., 'Y': ..., 'Z': ..., 'r': ...} — connector origin minus print origin (rigid, constant)
+
+# Print origin moves a little each run and is the only origin re-set per run.
+# The connector origin is rigidly tied to it: connector = print + connector_print_offset
+# (the offset is captured once by setting both origins). The connector's absolute
+# coordinates are stored too, but are re-derived from the print origin whenever
+# the offset exists. The PNP origin is a fixed absolute location; its distance to
+# the connector varies run to run and is never stored (see get_pnp_to_connector_delta).
+_ORIGIN_AXES = ('X', 'Y', 'Z', 'r')
+
+def _offset_add(base, offset):
+    return {ax: round(base[ax] + offset.get(ax, 0), 3) for ax in _ORIGIN_AXES if ax in base}
+
+def _offset_between(pos, base):
+    return {ax: round(pos[ax] - base[ax], 3) for ax in _ORIGIN_AXES if ax in pos and ax in base}
+
+def _refresh_derived_origins():
+    """Re-derive the connector absolute coordinates from the print origin and offset."""
+    global _connector_origin_saved
+    if _print_origin_saved and _connector_print_offset:
+        _connector_origin_saved = _offset_add(_print_origin_saved, _connector_print_offset)
+
+def _origin_chain_entries():
+    return {
+        'pnp_origin':             _pnp_origin_saved,
+        'print_origin_coords':    _print_origin_saved,
+        'connector_origin':       _connector_origin_saved,
+        'connector_print_offset': _connector_print_offset,
+    }
+
+def _read_settings():
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _write_settings(data):
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Warning: could not write {SETTINGS_FILE}: {e}")
+        return False
+
+def _persist_origin_chain():
+    """Write the PNP/connector/print origins and offsets to pcb_settings.json
+    without touching other keys. Entries that are None are removed."""
+    data = _read_settings()
+    for key, value in _origin_chain_entries().items():
+        if value:
+            data[key] = value
+        else:
+            data.pop(key, None)
+    _write_settings(data)
+
+def _migrate_legacy_origins(data):
+    """One-time conversion of older layouts to the current one:
+      - pnp_offsets (relative to the connector origin) -> stored absolute pnp_origin
+      - connector_pnp_offset / print_connector_offset (short-lived PNP-rooted layout)
+        -> connector_print_offset (connector minus print), computed from the
+        stored absolute origins.
+    connector_print_offset already has the connector-minus-print meaning.
+    Returns True if the settings were changed."""
+    changed = False
+    legacy_pnp_off = data.get('pnp_offsets')
+    if legacy_pnp_off:
+        if 'pnp_origin' not in data:
+            print_abs = data.get('print_origin_coords')
+            conn_off = data.get('connector_print_offset')
+            if conn_off and print_abs:
+                connector = _offset_add(print_abs, conn_off)
+            else:
+                connector = data.get('connector_origin')
+            if connector:
+                pnp = dict(connector)
+                for ax in ('X', 'Y', 'Z'):
+                    if ax in pnp:
+                        pnp[ax] = round(pnp[ax] + legacy_pnp_off.get(ax, 0), 3)
+                data['pnp_origin'] = pnp
+                if conn_off and print_abs:
+                    data['connector_origin'] = connector
+        data.pop('pnp_offsets', None)
+        changed = True
+    if 'connector_pnp_offset' in data or 'print_connector_offset' in data:
+        print_abs = data.get('print_origin_coords')
+        connector = data.get('connector_origin')
+        if print_abs and connector:
+            data['connector_print_offset'] = _offset_between(connector, print_abs)
+        data.pop('connector_pnp_offset', None)
+        data.pop('print_connector_offset', None)
+        changed = True
+    if changed:
+        print("Migrated older origin settings to the current layout.")
+    return changed
 
 def _load_origins():
-    """Load the four saved origins from pcb_settings.json at startup."""
-    global _probe_origin, _print_origin_saved, _microwire_origin_saved, _connector_origin_saved, _connector_print_offset
+    """Load the saved origins from pcb_settings.json at startup."""
+    global _probe_origin, _print_origin_saved, _microwire_origin_saved, _connector_origin_saved
+    global _pnp_origin_saved, _connector_print_offset
     if not os.path.isfile(SETTINGS_FILE):
         return
     try:
         with open(SETTINGS_FILE, 'r') as f:
             data = json.load(f)
+        if _migrate_legacy_origins(data):
+            _write_settings(data)
         _probe_origin             = data.get('probe_origin')            or None
         _print_origin_saved       = data.get('print_origin_coords')     or None
         _microwire_origin_saved   = data.get('microwire_origin')        or None
         _connector_origin_saved   = data.get('connector_origin')        or None
+        _pnp_origin_saved         = data.get('pnp_origin')              or None
         _connector_print_offset   = data.get('connector_print_offset')  or None
-        print(f"Origins loaded probe: {_probe_origin}, print: {_print_origin_saved}, microwire: {_microwire_origin_saved}, connector: {_connector_origin_saved}, connector_offset: {_connector_print_offset}")
+        _refresh_derived_origins()
+        print(f"Origins loaded probe: {_probe_origin}, pnp: {_pnp_origin_saved}, print: {_print_origin_saved}, connector: {_connector_origin_saved}, microwire: {_microwire_origin_saved}")
     except Exception as e:
         print(f"Warning: could not load origins from {SETTINGS_FILE}: {e}")
 
 def _save_origin(key, positions_dict):
     """Persist one origin dict to pcb_settings.json without overwriting other keys."""
-    existing = {}
-    if os.path.isfile(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                existing = json.load(f)
-        except Exception:
-            pass
+    existing = _read_settings()
     existing[key] = positions_dict
-    try:
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(existing, f, indent=2)
+    if _write_settings(existing):
         print(f"Origin '{key}' saved: {positions_dict}")
-    except Exception as e:
-        print(f"Warning: could not save origin '{key}': {e}")
 
 def reload_origins():
-    """Reload all four saved origins from pcb_settings.json into memory.
+    """Reload all saved origins from pcb_settings.json into memory.
     Call this after the GUI saves a new origin so in-session routines see it."""
     _load_origins()
 
+def get_pnp_origin():
+    """Return the saved PNP origin (a fixed machine location), or None."""
+    return _pnp_origin_saved
+
+def get_connector_origin():
+    """Return the effective connector origin (print origin + connector offset when
+    both exist, otherwise the saved absolute connector origin).
+    Call reload_origins() first to pick up values just saved by the GUI."""
+    return _connector_origin_saved
+
+def get_print_origin():
+    """Return the saved print origin."""
+    return _print_origin_saved
+
 def get_connector_print_offset():
-    """Return the saved connector-from-print offset dict, or None if not configured."""
+    """Return the saved connector-minus-print offset dict, or None if not configured."""
     return _connector_print_offset
 
+def get_pnp_to_connector_delta():
+    """Return connector origin minus PNP origin per axis. This varies run to run
+    (the PNP origin is fixed, the connector moves with the print origin), so it is
+    always computed from the current origins and never stored. None if either
+    origin is missing."""
+    if not _pnp_origin_saved or not _connector_origin_saved:
+        return None
+    return _offset_between(_connector_origin_saved, _pnp_origin_saved)
+
+def save_pnp_origin(positions):
+    """Set the PNP origin (absolute, independent of the print/connector origins)."""
+    global _pnp_origin_saved
+    _pnp_origin_saved = {ax: positions[ax] for ax in _ORIGIN_AXES if positions.get(ax) is not None}
+    _persist_origin_chain()
+    print(f"Origin 'pnp' saved: {_pnp_origin_saved}")
+
+def save_print_origin(positions):
+    """Set the print origin. The connector origin follows it (offset unchanged)."""
+    global _print_origin_saved
+    _print_origin_saved = {ax: positions[ax] for ax in _ORIGIN_AXES if positions.get(ax) is not None}
+    _refresh_derived_origins()
+    _persist_origin_chain()
+    print(f"Origin 'print' saved: {_print_origin_saved}, connector now at: {_connector_origin_saved}")
+
+def save_connector_origin(positions):
+    """Set the connector origin: stores its absolute coordinates and its offset
+    from the print origin. Do this once to capture the rigid print-to-connector
+    offset; later runs only re-set the print origin."""
+    global _connector_origin_saved, _connector_print_offset
+    _connector_origin_saved = {ax: positions[ax] for ax in _ORIGIN_AXES if positions.get(ax) is not None}
+    if _print_origin_saved:
+        _connector_print_offset = _offset_between(_connector_origin_saved, _print_origin_saved)
+    else:
+        _connector_print_offset = None
+        print("[Origin] No saved Print origin — connector origin saved as absolute only. "
+              "Set the Print origin, then re-set the Connector origin to capture the offset.")
+    _persist_origin_chain()
+    print(f"Origin 'connector' saved: {_connector_origin_saved}, offset from print: {_connector_print_offset}")
+
 def save_connector_print_offset(offset_dict):
-    """Persist the connector-from-print offset to pcb_settings.json and update in-memory state."""
+    """Edit the stored connector-from-print offset directly; the connector origin
+    is re-derived from the print origin."""
     global _connector_print_offset
-    _connector_print_offset = offset_dict if offset_dict else None
-    _save_origin('connector_print_offset', offset_dict)
+    _connector_print_offset = offset_dict or None
+    _refresh_derived_origins()
+    _persist_origin_chain()
+
+PNP_DEPART_Z_DROP_UM = 10000  # extra Z clearance when leaving the PNP origin (held part / PNP head)
+
+def is_at_pnp_origin(tolerance=500.0):
+    """True if the stage X and Y are within `tolerance` µm of the saved PNP origin."""
+    if not _pnp_origin_saved:
+        return False
+    for ax in ('X', 'Y'):
+        cur = get_current_position(ax)
+        if cur is None or ax not in _pnp_origin_saved or abs(cur - _pnp_origin_saved[ax]) > tolerance:
+            return False
+    return True
 
 def _already_at_origin(origin_dict, tolerance=10.0):
     """Return True if every axis in origin_dict is already within `tolerance` units
@@ -128,8 +288,9 @@ def _already_at_origin(origin_dict, tolerance=10.0):
 def _navigate_to_saved_origin(origin_dict, axes):
     """Move to a saved origin with camera-fixture-safe axis ordering.
 
-    Arriving AT microwire:   Z drop 5000  → Y → X → Z(target) → r
+    Arriving AT microwire:   Z drop 5000  → Y → X → r → Z(target)
     Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
+    Departing FROM PNP:       Z drop PNP_DEPART_Z_DROP_UM → non-Z axes → Z(target)
     All other moves:          Z drop 5000  → non-Z axes (given order) → Z(target)
     """
     if _already_at_origin(origin_dict):
@@ -154,14 +315,16 @@ def _navigate_to_saved_origin(origin_dict, axes):
             departing_microwire = True
 
     z_drop = 15000 if departing_microwire else 5000
+    if origin_dict is not _pnp_origin_saved and is_at_pnp_origin():
+        z_drop = max(z_drop, PNP_DEPART_Z_DROP_UM)
 
     # 1) Drop Z for clearance
     _abort_if_emergency_stop()
     move_linear_stage('Z', '-', z_drop, wait_for_stop=True, max_wait=30.0)
 
     if arriving_at_microwire:
-        # 2a) Arriving at microwire: Y → X → Z → r (Y first to clear camera fixturing)
-        for ax in ('Y', 'X', 'Z', 'r'):
+        # 2a) Arriving at microwire: Y → X → r → Z (Y first to clear camera fixturing)
+        for ax in ('Y', 'X', 'r', 'Z'):
             val = origin_dict.get(ax)
             if val is not None:
                 _move(ax, val)
@@ -328,64 +491,23 @@ def get_trace_tuning():
         print(f"Warning: could not read trace_tuning from {SETTINGS_FILE}: {e}")
     return tuning
 
-# Default PNP-to-nozzle offsets (µm).  Override via Settings › PNP Offsets.
-PNP_OFFSET_X = -29580
-PNP_OFFSET_Y = -2300
-PNP_OFFSET_Z =  4800
-
-def get_pnp_offsets():
-    """Read the PNP-to-nozzle axis offsets (µm) from pcb_settings.json.
-    Returns a dict with keys 'X', 'Y', 'Z'.
-    Defaults: X=-29580, Y=-2300, Z=4800."""
-    defaults = {'X': PNP_OFFSET_X, 'Y': PNP_OFFSET_Y, 'Z': PNP_OFFSET_Z}
-    try:
-        if os.path.isfile(SETTINGS_FILE):
-            with open(SETTINGS_FILE, 'r') as f:
-                saved = json.load(f).get('pnp_offsets', {})
-            return {k: int(saved[k]) if k in saved else v for k, v in defaults.items()}
-    except Exception as e:
-        print(f"Warning: could not read pnp_offsets from {SETTINGS_FILE}: {e}")
-    return defaults
-
 def goto_pnp_origin():
-    """Navigate the PNP head to the center of the connector pad array.
-
-    Target position = connector origin + PNP offsets (X, Y, Z).
-    Rotation (r) is taken directly from the connector origin unchanged.
-
-    Connector origin is determined in priority order:
-      1. print_origin + connector_print_offset  (if both are saved)
-      2. saved absolute connector_origin
+    """Navigate the PNP head to the saved PNP origin (the root of the origin chain).
 
     Move order: drop Z -5000 µm first (clearance) → move XY (and r) → move Z to final target.
     """
     reload_origins()
 
-    # Prefer print_origin + connector_print_offset when both are available.
-    if _connector_print_offset is not None and _print_origin_saved is not None:
-        origin = {
-            ax: _print_origin_saved[ax] + _connector_print_offset.get(ax, 0)
-            for ax in ('X', 'Y', 'Z', 'r')
-            if ax in _print_origin_saved
-        }
-        print(f"[PNP] Connector position derived from print origin + connector offset: {_connector_print_offset}")
-    else:
-        origin = _connector_origin_saved
-
+    origin = get_pnp_origin()
     if not origin or 'X' not in origin or 'Y' not in origin:
-        print("[PNP] No connector position available. Set the Connector origin or configure a connector offset from Print Origin in Settings.")
-        return
-
-    offsets = get_pnp_offsets()
-    target_x = origin['X'] + offsets['X']
-    target_y = origin['Y'] + offsets['Y']
+        print("[PNP] No PNP origin saved. Set the PNP origin first.")
+        return False
+    target_x = origin['X']
+    target_y = origin['Y']
     target_z = origin.get('Z')
-    if target_z is not None:
-        target_z = target_z + offsets['Z']
 
-    print(f"[PNP] Connector origin: X={origin['X']:.1f}, Y={origin['Y']:.1f}, Z={origin.get('Z')}")
-    print(f"[PNP] PNP offsets: {offsets}")
     print(f"[PNP] Target: X={target_x:.1f}, Y={target_y:.1f}, Z={target_z}")
+    print(f"[PNP] Connector origin is currently {get_pnp_to_connector_delta()} from the PNP origin.")
 
     def move_to(ax, target):
         cur = get_current_position(ax)
@@ -418,13 +540,23 @@ def goto_pnp_origin():
             _abort_if_emergency_stop()
             move_to('Z', target_z)
         print("[PNP] At PNP origin.")
+        return True
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("[PNP] Stopped by emergency stop.")
+            return False
         else:
             raise
     finally:
         update_speed(prev_speed)
+
+def save_pnp_origin_from_current():
+    """Save the current X/Y/Z/r position as the PNP origin (fixed machine location)."""
+    pos = {ax: get_current_position(ax) for ax in _ORIGIN_AXES}
+    if any(pos[ax] is None for ax in ('X', 'Y', 'Z')):
+        print("[PNP] Could not read X/Y/Z — PNP origin not saved.")
+        return
+    save_pnp_origin(pos)
 
 # Connector grid, 4x2 with no gaps (all directions in PCB view, but note the
 # stage moves the PCB under a still printhead, so machine moves are mirrored;
@@ -675,6 +807,51 @@ def reprint_feature(index, component="full"):
     update_speed(50)
     down(8000)
 
+def reprint_all_me_pads():
+    """Reprint the ME pad of every feature (1..pad_count) from the saved 'print'
+    origin, then one final ME pad at the connector origin. The user is first
+    offered the chance to fine-tune the print origin. Each pad is reached with an
+    automatic jog (Z touches down last)."""
+    clear_emergency_stop()
+    pad_count = get_pad_count()
+    reload_origins()
+    if not _print_origin_saved:
+        print("[reprint] No saved Print origin. Set the Print origin first.")
+        return
+    print(f"[reprint] Reprinting ME pads for {pad_count} feature(s) + connector origin")
+    try:
+        # Go to the saved print origin and let the user fine-tune it (the fine-tuned
+        # position is saved) before any printing; all pad positions derive from it.
+        print_origin()
+        _abort_if_emergency_stop()
+        for n in range(1, pad_count + 1):
+            _abort_if_emergency_stop()
+            jog_to_feature_start(n)
+            _abort_if_emergency_stop()  # jog swallows e-stop but leaves the flag set
+            update_speed(1)
+            print_pad(pad_types, "me", 8)
+            nordson_off()
+
+        _abort_if_emergency_stop()
+        if jog_to_connector_origin():
+            _abort_if_emergency_stop()
+            update_speed(1)
+            print_pad(pad_types, "me", 8)
+            nordson_off()
+    except RuntimeError as e:
+        if str(e) == "Emergency stop requested.":
+            print("[reprint] Stopped by emergency stop.")
+        else:
+            raise
+    finally:
+        nordson_off()
+        update_speed(50)
+    print("[reprint] Finished reprinting ME pads")
+
+    # Lower the PCB (effectively lifting the printhead clear) after reprinting.
+    update_speed(50)
+    down(8000)
+
 # Z clearance (in stage units) held above the print height while jogging XY, so
 # the pen never drags across the PCB before touching down.
 JOG_Z_CLEARANCE_UM = 1000
@@ -696,10 +873,12 @@ def _jog_to_print_point(index, y_offset_um, label):
 
     clear_emergency_stop()
     me_pitch_um = get_pad_spacing_um()
-    target_x = origin['X'] + (index - 1) * me_pitch_um
-    target_y = origin['Y'] + y_offset_um
-    print_z = origin.get('Z')
+    _jog_to_target(origin['X'] + (index - 1) * me_pitch_um, origin['Y'] + y_offset_um,
+                   origin.get('Z'), origin.get('r'), f"{label} for feature {index}")
 
+def _jog_to_target(target_x, target_y, print_z, rot, label):
+    """Jog to absolute (target_x, target_y[, rot]) with the pen held clear below
+    `print_z`, then touch down by lowering Z LAST."""
     def move_axis_to(ax, target):
         cur = get_current_position(ax)
         if cur is None:
@@ -711,7 +890,7 @@ def _jog_to_print_point(index, y_offset_um, label):
         direction = '+' if diff >= 0 else '-'
         move_linear_stage(ax, direction, abs(diff), wait_for_stop=True, max_wait=30.0)
 
-    print(f"[jog] Jogging to {label} for feature {index} "
+    print(f"[jog] Jogging to {label} "
           f"(X={target_x:.1f}, Y={target_y:.1f})")
     try:
         update_speed(30)
@@ -724,14 +903,14 @@ def _jog_to_print_point(index, y_offset_um, label):
         move_axis_to(x, target_x)
         _abort_if_emergency_stop()
         move_axis_to(y, target_y)
-        if 'r' in origin:
+        if rot is not None:
             _abort_if_emergency_stop()
-            move_axis_to('r', origin['r'])
+            move_axis_to('r', rot)
         # 3) Touch down: lower Z onto the board LAST
         if print_z is not None:
             _abort_if_emergency_stop()
             move_axis_to(z, print_z)
-        print(f"[jog] At {label} for feature {index}.")
+        print(f"[jog] At {label}.")
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("[jog] Stopped by emergency stop.")
@@ -739,6 +918,20 @@ def _jog_to_print_point(index, y_offset_um, label):
             raise
     finally:
         update_speed(50)
+
+def jog_to_connector_origin():
+    """Jog to the connector origin (print origin + connector offset, or the saved
+    absolute connector origin as a fallback), touching Z down LAST. Returns True
+    if the jog was started."""
+    reload_origins()
+    origin = get_connector_origin()
+    if not origin or 'X' not in origin or 'Y' not in origin:
+        print("[jog] No connector origin available. Set the Print and Connector origins first.")
+        return False
+
+    clear_emergency_stop()
+    _jog_to_target(origin['X'], origin['Y'], origin.get('Z'), origin.get('r'), "connector origin")
+    return True
 
 def jog_to_feature_start(index):
     """Automatically jog to feature `index`'s start (the ME-pad start point),
@@ -1124,7 +1317,6 @@ def z_home():
         print(f"Z home position set at {print_home[2]}")    
     
 def print_origin():
-    global _print_origin_saved
     if _print_origin_saved:
         # Navigate directly to the last confirmed print origin.
         print("Navigating to saved print origin...")
@@ -1143,8 +1335,7 @@ def print_origin():
     # Always give the user the option to verify / fine-tune, then save.
     _maybe_fine_tune_origin("Print Origin")
     pos = {ax: get_current_position(ax) for ax in ('X', 'Y', 'Z', 'r')}
-    _print_origin_saved = {k: v for k, v in pos.items() if v is not None}
-    _save_origin('print_origin_coords', _print_origin_saved)
+    save_print_origin({k: v for k, v in pos.items() if v is not None})
     get_coord()
 
 def calibrate():
@@ -1200,8 +1391,14 @@ def print_tester():
     time.sleep(5.0)
     servo_to(15)
     time.sleep(0.2)
-    goto_pnp_origin()
+    if not goto_pnp_origin():
+        print("[print_tester] Did not reach the PNP origin — leaving the vacuum on and stopping.")
+        return
     time.sleep(0.2)
+    # Let the user fine-tune the PNP origin while the part is still held; the final
+    # position is saved as the PNP origin before the vacuum is released.
+    _maybe_fine_tune_origin("PNP Origin")
+    save_pnp_origin_from_current()
     solenoid_relay_off()
     time.sleep(10)
           
@@ -1266,7 +1463,73 @@ def microwire_origin_setup():
     _microwire_origin_saved = {k: v for k, v in pos.items() if v is not None}
     _save_origin('microwire_origin', _microwire_origin_saved)
 
-def full_sequence(run_calibration=True):
+# PRINT LEVELING
+LEVEL_X_SWEEP_UM = 7000   # X sweep length used to check/adjust roll
+LEVEL_Y_SWEEP_UM = 9000   # Y sweep length used to check/adjust pitch
+
+_level_choice_event = threading.Event()
+_level_is_level = False
+_level_ask_callback = None  # callable(axis_label: str, adjust_name: str) registered by the GUI
+
+def register_level_ask_callback(callback):
+    """Register a GUI callable(axis_label, adjust_name) that asks the user whether the axis is level."""
+    global _level_ask_callback
+    _level_ask_callback = callback
+
+def notify_level_choice(is_level: bool):
+    """Called by the GUI with the user's answer: True = level, False = adjusted/not level yet."""
+    global _level_is_level
+    _level_is_level = is_level
+    _level_choice_event.set()
+
+def _ask_if_level(axis_label, adjust_name):
+    """Block until the user says whether the axis is level."""
+    if _level_ask_callback is None:
+        raise RuntimeError("No print-leveling prompt registered.")
+    _level_choice_event.clear()
+    _level_ask_callback(axis_label, adjust_name)
+    while not _level_choice_event.wait(0.1):
+        _abort_if_emergency_stop()
+    return _level_is_level
+
+def _level_axis(axis_label, adjust_name, sweep_fn, return_fn, length):
+    """Sweep out, let the user adjust, sweep back; repeat until the user reports level."""
+    while True:
+        _abort_if_emergency_stop()
+        print(f"[Leveling] {axis_label}: sweeping {length} µm")
+        sweep_fn(length)
+        level = _ask_if_level(axis_label, adjust_name)
+        _abort_if_emergency_stop()
+        return_fn(length)
+        if level:
+            print(f"[Leveling] {axis_label} confirmed level.")
+            return
+        print(f"[Leveling] {axis_label} not level yet — repeating sweep.")
+
+def print_leveling():
+    """Go to the print origin (with fine-tune), level X (roll) then Y (pitch)
+    by repeated sweeps, then run a rectangular move as a final check."""
+    prev_speed = get_current_speed()
+    try:
+        _abort_if_emergency_stop()
+        print("--- Print leveling ---")
+        print_origin()
+        _abort_if_emergency_stop()
+        update_speed(30)
+
+        _level_axis("X axis (roll)", "roll", right, left, LEVEL_X_SWEEP_UM)
+        _level_axis("Y axis (pitch)", "pitch", front, back, LEVEL_Y_SWEEP_UM)
+
+        print("[Leveling] Final rectangular check...")
+        for move, length in ((front, LEVEL_Y_SWEEP_UM), (right, LEVEL_X_SWEEP_UM),
+                             (back, LEVEL_Y_SWEEP_UM), (left, LEVEL_X_SWEEP_UM)):
+            _abort_if_emergency_stop()
+            move(length)
+        print("--- Print leveling complete ---")
+    finally:
+        update_speed(prev_speed)
+
+def full_sequence(run_calibration=True, run_sacrificial=True):
     global _has_calibrated
     clear_emergency_stop()
     # Flush the PC-side serial buffer so any bytes left over from a previous
@@ -1287,12 +1550,17 @@ def full_sequence(run_calibration=True):
                 print("Skipping calibration (already calibrated this session).")
         else:
             print("Calibration skipped by user.")
-            # Navigate to probe origin so the sacrificial print is in the right place
-            if _probe_origin:
-                print("Navigating to probe origin for sacrificial print...")
+            # The probe origin is only needed as the starting point for the
+            # sacrificial print or the print-origin fallback offsets; otherwise
+            # go straight to the saved print origin.
+            if _probe_origin and (run_sacrificial or not _print_origin_saved):
+                print("Navigating to probe origin...")
                 _navigate_to_saved_origin(_probe_origin, ['X', 'Y', 'r', 'Z'])
         _abort_if_emergency_stop()
-        sacrificial_print()
+        if run_sacrificial:
+            sacrificial_print()
+        else:
+            print("Sacrificial print skipped by user.")
         _abort_if_emergency_stop()
         print_origin()
         print_pcb()

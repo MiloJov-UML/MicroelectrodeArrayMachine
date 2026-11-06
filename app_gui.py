@@ -68,11 +68,24 @@ from assembly import (
     notify_fine_tune_choice,
     register_origin_prompt_callback,
     register_origin_ask_callback,
+    register_level_ask_callback,
+    notify_level_choice,
+    print_leveling,
     microwire_origin_setup,
+    is_at_pnp_origin,
+    PNP_DEPART_Z_DROP_UM,
     reload_origins,
+    save_pnp_origin,
+    save_connector_origin,
+    save_print_origin,
     save_connector_print_offset,
+    get_pnp_origin,
+    get_connector_origin,
+    get_print_origin,
+    get_connector_print_offset,
     full_sequence,
     reprint_feature,
+    reprint_all_me_pads,
     jog_to_feature_start,
     jog_to_trace_start,
     jog_to_connector_pad,
@@ -180,22 +193,6 @@ def save_trace_tuning(trace_tuning):
     except Exception as e:
         print(f"Warning: Could not save trace tuning: {e}")
 
-def save_pnp_offsets(offsets_dict):
-    """Persist PNP-to-nozzle offsets to pcb_settings.json."""
-    existing = {}
-    if os.path.isfile(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                existing = json.load(f)
-        except Exception:
-            pass
-    existing["pnp_offsets"] = offsets_dict
-    try:
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(existing, f, indent=2)
-        print(f"Saved PNP offsets to {SETTINGS_FILE}: {offsets_dict}")
-    except Exception as e:
-        print(f"Warning: Could not save PNP offsets: {e}")
 
 def save_camera_ports(ports_dict):
     """Persist camera port assignments to pcb_settings.json."""
@@ -321,6 +318,15 @@ def on_stop_motors():
     except Exception as e:
         print(f"Warning: could not turn Nordson off during stop: {e}")
 
+    # Turn recording off if it is on (this also stops auto-annotate).
+    try:
+        rv = globals().get('record_var')
+        if rv is not None and rv.get() == 'On':
+            rv.set('Off')
+            toggle_recording()
+    except Exception as e:
+        print(f"Warning: could not turn recording off during stop: {e}")
+
 def start_routine_thread(target, routine_name):
     global routine_thread
 
@@ -337,9 +343,9 @@ def start_routine_thread(target, routine_name):
     routine_thread = threading.Thread(target=runner, daemon=True)
     routine_thread.start()
 
-def run_full_assembly(run_calibration=True):
+def run_full_assembly(run_calibration=True, run_sacrificial=True):
     try:
-        full_sequence(run_calibration=run_calibration)
+        full_sequence(run_calibration=run_calibration, run_sacrificial=run_sacrificial)
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
             print("Metal ink routine stopped by emergency stop.")
@@ -404,6 +410,12 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
     r_align(target_pad_number=pad_num)
     if not wait_for_r_align_done():
         raise RuntimeError("Emergency stop requested.")
+    _abort_if_emergency_stop()
+    if image_recognition.r_align_failed:
+        # Don't cut a wire that isn't confirmed aligned; use Settings > Realign/Recut Pads to retry.
+        raise RuntimeError(f"Alignment failed on pad {pad_num} (unreliable CF_Tip detection or "
+                           f"Y-align travel limit) — skipped the laser cut. Check the wire/pad "
+                           f"position, then retry with Realign/Recut Pads.")
 
     """# ── Center on visible area, then re-check Y-axis alignment ─────
     _abort_if_emergency_stop()
@@ -607,8 +619,8 @@ def laser_cut():
         _abort_if_emergency_stop()
         update_speed(1)
         _abort_if_emergency_stop()
-        image_recognition.log_move("laser-cut", "SETUP", "Z", "+", "1800", "raise head clear before positioning T")
-        move_linear_stage("Z", "+", 1800, wait_for_stop=True, max_wait=30.0)
+        image_recognition.log_move("laser-cut", "SETUP", "Z", "+", "2100", "raise head clear before positioning T")
+        move_linear_stage("Z", "+", 2600, wait_for_stop=True, max_wait=30.0)
         _abort_if_emergency_stop()
         #update_speed(30)
         #_abort_if_emergency_stop()
@@ -631,8 +643,8 @@ def laser_cut():
         _abort_if_emergency_stop()
         update_speed(10)
         _abort_if_emergency_stop()
-        image_recognition.log_move("laser-cut", "TEARDOWN", "Z", "-", "1800", "lower head after cut")
-        move_linear_stage("Z", "-", 1800, wait_for_stop=True, max_wait=30.0)
+        image_recognition.log_move("laser-cut", "TEARDOWN", "Z", "-", "2100", "lower head after cut")
+        move_linear_stage("Z", "-", 2600, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
@@ -1304,6 +1316,20 @@ _ORIGIN_CONFIG = {
     'print':     ('print_origin_coords', ['X', 'Y', 'r', 'Z']),
     'microwire': ('microwire_origin',    ['X', 'Y', 'Z', 'r']),
     'connector': ('connector_origin',    ['X', 'Y', 'Z', 'r']),
+    'pnp':       ('pnp_origin',          ['X', 'Y', 'Z', 'r']),
+}
+
+# Origins in the print -> connector relationship (and the fixed PNP origin) are saved
+# through assembly.py: connector stores its absolute coordinates plus its offset from print.
+_CHAIN_SAVERS = {
+    'pnp':       save_pnp_origin,
+    'connector': save_connector_origin,
+    'print':     save_print_origin,
+}
+_CHAIN_GETTERS = {
+    'pnp':       get_pnp_origin,
+    'connector': get_connector_origin,
+    'print':     get_print_origin,
 }
 
 def save_named_origin(name):
@@ -1320,6 +1346,10 @@ def save_named_origin(name):
             positions[ax] = pos
     if not positions:
         print(f"[Origin] Could not read any axis positions — '{name}' origin not saved.")
+        return
+    if name in _CHAIN_SAVERS:
+        reload_origins()
+        _CHAIN_SAVERS[name](positions)
         return
     existing = {}
     if os.path.isfile(SETTINGS_FILE):
@@ -1340,7 +1370,13 @@ def save_named_origin(name):
     reload_origins()
 
 def load_named_origin(name):
-    """Return the saved axis-position dict for 'name', or None if not found."""
+    """Return the saved axis-position dict for 'name', or None if not found.
+
+    pnp / connector / print are the effective positions from assembly.py
+    (connector is derived from print + offset when the offset exists)."""
+    if name in _CHAIN_GETTERS:
+        reload_origins()
+        return _CHAIN_GETTERS[name]()
     cfg = _ORIGIN_CONFIG.get(name)
     if not cfg:
         return None
@@ -1362,6 +1398,7 @@ def _return_to_named_origin_thread(name):
 
     Arriving AT microwire:    Z drop 5000  → Y → X → r → Z(target)
     Departing FROM microwire: Z drop 15000 → Y → X → r → Z(target)
+    Departing FROM PNP:       Z drop 10000 → X → Y → r → Z(target)
     All other moves:          Z drop 5000  → X → Y → r → Z(target)
     """
     cfg = _ORIGIN_CONFIG.get(name)
@@ -1407,7 +1444,8 @@ def _return_to_named_origin_thread(name):
                 departing_microwire = True
 
     z_drop = 15000 if departing_microwire else 5000
-
+    if name != 'pnp' and is_at_pnp_origin():
+        z_drop = max(z_drop, PNP_DEPART_Z_DROP_UM)
     # The Z drop only exists to clear the fixture during X/Y/r travel. If those
     # axes are already at the origin, skip it (and the Z back-up that follows).
     def _needs_clearance_drop():
@@ -1483,130 +1521,45 @@ def open_trace_tuning_window(root):
 
     win.grab_set()
 
-def open_connector_offset_window(root):
-    """Popup to edit the connector origin offset relative to the print origin (µm).
+def open_origin_offsets_window(root):
+    """Popup to edit the connector origin offset from the print origin (µm).
 
-    When set, goto_pnp_origin() derives the connector position as
-    print_origin + this offset instead of using the saved absolute connector_origin.
-    Set all axes to 0 and click Clear to revert to the absolute connector origin.
+    The connector origin is print origin + this offset, so only the print origin
+    needs re-setting each run. The offset is captured automatically when the
+    Connector origin is set via the main window's Set Origin button.
     """
     win = Toplevel(root)
     win.title("Connector Offset from Print Origin")
     win.resizable(False, False)
 
-    try:
-        with open(SETTINGS_FILE, 'r') as f:
-            current = json.load(f).get('connector_print_offset', {})
-    except Exception:
-        current = {}
-
-    fields = [
-        ('X', 'X offset (µm):', 0),
-        ('Y', 'Y offset (µm):', 0),
-        ('Z', 'Z offset (µm):', 0),
-        ('r', 'r offset (µm):', 0),
-    ]
-
+    current = get_connector_print_offset() or {}
     vars_by_key = {}
-    for row, (key, label, default) in enumerate(fields):
-        tk.Label(win, text=label).grid(row=row, column=0, padx=10, pady=6, sticky='w')
-        var = tk.StringVar(value=str(current.get(key, default)))
-        vars_by_key[key] = var
-        tk.Entry(win, textvariable=var, width=10).grid(row=row, column=1, padx=10, pady=6)
+    for row, ax in enumerate(('X', 'Y', 'Z', 'r')):
+        tk.Label(win, text=f"{ax} offset (µm):").grid(row=row, column=0, padx=10, pady=4, sticky='w')
+        var = tk.StringVar(value=str(current.get(ax, 0)))
+        vars_by_key[ax] = var
+        tk.Entry(win, textvariable=var, width=10).grid(row=row, column=1, padx=10, pady=4)
 
     tk.Label(
         win,
-        text=("Offset from print origin to connector pad array center.\n"
-              "When set, overrides the saved absolute connector origin.\n"
-              "Use 'Clear' to remove and revert to the absolute connector origin."),
+        text="Connector origin = Print origin + offset.\nThe PNP origin is a fixed location and has no offset.",
         fg="gray",
         justify='left',
-    ).grid(row=len(fields), column=0, columnspan=2, padx=10, pady=(2, 8))
+    ).grid(row=4, column=0, columnspan=2, padx=10, pady=(6, 8))
 
     def on_apply():
         try:
-            new_offset = {key: int(var.get()) for key, var in vars_by_key.items()}
+            new_offset = {ax: float(var.get()) for ax, var in vars_by_key.items()}
         except ValueError:
-            messagebox.showerror("Error", "Offsets must be integers (µm).", parent=win)
+            messagebox.showerror("Error", "Offsets must be numbers (µm).", parent=win)
             return
-        save_connector_print_offset(new_offset)
         reload_origins()
+        save_connector_print_offset(new_offset)
         print(f"[Settings] Connector offset from print origin saved: {new_offset}")
         win.destroy()
 
-    def on_clear():
-        """Remove the connector_print_offset key entirely so the absolute origin is used."""
-        existing = {}
-        if os.path.isfile(SETTINGS_FILE):
-            try:
-                with open(SETTINGS_FILE, 'r') as f:
-                    existing = json.load(f)
-            except Exception:
-                pass
-        existing.pop('connector_print_offset', None)
-        try:
-            with open(SETTINGS_FILE, 'w') as f:
-                json.dump(existing, f, indent=2)
-        except Exception as e:
-            print(f"Warning: Could not clear connector offset: {e}")
-            return
-        save_connector_print_offset(None)
-        reload_origins()
-        print("[Settings] Connector offset cleared — absolute connector origin will be used.")
-        win.destroy()
-
     btn_frame = tk.Frame(win)
-    btn_frame.grid(row=len(fields) + 1, column=0, columnspan=2, pady=8)
-    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=6)
-    tk.Button(btn_frame, text="Clear", command=on_clear).pack(side='left', padx=6)
-    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=6)
-
-    win.grab_set()
-
-
-def open_pnp_offsets_window(root):
-    """Popup to edit the PNP-to-nozzle axis offsets (µm), persisted to pcb_settings.json."""
-    win = Toplevel(root)
-    win.title("PNP Offsets")
-    win.resizable(False, False)
-
-    try:
-        with open(SETTINGS_FILE, 'r') as f:
-            current = json.load(f).get('pnp_offsets', {})
-    except Exception:
-        current = {}
-
-    fields = [
-        ('X', 'X offset (µm):', -29580),
-        ('Y', 'Y offset (µm):', -2300),
-        ('Z', 'Z offset (µm):', 4800),
-    ]
-
-    vars_by_key = {}
-    for row, (key, label, default) in enumerate(fields):
-        tk.Label(win, text=label).grid(row=row, column=0, padx=10, pady=6, sticky='w')
-        var = tk.StringVar(value=str(current.get(key, default)))
-        vars_by_key[key] = var
-        tk.Entry(win, textvariable=var, width=10).grid(row=row, column=1, padx=10, pady=6)
-
-    tk.Label(
-        win,
-        text="Applied when navigating to the PNP position.\nPositive = stage moves in + direction.",
-        fg="gray",
-        justify='left',
-    ).grid(row=len(fields), column=0, columnspan=2, padx=10, pady=(2, 8))
-
-    def on_apply():
-        try:
-            new_offsets = {key: int(var.get()) for key, var in vars_by_key.items()}
-        except ValueError:
-            messagebox.showerror("Error", "Offsets must be integers (µm).", parent=win)
-            return
-        save_pnp_offsets(new_offsets)
-        win.destroy()
-
-    btn_frame = tk.Frame(win)
-    btn_frame.grid(row=len(fields) + 1, column=0, columnspan=2, pady=8)
+    btn_frame.grid(row=5, column=0, columnspan=2, pady=8)
     tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=10)
     tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
 
@@ -1643,16 +1596,9 @@ def open_settings_window(root):
 
     tk.Button(
         win,
-        text="PNP Offsets",
+        text="Connector Offset from Print",
         width=34,
-        command=lambda: open_pnp_offsets_window(root)
-    ).pack(pady=6)
-
-    tk.Button(
-        win,
-        text="Connector Offset from Print Origin",
-        width=34,
-        command=lambda: open_connector_offset_window(root)
+        command=lambda: open_origin_offsets_window(root)
     ).pack(pady=6)
 
     tk.Frame(win, height=1, bg='gray').pack(fill='x', padx=12, pady=(6, 2))
@@ -1666,9 +1612,20 @@ def open_settings_window(root):
 
     tk.Button(
         win,
-        text="Recut Pads",
+        text="Realign/Recut Pads",
         width=34,
         command=lambda: open_recut_window(root)
+    ).pack(pady=6)
+
+    def _run_laser_cut_only():
+        win.destroy()
+        start_routine_thread(laser_cut_only, "laser_cut_only")
+
+    tk.Button(
+        win,
+        text="Laser Cut Only",
+        width=34,
+        command=_run_laser_cut_only
     ).pack(pady=6)
 
     tk.Button(
@@ -1782,7 +1739,7 @@ def open_recut_window(root):
     Runs the same per-pad align+laser-cut body as the full routine, but only
     for the pads the user selects."""
     win = Toplevel(root)
-    win.title("Recut Pads")
+    win.title("Realign/Recut Pads")
     win.resizable(False, False)
 
     pad_count = PAD_COUNT if PAD_COUNT and PAD_COUNT > 0 else 8
@@ -2399,12 +2356,19 @@ def launch_gui():
     tk.Radiobutton(nord_frame, text="Off", variable=nord_state_var, value='Off', command=set_nord).pack(side='left')
 
     # Query & origin
+    def _select_origin_for_label(label):
+        # Pre-select the matching origin radio so 'Set Origin' saves the right one.
+        mode = label.split()[0].lower()
+        if mode in ('probe', 'print', 'connector', 'pnp', 'microwire'):
+            origin_mode_var.set(mode)
+
     def show_origin_ask(label):
         """Ask the user whether to fine-tune this origin.
         Called from the routine worker thread, so the actual dialog is queued
         to run on the GUI thread via _poll_gui_requests()."""
         def _do_ask():
             root.lift()
+            _select_origin_for_label(label)
             result = messagebox.askyesno(
                 f"{label} — Fine-tune?",
                 f"The machine is now at the {label} position.\n\n"
@@ -2433,11 +2397,104 @@ def launch_gui():
     register_origin_ask_callback(show_origin_ask)
     register_origin_prompt_callback(show_origin_prompt)
 
+    def show_level_ask(axis_label, adjust_name):
+        """Non-modal prompt (so the main window and keyboard controls stay usable)
+        with Z jog buttons for adjusting height while the PCB holder is leveled."""
+        def _do_ask():
+            win = Toplevel(root)
+            win.title(f"Print Leveling — {axis_label}")
+            win.resizable(False, False)
+            win.attributes('-topmost', True)
+            answered = [False]
+
+            tk.Label(
+                win,
+                text=(f"The stage is at the end of the {axis_label} sweep.\n"
+                      f"Adjust the PCB holder {adjust_name} and/or Z height if needed."),
+                justify='left',
+            ).pack(padx=14, pady=(12, 6))
+
+            z_frame = tk.LabelFrame(win, text="Z adjust")
+            z_frame.pack(padx=14, pady=6)
+            tk.Label(z_frame, text="Step (µm):").grid(row=0, column=0, padx=6, pady=6)
+            step_entry = tk.Entry(z_frame, width=7)
+            step_entry.insert(0, "100")
+            step_entry.grid(row=0, column=1, padx=6, pady=6)
+
+            def jog_z(direction):
+                try:
+                    step = abs(float(step_entry.get().strip()))
+                except ValueError:
+                    messagebox.showerror("Error", "Invalid Z step.", parent=win)
+                    return
+                z_up_btn.config(state='disabled')
+                z_down_btn.config(state='disabled')
+
+                def worker():
+                    try:
+                        move_linear_stage('Z', direction, step, wait_for_stop=True, max_wait=30.0)
+                    except Exception as e:
+                        print(f"[Leveling] Z jog failed: {e}")
+                    finally:
+                        def _reenable():
+                            if win.winfo_exists():
+                                z_up_btn.config(state='normal')
+                                z_down_btn.config(state='normal')
+                        root.after(0, _reenable)
+                threading.Thread(target=worker, daemon=True).start()
+
+            z_up_btn = tk.Button(z_frame, text="Z Up", width=8, command=lambda: jog_z('+'))
+            z_up_btn.grid(row=0, column=2, padx=6, pady=6)
+            z_down_btn = tk.Button(z_frame, text="Z Down", width=8, command=lambda: jog_z('-'))
+            z_down_btn.grid(row=0, column=3, padx=6, pady=6)
+
+            def answer(is_level):
+                answered[0] = True
+                win.destroy()
+                notify_level_choice(is_level)
+
+            tk.Label(win, text=f"Is the {axis_label} level?").pack(pady=(6, 2))
+            btns = tk.Frame(win)
+            btns.pack(pady=(2, 12))
+            tk.Button(btns, text="Yes — level, continue", command=lambda: answer(True)).pack(side='left', padx=8)
+            tk.Button(btns, text="No — sweep again", command=lambda: answer(False)).pack(side='left', padx=8)
+
+            # Treat closing the window as "not level yet"; close it if the routine was stopped.
+            win.protocol("WM_DELETE_WINDOW", lambda: answer(False))
+
+            def _close_if_stopped():
+                if answered[0] or not win.winfo_exists():
+                    return
+                if is_emergency_stop_requested():
+                    answered[0] = True
+                    win.destroy()
+                    return
+                win.after(200, _close_if_stopped)
+            win.after(200, _close_if_stopped)
+        _gui_request_queue.put(_do_ask)
+
+    register_level_ask_callback(show_level_ask)
+
     # Named-origin controls
     origin_mode_var = tk.StringVar(value='probe')
 
     def on_set_origin_clicked():
         mode = origin_mode_var.get()
+        if mode == 'pnp':
+            if not messagebox.askyesno(
+                "Confirm Set PNP Origin",
+                "The PNP origin is a fixed machine location, independent of the Print and\n"
+                "Connector origins. This will overwrite the saved PNP origin with the\n"
+                "machine's current axis positions.\n\n"
+                "Is the machine positioned at the PNP origin?",
+                icon='warning',
+                parent=root,
+            ):
+                print("[Origin] Set Origin for 'pnp' cancelled by user.")
+                return
+            save_named_origin(mode)
+            confirm_origin_set()           # unblocks a waiting fine-tune prompt (PNP full routine)
+            return
         if not messagebox.askyesno(
             "Confirm Set Origin",
             f"This will overwrite the saved '{mode}' origin with the machine's\n"
@@ -2449,7 +2506,7 @@ def launch_gui():
             print(f"[Origin] Set Origin for '{mode}' cancelled by user.")
             return
         set_origin_to_current()       # keeps in-memory axis_origins in sync for automated routines
-        save_named_origin(mode)        # persists to JSON and reloads print.py in-memory state
+        save_named_origin(mode)        # persists to JSON (origin chain also stores its offset) and reloads in-memory state
         confirm_origin_set()           # unblocks any waiting setup flow
 
     def on_return_to_origin_clicked():
@@ -2468,7 +2525,7 @@ def launch_gui():
     origin_radio_frame = tk.Frame(root)
     origin_radio_frame.pack(pady=(0, 4))
     tk.Label(origin_radio_frame, text="Origin:").pack(side='left', padx=(0, 6))
-    for _mode in ('Probe', 'Print', 'Connector', 'Microwire'):
+    for _mode in ('Probe', 'Print', 'Connector', 'PNP', 'Microwire'):
         tk.Radiobutton(
             origin_radio_frame,
             text=_mode,
@@ -2507,27 +2564,58 @@ def launch_gui():
 
     tk.Button(root, text="Query Position", command=query_all_axes_positions).pack(pady=5)
 
+    # Button: Print Leveling
+    def run_print_leveling():
+        clear_emergency_stop()
+        flush_serial()
+        try:
+            print_leveling()
+        except RuntimeError as e:
+            if str(e) == "Emergency stop requested.":
+                print("Print leveling stopped by emergency stop.")
+            else:
+                raise
+
+    tk.Button(
+        root, text="Print Leveling",
+        command=lambda: start_routine_thread(run_print_leveling, "print_leveling")
+    ).pack(pady=5)
+
     # Button: Full Assembly
     calib_var = tk.IntVar(value=0)
+    sac_var = tk.IntVar(value=0)
+    print_opts_frame = tk.Frame(root)
+    print_opts_frame.pack(pady=(5, 0))
     tk.Checkbutton(
-        root,
+        print_opts_frame,
         text="Run Calibration Before Printing",
         variable=calib_var
-    ).pack(pady=(5, 0))
+    ).pack(side='left')
+    tk.Checkbutton(
+        print_opts_frame,
+        text="Sacrificial Print",
+        variable=sac_var
+    ).pack(side='left', padx=(10, 0))
     tk.Button(
         root,
         text="Print Metal Ink Traces/Pads",
         command=lambda: start_routine_thread(
-            lambda: run_full_assembly(run_calibration=bool(calib_var.get())),
+            lambda: run_full_assembly(
+                run_calibration=bool(calib_var.get()),
+                run_sacrificial=bool(sac_var.get()),
+            ),
             "run_full_assembly"
         )
     ).pack(pady=5)
 
     # Full manual loop
-    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(side='bottom', pady=8)
+    tk.Button(root, text="Start Wire/Laser Automation Routine", command=lambda: start_routine_thread(run_full_manual_loop, "run_full_manual_loop")).pack(pady=8)
 
-    # Laser cut only (T-axis 5x passes, no Z moves)
-    tk.Button(root, text="Laser Cut Only", command=lambda: start_routine_thread(laser_cut_only, "laser_cut_only")).pack(side='bottom', pady=8)
+    # Reprint all ME pads
+    tk.Button(root, text="Reprint All ME Pads", command=lambda: start_routine_thread(reprint_all_me_pads, "reprint_all_me_pads")).pack(pady=8)
+
+    # PNP full routine (same sequence as Settings > Test PNP Routine > Run Full Sequence)
+    tk.Button(root, text="PNP Full Routine", command=lambda: start_routine_thread(print_tester, "print_tester")).pack(side='bottom', pady=8)
 
     # Drain GUI requests queued by worker threads (origin popups, etc.) on the
     # GUI thread. Reschedules itself so it runs for the lifetime of the window.

@@ -1,0 +1,12 @@
+21:44:00.520  [origin:PRINT] navigating to saved 'print' origin.
+21:44:00.678  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:44:07.339  [origin:PRINT] MOVE Y +11850.0  —  move to saved 'print' origin (Y -> 2397400.000)
+21:44:13.000  [origin:PRINT] MOVE X +19382.5  —  move to saved 'print' origin (X -> 353400.000)
+21:44:21.669  [origin:PRINT] MOVE r +25.3  —  move to saved 'print' origin (r -> 3150.050)
+21:44:27.328  [origin:PRINT] MOVE Z +20000.0  —  move to saved 'print' origin (Z -> 2312012.500)
+21:45:33.617  [origin:PRINT] navigating to saved 'print' origin.
+21:47:28.401  [origin:PNP] navigating to saved 'pnp' origin.
+21:47:28.555  [origin:PNP] MOVE Z -15000  —  drop Z for clearance before XY/r move
+21:47:35.223  [origin:PNP] MOVE Y -2250.0  —  move to saved 'pnp' origin (Y -> 2394250.000)
+21:47:36.879  [origin:PNP] MOVE X -23900.0  —  move to saved 'pnp' origin (X -> 330800.000)
+21:47:47.606  [origin:PNP] MOVE Z +20200.0  —  move to saved 'pnp' origin (Z -> 2316812.500)
