@@ -1,0 +1,6 @@
+21:20:18.325  [laser-cut:T-MOVE] MOVE T -77.5µm  —  position T at cut start (target 2614212.5µm)
+21:20:19.060  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 1/5 (target 2615212.5µm)
+21:20:25.726  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 2/5 (target 2614212.5µm)
+21:20:32.395  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 3/5 (target 2615212.5µm)
+21:20:39.065  [laser-cut:T-MOVE] MOVE T -1000.0µm  —  cut pass 4/5 (target 2614212.5µm)
+21:20:45.724  [laser-cut:T-MOVE] MOVE T +1000.0µm  —  cut pass 5/5 (target 2615212.5µm)

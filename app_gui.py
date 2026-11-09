@@ -595,8 +595,40 @@ def run_full_manual_loop():
 
 # Absolute T-axis positions (µm) bounding the laser cut — the cut is run
 # back-and-forth _LASER_CUT_PASSES times to ensure a clean cut over the full length.
-_LASER_CUT_T_START = 2614212.500
-_LASER_CUT_T_END = 2615212.500
+_LASER_CUT_T_CENTER_DEFAULT = 2615512.500
+_LASER_CUT_HALF_SPAN_UM = 500  # cut runs from center - 500 to center + 500
+
+def get_laser_cut_t_center():
+    """Saved laser-cut center on the T axis (µm), set via Settings > Laser Cut Origin."""
+    try:
+        if os.path.isfile(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as f:
+                return float(json.load(f).get("laser_cut_t_center", _LASER_CUT_T_CENTER_DEFAULT))
+    except Exception as e:
+        print(f"Warning: could not read laser cut center from {SETTINGS_FILE}: {e}")
+    return _LASER_CUT_T_CENTER_DEFAULT
+
+def save_laser_cut_t_center(center_um):
+    """Persist the laser-cut T center to pcb_settings.json without touching other keys."""
+    existing = {}
+    if os.path.isfile(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing["laser_cut_t_center"] = center_um
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(existing, f, indent=2)
+        print(f"Saved laser cut T center to {SETTINGS_FILE}: {center_um:.3f}")
+    except Exception as e:
+        print(f"Warning: Could not save laser cut T center: {e}")
+
+def get_laser_cut_t_range():
+    """(start, end) T positions of the cut: center -/+ _LASER_CUT_HALF_SPAN_UM."""
+    center = get_laser_cut_t_center()
+    return center - _LASER_CUT_HALF_SPAN_UM, center + _LASER_CUT_HALF_SPAN_UM
 _LASER_CUT_PASSES = 5
 
 def _move_t_to_absolute(target_um, reason="laser cut T-axis pass"):
@@ -616,15 +648,16 @@ def _move_t_to_absolute(target_um, reason="laser cut T-axis pass"):
 def laser_cut():
     try:
         print("--- Starting Laser Cutting Sequence ---")
+        _cut_start, _cut_end = get_laser_cut_t_range()
         _abort_if_emergency_stop()
         update_speed(1)
         _abort_if_emergency_stop()
         image_recognition.log_move("laser-cut", "SETUP", "Z", "+", "2100", "raise head clear before positioning T")
-        move_linear_stage("Z", "+", 2600, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "+", 4000, wait_for_stop=True, max_wait=30.0)
         _abort_if_emergency_stop()
         #update_speed(30)
         #_abort_if_emergency_stop()
-        _move_t_to_absolute(_LASER_CUT_T_START, reason="position T at cut start")
+        _move_t_to_absolute(_cut_start, reason="position T at cut start")
         _abort_if_emergency_stop()
         laser_relay_on()
         if laser_state_var is not None:
@@ -632,7 +665,7 @@ def laser_cut():
         _abort_if_emergency_stop()
         update_speed(1)
         # Alternate start<->end for _LASER_CUT_PASSES passes with the laser on.
-        _pass_targets = [_LASER_CUT_T_END, _LASER_CUT_T_START]
+        _pass_targets = [_cut_end, _cut_start]
         for _pass_num in range(_LASER_CUT_PASSES):
             _abort_if_emergency_stop()
             _move_t_to_absolute(_pass_targets[_pass_num % 2], reason=f"cut pass {_pass_num + 1}/{_LASER_CUT_PASSES}")
@@ -644,7 +677,7 @@ def laser_cut():
         update_speed(10)
         _abort_if_emergency_stop()
         image_recognition.log_move("laser-cut", "TEARDOWN", "Z", "-", "2100", "lower head after cut")
-        move_linear_stage("Z", "-", 2600, wait_for_stop=True, max_wait=30.0)
+        move_linear_stage("Z", "-", 4000, wait_for_stop=True, max_wait=30.0)
         print("Laser cutting sequence completed.")
     except RuntimeError as e:
         if str(e) == "Emergency stop requested.":
@@ -666,9 +699,10 @@ def laser_cut_only():
     """Run only the laser cut: T-axis back-and-forth passes, no Z moves."""
     try:
         print("--- Starting Laser-Cut-Only Sequence ---")
+        _cut_start, _cut_end = get_laser_cut_t_range()
         clear_emergency_stop()
         _abort_if_emergency_stop()
-        _move_t_to_absolute(_LASER_CUT_T_START, reason="position T at cut start")
+        _move_t_to_absolute(_cut_start, reason="position T at cut start")
         _abort_if_emergency_stop()
         laser_relay_on()
         if laser_state_var is not None:
@@ -676,7 +710,7 @@ def laser_cut_only():
         _abort_if_emergency_stop()
         update_speed(1)
         # Alternate start<->end for _LASER_CUT_PASSES passes with the laser on.
-        _pass_targets = [_LASER_CUT_T_END, _LASER_CUT_T_START]
+        _pass_targets = [_cut_end, _cut_start]
         for _pass_num in range(_LASER_CUT_PASSES):
             _abort_if_emergency_stop()
             _move_t_to_absolute(_pass_targets[_pass_num % 2], reason=f"cut pass {_pass_num + 1}/{_LASER_CUT_PASSES}")
@@ -1565,6 +1599,68 @@ def open_origin_offsets_window(root):
 
     win.grab_set()
 
+def open_laser_cut_origin_window(root):
+    """Popup to set the laser-cut center on the T axis (µm). The cut runs
+    +/- _LASER_CUT_HALF_SPAN_UM around this value."""
+    win = Toplevel(root)
+    win.title("Laser Cut Origin (T)")
+    win.resizable(False, False)
+
+    center_var = tk.StringVar(value=f"{get_laser_cut_t_center():.3f}")
+
+    tk.Label(win, text="Laser cut center, T axis (µm):").grid(row=0, column=0, padx=10, pady=(12, 4), sticky='w')
+    tk.Entry(win, textvariable=center_var, width=14).grid(row=0, column=1, padx=10, pady=(12, 4))
+
+    range_label = tk.Label(win, fg="gray", justify='left')
+    range_label.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 6), sticky='w')
+
+    def _parse_center():
+        try:
+            return float(center_var.get())
+        except ValueError:
+            messagebox.showerror("Error", "Center must be a number (µm).", parent=win)
+            return None
+
+    def _refresh_range(*_):
+        try:
+            c = float(center_var.get())
+            range_label.config(text=f"Cut runs T {c - _LASER_CUT_HALF_SPAN_UM:.3f} → {c + _LASER_CUT_HALF_SPAN_UM:.3f}")
+        except ValueError:
+            range_label.config(text="")
+    center_var.trace_add('write', _refresh_range)
+    _refresh_range()
+
+    def use_current():
+        pos = get_current_position('T')
+        if pos is None:
+            messagebox.showerror("Error", "Could not read the current T position.", parent=win)
+            return
+        center_var.set(f"{pos:.3f}")
+
+    def go_to_center():
+        c = _parse_center()
+        if c is None:
+            return
+        win.destroy()
+        start_routine_thread(lambda: _move_t_to_absolute(c, reason="go to laser cut center"), "laser_cut_goto_center")
+
+    def on_apply():
+        c = _parse_center()
+        if c is None:
+            return
+        save_laser_cut_t_center(c)
+        win.destroy()
+
+    tk.Button(win, text="Use Current T Position", command=use_current).grid(row=2, column=0, columnspan=2, padx=10, pady=4)
+    tk.Button(win, text="Move T to Center", command=go_to_center).grid(row=3, column=0, columnspan=2, padx=10, pady=4)
+
+    btn_frame = tk.Frame(win)
+    btn_frame.grid(row=4, column=0, columnspan=2, pady=(8, 12))
+    tk.Button(btn_frame, text="Apply & Save", command=on_apply).pack(side='left', padx=10)
+    tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side='left', padx=10)
+
+    win.grab_set()
+
 def open_settings_window(root):
     """Settings hub popup — opens Image Adjustments or Camera Port Settings."""
     win = Toplevel(root)
@@ -1599,6 +1695,13 @@ def open_settings_window(root):
         text="Connector Offset from Print",
         width=34,
         command=lambda: open_origin_offsets_window(root)
+    ).pack(pady=6)
+
+    tk.Button(
+        win,
+        text="Laser Cut Origin (T)",
+        width=34,
+        command=lambda: open_laser_cut_origin_window(root)
     ).pack(pady=6)
 
     tk.Frame(win, height=1, bg='gray').pack(fill='x', padx=12, pady=(6, 2))
@@ -2613,6 +2716,9 @@ def launch_gui():
 
     # Reprint all ME pads
     tk.Button(root, text="Reprint All ME Pads", command=lambda: start_routine_thread(reprint_all_me_pads, "reprint_all_me_pads")).pack(pady=8)
+
+    # Laser cut only (T-axis 5x passes, no Z moves)
+    tk.Button(root, text="Laser Cut Only", command=lambda: start_routine_thread(laser_cut_only, "laser_cut_only")).pack(pady=8)
 
     # PNP full routine (same sequence as Settings > Test PNP Routine > Run Full Sequence)
     tk.Button(root, text="PNP Full Routine", command=lambda: start_routine_thread(print_tester, "print_tester")).pack(side='bottom', pady=8)

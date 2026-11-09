@@ -18,21 +18,21 @@
     "Z": 2311042.5
   },
   "print_origin_coords": {
-    "X": 354500.0,
-    "Y": 2396500.0,
-    "Z": 2311512.5,
+    "X": 353500.0,
+    "Y": 2396700.0,
+    "Z": 2312032.5,
     "r": 3150.05
   },
   "microwire_origin": {
-    "X": 334017.5,
+    "X": 333717.5,
     "Y": 2385550.0,
     "Z": 2316322.5,
     "r": 3058.4500000000003
   },
   "connector_origin": {
-    "X": 358050.0,
-    "Y": 2389000.0,
-    "Z": 2311512.5,
+    "X": 357050.0,
+    "Y": 2389200.0,
+    "Z": 2312032.5,
     "r": 3150.05
   },
   "camera_adjustments": {
@@ -60,8 +60,8 @@
   },
   "yolo_exe_path": "C:\\Users\\MINI Lab\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\Scripts\\yolo.exe",
   "pnp_origin": {
-    "X": 327500.0,
-    "Y": 2389350.0,
+    "X": 328250.0,
+    "Y": 2389200.0,
     "Z": 2316542.5,
     "r": 3150.05
   },

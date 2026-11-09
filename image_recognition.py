@@ -114,6 +114,7 @@ extrude_done = False
 r_align_done = False
 r_align_failed = False  # set when r_align gave up (unreliable detection / travel limit); callers must not cut
 x_align_done = False
+PAD_VERTICAL_OFFSET_FRAC = 0.25  # x_align target: fraction of pad height, measured up from the bottom edge
 center_on_visible_area_done = False
 last_r_align_angle = 0.0  # signed angle of the most recent r_align rotation (0 = none)
 target_pad_ref_y = None  # target pad center Y-pixel position recorded before r_align rotates it
@@ -704,7 +705,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
                       within the stabilisation loop where the tip is already visible.
     """
     import time
-    from motor_control import update_speed, move_linear_stage, steps_to_µm
+    from motor_control import update_speed, move_linear_stage, steps_to_µm, is_emergency_stop_requested
 
     # If known_µm is not provided, get it from the settings file
     if known_µm is None:
@@ -725,6 +726,10 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     if initial_extend:
         log_move("extrude", "INIT", "t", "+", "100", "extend wire to bring CF_Tip into camera view")
         move_linear_stage("t", "+", 100, wait_for_stop=True, max_wait=30.0)
+        if is_emergency_stop_requested():
+            print("[Extrude] Emergency stop requested => abort.")
+            extrude_done = True
+            return
     
     # Configuration
     step_size_µm = 100.0
@@ -777,6 +782,11 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     for attempt in range(max_iterations):
         print(f"[Extrude] Attempt {attempt+1}/{max_iterations}")
 
+        if is_emergency_stop_requested():
+            print("[Extrude] Emergency stop requested => abort.")
+            extrude_done = True
+            return
+
         # 3) Re-check we still have CF_Tip detection
         if last_cf_box is None:
             print("[Extrude] Lost CF_Tip detection => abort.")
@@ -828,7 +838,10 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
 
         # 10) Wait for YOLO to update
         time.sleep(wait_between_moves)
-
+        if is_emergency_stop_requested():
+            print("[Extrude] Emergency stop requested => abort.")
+            extrude_done = True
+            return
         """# 11) Jam detection
         if last_cf_box is not None and last_cf_x_px is not None:
             new_cf_x_px = center_of_bbox(last_cf_box)[0]
@@ -865,7 +878,7 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
     Step 1: Move 'X' so the VisibleArea box's center lines back up with the
     (fixed) CF_Tip center, bringing the pads/VisibleArea back into frame.
     Step 2: Re-check CF_Tip's alignment with the target pad's reference point
-    (same bottom+33% point x_align uses) and correct via 'Y' if the move above
+    (same bottom+25% point x_align uses) and correct via 'Y' if the move above
     left it out of tolerance — mirrors r_align's post-pad-search Y correction.
     """
     import time
@@ -930,7 +943,7 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
         center_on_visible_area_done = True
         return
     pad_height = target_pad_box[3] - target_pad_box[1]
-    pad_y = target_pad_box[3] - 0.33 * pad_height  # same reference point x_align targets
+    pad_y = target_pad_box[3] - PAD_VERTICAL_OFFSET_FRAC * pad_height  # same reference point x_align targets
     cf_y = center_of_bbox(last_cf_box)[1]
     delta_y_px2 = cf_y - pad_y
     delta_µm2 = steps_to_µm(abs(delta_y_px2 * steps_pp_y), axis='Y')
@@ -949,7 +962,7 @@ def center_on_visible_area(target_pad_number=1, known_µm=None,
 # --------------------------------------------------------
 def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
     """
-    Align CF_Tip's center against the target pad's center, offset 33% up from
+    Align CF_Tip's center against the target pad's center, offset 25% up from
     the bottom edge, in one move.
     Parameters:
     - target_pad_number: The pad number to align with (1-8)
@@ -1026,8 +1039,7 @@ def x_align(target_pad_number=1, known_µm=None, tolerance_µm=10):
     print(f"[x_align] Calibration: {steps_pp:.4f} steps/px (from {cal_pad1_key}..{cal_pad2_key})")
  
     # 3) Calculate vertical distance between the pad's target point (horizontally
-    # centered, 33% up from the bottom edge) and CF_Tip's center
-    PAD_VERTICAL_OFFSET_FRAC = 0.33  # fraction of pad height, measured up from the bottom edge
+    # centered, 25% up from the bottom edge) and CF_Tip's center
     pad_x = (target_pad_box[0] + target_pad_box[2]) / 2
     pad_height = target_pad_box[3] - target_pad_box[1]
     pad_y = target_pad_box[3] - PAD_VERTICAL_OFFSET_FRAC * pad_height
@@ -1522,8 +1534,8 @@ def _fine_align(target_pad_number):
         if tbox is None or cf_snap is None:
             _align_report("STEP3 X-ALIGN", "missing pad/CF_Tip snapshot — skipping X align.")
         else:
-            # Same target point as x_align(): 33% up from the pad's bottom edge.
-            pad_cy = tbox[3] - 0.33 * (tbox[3] - tbox[1])
+            # Same target point as x_align(): PAD_VERTICAL_OFFSET_FRAC up from the pad's bottom edge.
+            pad_cy = tbox[3] - PAD_VERTICAL_OFFSET_FRAC * (tbox[3] - tbox[1])
             delta_y_px = cf_snap[1] - pad_cy
             delta_y_µm = steps_to_µm(abs(delta_y_px * steps_pp_f), axis='X')
             if abs(delta_y_µm) <= FINE_TOL_UM:
