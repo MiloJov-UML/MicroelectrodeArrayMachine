@@ -1,0 +1,233 @@
+19:45:20.647  [laser-cut:T-MOVE] MOVE T -2500.0µm  —  position T at cut start (target 2613512.5µm)
+19:45:22.379  [laser-cut:T-MOVE] MOVE T +4000.0µm  —  cut pass 1/5 (target 2617512.5µm)
+19:50:04.659  [origin:PRINT] navigating to saved 'print' origin.
+19:50:04.865  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:50:11.533  [origin:PRINT] MOVE Y +11150.0  —  move to saved 'print' origin (Y -> 2396700.000)
+19:50:16.698  [origin:PRINT] MOVE X +19782.5  —  move to saved 'print' origin (X -> 353500.000)
+19:50:25.366  [origin:PRINT] MOVE r +43.0  —  move to saved 'print' origin (r -> 3150.050)
+19:50:35.039  [origin:PRINT] MOVE Z +20000.0  —  move to saved 'print' origin (Z -> 2312032.500)
+19:52:00.695  [origin:CONNECTOR] navigating to saved 'connector' origin.
+19:52:00.902  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:52:07.566  [origin:CONNECTOR] MOVE Y -7500.0  —  move to saved 'connector' origin (Y -> 2387500.000)
+19:52:11.224  [origin:CONNECTOR] MOVE X +3550.0  —  move to saved 'connector' origin (X -> 357170.000)
+19:52:13.432  [origin:CONNECTOR] MOVE Z +15000.0  —  move to saved 'connector' origin (Z -> 2312032.500)
+19:52:27.839  [origin:PRINT] navigating to saved 'print' origin.
+19:52:28.049  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:52:34.714  [origin:PRINT] MOVE Y +7500.0  —  move to saved 'print' origin (Y -> 2395000.000)
+19:52:38.373  [origin:PRINT] MOVE X -3550.0  —  move to saved 'print' origin (X -> 353620.000)
+19:52:40.579  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2312032.500)
+19:55:21.986  [origin:CONNECTOR] navigating to saved 'connector' origin.
+19:55:22.201  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+19:55:28.861  [origin:CONNECTOR] MOVE Y -7500.0  —  move to saved 'connector' origin (Y -> 2387500.000)
+19:55:32.520  [origin:CONNECTOR] MOVE X +3550.0  —  move to saved 'connector' origin (X -> 357170.000)
+19:55:34.728  [origin:CONNECTOR] MOVE Z +15000.0  —  move to saved 'connector' origin (Z -> 2312082.500)
+20:00:32.849  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:00:33.004  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:00:35.660  [origin:MICROWIRE] MOVE Y -1950.0  —  move to saved 'microwire' origin (Y -> 2385550.000)
+20:00:36.815  [origin:MICROWIRE] MOVE X -23452.5  —  move to saved 'microwire' origin (X -> 333717.500)
+20:00:47.484  [origin:MICROWIRE] MOVE r -91.6  —  move to saved 'microwire' origin (r -> 3058.450)
+20:02:39.771  [origin:CONNECTOR] navigating to saved 'connector' origin.
+20:02:39.978  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:02:46.640  [origin:CONNECTOR] MOVE Y +1950.0  —  move to saved 'connector' origin (Y -> 2387500.000)
+20:02:47.797  [origin:CONNECTOR] MOVE X +23452.5  —  move to saved 'connector' origin (X -> 357170.000)
+20:02:58.467  [origin:CONNECTOR] MOVE r +40.9  —  move to saved 'connector' origin (r -> 3150.050)
+20:03:07.634  [origin:CONNECTOR] MOVE Z +20000.0  —  move to saved 'connector' origin (Z -> 2312082.500)
+20:03:23.334  [origin:PRINT] navigating to saved 'print' origin.
+20:03:23.543  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:03:30.207  [origin:PRINT] MOVE Y +7500.0  —  move to saved 'print' origin (Y -> 2395000.000)
+20:03:33.864  [origin:PRINT] MOVE X -3550.0  —  move to saved 'print' origin (X -> 353620.000)
+20:03:36.069  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2312082.500)
+20:04:56.054  [origin:CONNECTOR] navigating to saved 'connector' origin.
+20:04:56.267  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:05:02.929  [origin:CONNECTOR] MOVE Y -7500.0  —  move to saved 'connector' origin (Y -> 2388900.000)
+20:05:06.589  [origin:CONNECTOR] MOVE X +3550.0  —  move to saved 'connector' origin (X -> 356470.000)
+20:05:08.800  [origin:CONNECTOR] MOVE Z +15000.0  —  move to saved 'connector' origin (Z -> 2312702.500)
+20:05:21.995  [origin:PRINT] navigating to saved 'print' origin.
+20:05:22.200  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:05:28.868  [origin:PRINT] MOVE Y +7500.0  —  move to saved 'print' origin (Y -> 2396400.000)
+20:05:32.526  [origin:PRINT] MOVE X -3550.0  —  move to saved 'print' origin (X -> 352920.000)
+20:05:34.735  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2312702.500)
+20:06:21.558  [origin:CONNECTOR] navigating to saved 'connector' origin.
+20:06:21.768  [origin:CONNECTOR] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:06:28.442  [origin:CONNECTOR] MOVE Y -7500.0  —  move to saved 'connector' origin (Y -> 2388900.000)
+20:06:32.101  [origin:CONNECTOR] MOVE X +3550.0  —  move to saved 'connector' origin (X -> 356470.000)
+20:06:34.309  [origin:CONNECTOR] MOVE Z +15000.0  —  move to saved 'connector' origin (Z -> 2312702.500)
+20:06:55.042  [origin:PRINT] navigating to saved 'print' origin.
+20:06:55.249  [origin:PRINT] MOVE Z -15000  —  drop Z for clearance before XY/r move
+20:07:01.912  [origin:PRINT] MOVE Y +7500.0  —  move to saved 'print' origin (Y -> 2396400.000)
+20:07:05.569  [origin:PRINT] MOVE X -3550.0  —  move to saved 'print' origin (X -> 352920.000)
+20:07:07.777  [origin:PRINT] MOVE Z +15000.0  —  move to saved 'print' origin (Z -> 2312702.500)
+20:07:36.895  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09\camera1_20261109_200736.avi start=2026-11-09T20:07:36.895
+20:07:36.895  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09\camera0_20261109_200736.avi start=2026-11-09T20:07:36.895
+20:07:36.897  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09\camera2_20261109_200736.avi start=2026-11-09T20:07:36.897
+20:22:40.388  [cam0 f5902 rec+903.49s] [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:22:40.441  [cam0 f5902 rec+903.55s] [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+20:22:46.052  [cam0 f5937 rec+909.16s] [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+20:22:46.104  [cam0 f5938 rec+909.21s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:22:47.010  [cam0 f5943 rec+910.12s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (8451.9µm remaining)
+20:22:48.615  [cam0 f5953 rec+911.72s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (7844.4µm remaining)
+20:22:50.221  [cam0 f5964 rec+913.33s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (7150.2µm remaining)
+20:22:51.828  [cam0 f5974 rec+914.93s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (6711.4µm remaining)
+20:22:53.432  [cam0 f5984 rec+916.54s] [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (6238.9µm remaining)
+20:22:55.039  [cam0 f5994 rec+918.14s] [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (5872.5µm remaining)
+20:22:56.643  [cam0 f6003 rec+919.75s] [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (5887.0µm remaining)
+20:22:58.251  [cam0 f6013 rec+921.36s] [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (4715.3µm remaining)
+20:22:59.856  [cam0 f6023 rec+922.96s] [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad1 (4189.8µm remaining)
+20:23:01.463  [cam0 f6033 rec+924.57s] [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad1 (3722.1µm remaining)
+20:23:03.067  [cam0 f6043 rec+926.17s] [extrude:ATTEMPT 11] MOVE t +100.0µm  —  close horizontal gap to pad1 (3230.4µm remaining)
+20:23:04.671  [cam0 f6053 rec+927.78s] [extrude:ATTEMPT 12] MOVE t +100.0µm  —  close horizontal gap to pad1 (2743.4µm remaining)
+20:23:06.276  [cam0 f6063 rec+929.38s] [extrude:ATTEMPT 13] MOVE t +100.0µm  —  close horizontal gap to pad1 (2377.0µm remaining)
+20:23:07.882  [cam0 f6074 rec+930.99s] [extrude:ATTEMPT 14] MOVE t +100.0µm  —  close horizontal gap to pad1 (1947.9µm remaining)
+20:23:09.486  [cam0 f6084 rec+932.59s] [extrude:ATTEMPT 15] MOVE t +100.0µm  —  close horizontal gap to pad1 (1972.0µm remaining)
+20:23:11.090  [cam0 f6094 rec+934.20s] [extrude:ATTEMPT 16] MOVE t +100.0µm  —  close horizontal gap to pad1 (1938.2µm remaining)
+20:23:12.694  [cam0 f6104 rec+935.80s] [extrude:ATTEMPT 17] MOVE t +100.0µm  —  close horizontal gap to pad1 (1938.2µm remaining)
+20:23:14.297  [cam0 f6115 rec+937.40s] [extrude:ATTEMPT 18] MOVE t +100.0µm  —  close horizontal gap to pad1 (1938.2µm remaining)
+20:23:15.901  [cam0 f6125 rec+939.01s] [extrude:ATTEMPT 19] MOVE t +100.0µm  —  close horizontal gap to pad1 (1938.2µm remaining)
+20:23:17.507  [cam0 f6135 rec+940.61s] [extrude:ATTEMPT 20] MOVE t +100.0µm  —  close horizontal gap to pad1 (1938.2µm remaining)
+20:23:18.262  [cam0 f6140 rec+941.37s] [camera1:RECORDING STOP] frames_written=6205
+20:23:18.355  [camera0:RECORDING STOP] frames_written=6141
+20:23:18.366  [camera2:RECORDING STOP] frames_written=6085
+20:23:23.056  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09_1\camera1_20261109_202323.avi start=2026-11-09T20:23:23.056
+20:23:23.110  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09_1\camera0_20261109_202323.avi start=2026-11-09T20:23:23.110
+20:23:23.114  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09_1\camera2_20261109_202323.avi start=2026-11-09T20:23:23.114
+20:23:30.252  [cam0 f45 rec+7.14s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:23:30.715  [cam0 f48 rec+7.61s] [origin:MICROWIRE] MOVE Z +1220.0  —  move to saved 'microwire' origin (Z -> 2316322.500)
+20:24:09.176  [cam0 f294 rec+46.07s] [camera1:RECORDING STOP] frames_written=305
+20:24:09.184  [camera0:RECORDING STOP] frames_written=295
+20:24:09.187  [camera2:RECORDING STOP] frames_written=295
+20:24:09.902  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09_2\camera1_20261109_202409.avi start=2026-11-09T20:24:09.902
+20:24:09.908  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09_2\camera0_20261109_202409.avi start=2026-11-09T20:24:09.908
+20:24:09.910  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09_2\camera2_20261109_202409.avi start=2026-11-09T20:24:09.910
+20:24:14.253  [cam0 f26 rec+4.35s] [pad-loop:PAD 1] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:24:14.305  [cam0 f26 rec+4.40s] [pad-loop:PAD 1] MOVE Z -1220  —  lower head to alignment/working height
+20:24:19.917  [cam0 f61 rec+10.01s] [extrude:START] pad1: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+20:24:19.970  [cam0 f61 rec+10.06s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:24:20.875  [cam0 f67 rec+10.97s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad1 (3308.0µm remaining)
+20:24:22.479  [cam0 f77 rec+12.57s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad1 (3376.5µm remaining)
+20:24:24.084  [cam0 f87 rec+14.18s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad1 (3278.6µm remaining)
+20:24:25.691  [cam0 f97 rec+15.78s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad1 (3151.4µm remaining)
+20:24:27.295  [cam0 f107 rec+17.39s] [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad1 (2422.3µm remaining)
+20:24:28.900  [cam0 f116 rec+18.99s] [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad1 (2001.4µm remaining)
+20:24:30.506  [cam0 f127 rec+20.60s] [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad1 (1512.1µm remaining)
+20:24:32.110  [cam0 f137 rec+22.20s] [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad1 (934.7µm remaining)
+20:24:33.715  [cam0 f147 rec+23.81s] [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad1 (533.4µm remaining)
+20:24:35.319  [cam0 f157 rec+25.41s] [extrude:DONE] pad1: CF_Tip within ±400µm of pad center after 10 attempt(s).
+20:24:36.320  [cam0 f164 rec+26.41s] [extrude:LOCK] live CF_Tip locked at px (408, 1073); other CF_Tips are treated as stubs.
+20:24:36.374  [cam0 f164 rec+26.47s] [r_align:START] pad1: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+20:24:37.376  [cam0 f170 rec+27.47s] [r_align:ANGLE] CF→GC -3.09° vs reference 0.00° (Δ-3.09°, tol ±0.5°).
+20:24:37.379  [cam0 f170 rec+27.47s] [r_align:ROTATE] MOVE r +3.09°  —  level CF→GC wire -3.09° → 0.00° (Δ-3.09°)
+20:24:43.988  [cam0 f213 rec+34.08s] [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+20:24:43.989  [cam0 f213 rec+34.08s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:24:48.597  [cam0 f244 rec+38.69s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:24:53.206  [cam0 f274 rec+43.30s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:24:57.819  [cam0 f305 rec+47.91s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:25:02.428  [cam0 f335 rec+52.52s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:25:07.036  [cam0 f366 rec+57.13s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:25:11.644  [cam0 f396 rec+61.74s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:25:16.250  [cam0 f426 rec+66.34s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:25:20.857  [cam0 f456 rec+70.95s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  all 8 pads visible — one extra step for margin
+20:25:25.464  [cam0 f486 rec+75.56s] [r_align:STEP1 Y-RESTORE] MOVE Y -2720.8µm  —  return pad to its pre-rotation row (1067.0px → ref 789.0px)
+20:25:35.578  [cam0 f553 rec+85.67s] [r_align:STEP2 VA-RECOVER] no pre-rotation VisibleArea area recorded — skipping recovery.
+20:25:35.591  [cam0 f553 rec+85.68s] [r_align:STEP2 ROUGH-CENTER] no CF_Tip ref / VisibleArea / calibration — skipping.
+20:25:37.098  [cam0 f562 rec+87.19s] [r_align:STEP3 Y-ALIGN] CF_Tip on pad column within ±250µm (off by 73.4µm) — aligned.
+20:25:37.099  [cam0 f562 rec+87.19s] [r_align:STEP3 X-ALIGN] MOVE X +430.6µm  —  open-loop final approach (saved tip 1073.0px vs pad target 1117.0px); tip leaves view mid-move
+20:25:38.754  [cam0 f573 rec+88.85s] [r_align:DONE] pad1 alignment sequence complete.
+20:25:38.811  [cam0 f573 rec+88.90s] [laser-cut:SETUP] MOVE Z +2100  —  raise head clear before positioning T
+20:26:05.001  [cam0 f739 rec+115.09s] [laser-cut:T-MOVE] MOVE T -1902.5µm  —  position T at cut start (target 2613512.5µm)
+20:26:17.750  [cam0 f821 rec+127.84s] [laser-cut:T-MOVE] MOVE T +4000.0µm  —  cut pass 1/5 (target 2617512.5µm)
+20:26:43.947  [cam0 f988 rec+154.04s] [laser-cut:T-MOVE] MOVE T -4000.0µm  —  cut pass 2/5 (target 2613512.5µm)
+20:27:10.145  [cam0 f1155 rec+180.24s] [laser-cut:T-MOVE] MOVE T +4000.0µm  —  cut pass 3/5 (target 2617512.5µm)
+20:27:36.328  [cam0 f1322 rec+206.42s] [laser-cut:T-MOVE] MOVE T -4000.0µm  —  cut pass 4/5 (target 2613512.5µm)
+20:28:02.519  [cam0 f1489 rec+232.61s] [laser-cut:T-MOVE] MOVE T +4000.0µm  —  cut pass 5/5 (target 2617512.5µm)
+20:28:28.731  [cam0 f1657 rec+258.82s] [laser-cut:TEARDOWN] MOVE Z -2100  —  lower head after cut
+20:28:33.840  [cam0 f1689 rec+263.93s] [pad-loop:PAD 2] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:28:33.841  [cam0 f1689 rec+263.93s] [pad-loop:PAD 2] returning to microwire origin before alignment.
+20:28:33.845  [cam0 f1689 rec+263.94s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:28:33.998  [cam0 f1690 rec+264.09s] [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:28:36.656  [cam0 f1707 rec+266.75s] [origin:MICROWIRE] MOVE Y +2720.0  —  move to saved 'microwire' origin (Y -> 2385550.000)
+20:28:38.315  [cam0 f1717 rec+268.41s] [origin:MICROWIRE] MOVE X -9430.0  —  move to saved 'microwire' origin (X -> 333717.500)
+20:28:42.975  [cam0 f1748 rec+273.07s] [origin:MICROWIRE] MOVE r -3.1  —  move to saved 'microwire' origin (r -> 3058.450)
+20:28:44.131  [cam0 f1756 rec+274.22s] [origin:MICROWIRE] MOVE Z +6220.0  —  move to saved 'microwire' origin (Z -> 2316322.500)
+20:28:48.339  [cam0 f1784 rec+278.43s] [pad-loop:PAD 2] MOVE Z -1220  —  lower head to alignment/working height
+20:28:53.949  [cam0 f1821 rec+284.04s] [extrude:START] pad2: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+20:28:54.001  [cam0 f1821 rec+284.09s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:28:54.905  [cam0 f1827 rec+285.00s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad2 (8429.6µm remaining)
+20:28:56.514  [cam0 f1837 rec+286.61s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad2 (7733.1µm remaining)
+20:28:58.122  [cam0 f1847 rec+288.21s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad2 (7272.0µm remaining)
+20:28:59.726  [cam0 f1857 rec+289.82s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad2 (6647.6µm remaining)
+20:29:01.335  [cam0 f1867 rec+291.43s] [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad2 (6037.6µm remaining)
+20:29:02.944  [cam0 f1877 rec+293.04s] [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:04.548  [cam0 f1887 rec+294.64s] [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:06.152  [cam0 f1897 rec+296.24s] [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:07.761  [cam0 f1907 rec+297.85s] [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:09.364  [cam0 f1917 rec+299.46s] [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:10.969  [cam0 f1927 rec+301.06s] [extrude:ATTEMPT 11] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:12.573  [cam0 f1937 rec+302.67s] [extrude:ATTEMPT 12] MOVE t +100.0µm  —  close horizontal gap to pad2 (7814.8µm remaining)
+20:29:14.177  [cam0 f1947 rec+304.27s] [extrude:ATTEMPT 13] MOVE t +100.0µm  —  close horizontal gap to pad2 (5648.6µm remaining)
+20:29:15.784  [cam0 f1957 rec+305.88s] [extrude:ATTEMPT 14] MOVE t +100.0µm  —  close horizontal gap to pad2 (5744.6µm remaining)
+20:29:17.388  [cam0 f1967 rec+307.48s] [extrude:ATTEMPT 15] MOVE t +100.0µm  —  close horizontal gap to pad2 (6152.9µm remaining)
+20:29:18.994  [cam0 f1977 rec+309.09s] [extrude:ATTEMPT 16] MOVE t +100.0µm  —  close horizontal gap to pad2 (6609.2µm remaining)
+20:29:19.645  [cam0 f1980 rec+309.74s] [camera2:RECORDING STOP] frames_written=1979
+20:29:19.647  [camera0:RECORDING STOP] frames_written=1981
+20:29:29.084  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09_3\camera1_20261109_202929.avi start=2026-11-09T20:29:29.084
+20:29:29.085  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09_3\camera0_20261109_202929.avi start=2026-11-09T20:29:29.085
+20:29:29.086  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09_3\camera2_20261109_202929.avi start=2026-11-09T20:29:29.086
+20:29:31.905  [cam0 f17 rec+2.82s] [camera1:RECORDING STOP] frames_written=19
+20:29:31.924  [camera2:RECORDING STOP] frames_written=18
+20:29:31.924  [camera0:RECORDING STOP] frames_written=18
+20:33:14.122  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09_4\camera1_20261109_203314.avi start=2026-11-09T20:33:14.122
+20:33:14.127  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09_4\camera0_20261109_203314.avi start=2026-11-09T20:33:14.127
+20:33:14.131  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09_4\camera2_20261109_203314.avi start=2026-11-09T20:33:14.131
+20:34:03.348  [cam0 f307 rec+49.22s] [pad-loop:PAD 2] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:34:03.350  [cam0 f307 rec+49.22s] [pad-loop:PAD 2] returning to microwire origin before alignment.
+20:34:03.352  [cam0 f307 rec+49.23s] [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:34:04.915  [cam0 f316 rec+50.79s] [pad-loop:PAD 2] MOVE Z -1220  —  lower head to alignment/working height
+20:34:10.523  [cam0 f350 rec+56.40s] [extrude:START] pad2: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+20:34:10.576  [cam0 f350 rec+56.45s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:34:11.530  [cam0 f356 rec+57.40s] [r_align:START] pad2: level wire → re-acquire pads → restore pad Y → recover VisibleArea → rough-center tip → fine Y then X align.
+20:34:23.542  [cam0 f429 rec+69.42s] [r_align:ANGLE] CF→GC -2.33° vs reference 0.00° (Δ-2.33°, tol ±0.5°).
+20:34:23.545  [cam0 f429 rec+69.42s] [r_align:ROTATE] MOVE r +2.33°  —  level CF→GC wire -2.33° → 0.00° (Δ-2.33°)
+20:34:28.658  [cam0 f460 rec+74.53s] [r_align:PAD-SEARCH] re-acquiring pads: stepping X + until all 8 pads are visible.
+20:34:28.660  [cam0 f460 rec+74.53s] [r_align:PAD-SEARCH] MOVE X +1000µm  —  not all pads visible yet — searching to re-acquire pads shifted by the rotation
+20:34:32.606  [cam0 f484 rec+78.48s] [camera1:RECORDING STOP] frames_written=497
+20:34:32.611  [camera0:RECORDING STOP] frames_written=485
+20:34:32.618  [camera2:RECORDING STOP] frames_written=485
+20:34:38.268  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:34:38.422  [origin:MICROWIRE] MOVE Z -5000  —  drop Z for clearance before XY/r move
+20:34:41.134  [origin:MICROWIRE] MOVE X -1000.0  —  move to saved 'microwire' origin (X -> 333717.500)
+20:34:42.289  [origin:MICROWIRE] MOVE r -2.3  —  move to saved 'microwire' origin (r -> 3058.450)
+20:34:43.445  [origin:MICROWIRE] MOVE Z +6220.0  —  move to saved 'microwire' origin (Z -> 2316322.500)
+20:35:01.711  [pad-loop:PAD 2] starting: return to origin (if needed) -> extrude -> r_align -> laser cut.
+20:35:01.714  [pad-loop:PAD 2] returning to microwire origin before alignment.
+20:35:01.716  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:35:02.423  [camera1:RECORDING START] video=D:\camera1_pcb2_CFmicrowire_2026-11-09_5\camera1_20261109_203502.avi start=2026-11-09T20:35:02.423
+20:35:02.428  [cam0 f0 rec+0.00s] [camera0:RECORDING START] video=D:\camera0_pcb2_CFmicrowire_2026-11-09_5\camera0_20261109_203502.avi start=2026-11-09T20:35:02.428
+20:35:02.431  [cam0 f0 rec+0.00s] [camera2:RECORDING START] video=D:\camera2_pcb2_CFmicrowire_2026-11-09_5\camera2_20261109_203502.avi start=2026-11-09T20:35:02.431
+20:35:03.282  [cam0 f5 rec+0.85s] [pad-loop:PAD 2] MOVE Z -1220  —  lower head to alignment/working height
+20:35:08.894  [cam0 f33 rec+6.47s] [extrude:START] pad2: extend 't' until CF_Tip is within ±400µm of pad center (calibration 1000.0µm).
+20:35:08.946  [cam0 f33 rec+6.52s] [extrude:INIT] MOVE t +100  —  extend wire to bring CF_Tip into camera view
+20:35:09.851  [cam0 f38 rec+7.42s] [extrude:ATTEMPT 1] MOVE t +100.0µm  —  close horizontal gap to pad2 (4560.9µm remaining)
+20:35:11.457  [cam0 f45 rec+9.03s] [extrude:ATTEMPT 2] MOVE t +100.0µm  —  close horizontal gap to pad2 (4454.7µm remaining)
+20:35:13.064  [cam0 f54 rec+10.64s] [extrude:ATTEMPT 3] MOVE t +100.0µm  —  close horizontal gap to pad2 (4367.9µm remaining)
+20:35:14.668  [cam0 f64 rec+12.24s] [extrude:ATTEMPT 4] MOVE t +100.0µm  —  close horizontal gap to pad2 (4261.7µm remaining)
+20:35:16.271  [cam0 f73 rec+13.84s] [extrude:ATTEMPT 5] MOVE t +100.0µm  —  close horizontal gap to pad2 (3861.1µm remaining)
+20:35:17.879  [cam0 f83 rec+15.45s] [extrude:ATTEMPT 6] MOVE t +100.0µm  —  close horizontal gap to pad2 (3166.1µm remaining)
+20:35:19.486  [cam0 f91 rec+17.06s] [extrude:ATTEMPT 7] MOVE t +100.0µm  —  close horizontal gap to pad2 (2611.1µm remaining)
+20:35:21.091  [cam0 f99 rec+18.66s] [extrude:ATTEMPT 8] MOVE t +100.0µm  —  close horizontal gap to pad2 (2051.2µm remaining)
+20:35:22.698  [cam0 f107 rec+20.27s] [extrude:ATTEMPT 9] MOVE t +100.0µm  —  close horizontal gap to pad2 (1698.9µm remaining)
+20:35:24.314  [cam0 f116 rec+21.89s] [extrude:ATTEMPT 10] MOVE t +100.0µm  —  close horizontal gap to pad2 (849.4µm remaining)
+20:35:25.920  [cam0 f126 rec+23.49s] [extrude:ATTEMPT 11] MOVE t +100.0µm  —  close horizontal gap to pad2 (704.6µm remaining)
+20:35:27.529  [cam0 f136 rec+25.10s] [extrude:ATTEMPT 12] MOVE t +100.0µm  —  close horizontal gap to pad2 (637.1µm remaining)
+20:35:29.133  [cam0 f146 rec+26.71s] [extrude:ATTEMPT 13] MOVE t -100.0µm  —  close horizontal gap to pad2 (608.1µm remaining)
+20:35:30.737  [cam0 f156 rec+28.31s] [extrude:ATTEMPT 14] MOVE t -100.0µm  —  close horizontal gap to pad2 (608.1µm remaining)
+20:35:32.341  [cam0 f166 rec+29.91s] [extrude:ATTEMPT 15] MOVE t -100.0µm  —  close horizontal gap to pad2 (608.1µm remaining)
+20:35:33.949  [cam0 f176 rec+31.52s] [extrude:ATTEMPT 16] MOVE t -100.0µm  —  close horizontal gap to pad2 (608.1µm remaining)
+20:35:35.553  [cam0 f186 rec+33.13s] [extrude:ATTEMPT 17] MOVE t +100.0µm  —  close horizontal gap to pad2 (550.2µm remaining)
+20:35:35.904  [cam0 f188 rec+33.48s] [camera1:RECORDING STOP] frames_written=194
+20:35:36.018  [camera0:RECORDING STOP] frames_written=189
+20:35:36.020  [camera2:RECORDING STOP] frames_written=189
+20:35:37.164  [extrude:ATTEMPT 18] MOVE t +100.0µm  —  close horizontal gap to pad2 (738.4µm remaining)
+20:35:38.767  [extrude:ATTEMPT 19] MOVE t +100.0µm  —  close horizontal gap to pad2 (724.0µm remaining)
+20:35:40.374  [extrude:ATTEMPT 20] MOVE t +100.0µm  —  close horizontal gap to pad2 (781.9µm remaining)
+20:36:33.051  [origin:MICROWIRE] navigating to saved 'microwire' origin.
+20:36:33.512  [origin:MICROWIRE] MOVE Z +1220.0  —  move to saved 'microwire' origin (Z -> 2316322.500)

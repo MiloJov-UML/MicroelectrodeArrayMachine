@@ -111,6 +111,7 @@ def _stop_recording_correlation(camera_index):
         record_start_times[camera_index] = None
 
 extrude_done = False
+extrude_failed = False  # set when extrude gave up (missing pads/CF_Tip, lost tip, or tolerance never reached); callers must not continue
 r_align_done = False
 r_align_failed = False  # set when r_align gave up (unreliable detection / travel limit); callers must not cut
 x_align_done = False
@@ -431,6 +432,124 @@ last_pad_box= None  # We'll store one "Pad" bounding box for extrude reference
 last_visible_area_box = None  # Camera's usable field-of-view box
 last_clog_box = None  # Exclusively updated by camera 2
 
+# Cut wires leave CF_Tip "stubs" in frame on earlier pads. The GC_Tip is always at the
+# bottom-right of the frame and the live CF_Tip starts there and extrudes left. The live
+# tip is chosen only while extrude() runs (lowest CF_Tip at/left of the GC_Tip and below
+# the lowest pad; see _cf_zone_top_y); afterwards detections are matched to that locked
+# location, since the live tip stays fixed in the camera frame.
+CF_TIP_BAND_UM = 300.0
+extrude_active = False
+cf_lock_center = None  # (x, y) px of the live CF_Tip captured when extrude finishes
+gc_lock_center = None  # (x, y) px of the GC_Tip captured when extrude finishes
+
+def _pick_live_tip(candidates, lock_center, extrude_key):
+    """Best candidate by extrude_key while extruding/unlocked, else the one nearest the locked location."""
+    if not candidates:
+        return None
+    if lock_center is not None and not extrude_active:
+        return min(candidates, key=lambda b: math.hypot(center_of_bbox(b)[0] - lock_center[0],
+                                                        center_of_bbox(b)[1] - lock_center[1]))
+    return max(candidates, key=extrude_key)
+
+def _cf_zone_top_y(gc_box):
+    """Top edge (px) of the accepted CF_Tip zone, or None if it can't be determined.
+    Normally the bottom edge of the lowest pad (pad1): the live wire runs below the pad
+    rows while stubs from earlier cuts sit on them. Before any pad is detected it falls
+    back to CF_TIP_BAND_UM above the GC_Tip (needs the calibrated pixel scale)."""
+    pad1 = pad_box_dict.get("pad1")
+    if pad1 is not None:
+        return pad1[3]
+    if gc_box is not None and _px_per_µm:
+        return center_of_bbox(gc_box)[1] - CF_TIP_BAND_UM * _px_per_µm
+    return None
+
+GC_REGION_MIN_X_FRAC = 0.65  # GC_Tip is always in the bottom-right: center x >= 65% of frame width
+GC_REGION_MIN_Y_FRAC = 0.65  # ... and center y >= 65% of frame height
+GC_MAX_JUMP_FRAC = 0.10      # max jump (fraction of frame width) from the remembered GC_Tip in one frame
+GC_REACQUIRE_FRAMES = 8      # a far-away in-region GC_Tip is only accepted after this many consecutive frames
+gc_memory_box = None         # last accepted GC_Tip; reused when detection drops out
+_gc_far_count = 0
+
+def _resolve_gc(gc_list, w, h):
+    """Return (gc_box, detected_now). Detections outside the bottom-right region are
+    ignored, as are sudden jumps from the remembered position (unless they persist for
+    GC_REACQUIRE_FRAMES frames). When nothing valid is detected the remembered GC_Tip is
+    returned with detected_now False."""
+    global gc_memory_box, _gc_far_count
+    in_region = [b for b in gc_list
+                 if center_of_bbox(b)[0] >= w * GC_REGION_MIN_X_FRAC
+                 and center_of_bbox(b)[1] >= h * GC_REGION_MIN_Y_FRAC]
+    pick = _pick_live_tip(in_region, gc_lock_center,
+                          lambda b: center_of_bbox(b)[0] + center_of_bbox(b)[1])
+    if pick is not None and gc_memory_box is not None:
+        px, py = center_of_bbox(pick)
+        mx, my = center_of_bbox(gc_memory_box)
+        if math.hypot(px - mx, py - my) > GC_MAX_JUMP_FRAC * w:
+            _gc_far_count += 1
+            if _gc_far_count < GC_REACQUIRE_FRAMES:
+                pick = None
+        else:
+            _gc_far_count = 0
+    elif pick is None:
+        _gc_far_count = 0
+    if pick is not None:
+        if _gc_far_count >= GC_REACQUIRE_FRAMES:
+            _gc_far_count = 0
+        gc_memory_box = pick
+        return pick, True
+    return gc_memory_box, False
+
+def _select_live_tips(cf_list, gc_list, w, h):
+    """Return (cf_box, gc_box, gc_detected_now). The GC_Tip is the bottom-right one in
+    frame (remembered through detection dropouts, see _resolve_gc). The live CF_Tip starts
+    at the bottom-right and extrudes left, so it must be at or left of the GC_Tip and
+    below the zone's top edge (see _cf_zone_top_y); the lowest such tip wins and the rest
+    are stubs."""
+    gc, gc_detected = _resolve_gc(gc_list, w, h)
+    if gc is not None:
+        cf_list = [b for b in cf_list if center_of_bbox(b)[0] <= gc[2]]
+        top = _cf_zone_top_y(gc)
+        if top is not None:
+            cf_list = [b for b in cf_list if center_of_bbox(b)[1] >= top]
+    return _pick_live_tip(cf_list, cf_lock_center, lambda b: center_of_bbox(b)[1]), gc, gc_detected
+
+def draw_cf_tip_zone(img, gc_box, cf_list, live_cf, gc_remembered=False):
+    """Display-only overlay of where CF_Tips are accepted: at/left of the GC_Tip's right
+    edge and below the lowest pad (see _cf_zone_top_y). The chosen CF_Tip is drawn green;
+    other CF_Tip detections are red (stubs)."""
+    h, w = img.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    if gc_box is not None:
+        gx2 = max(0, min(w - 1, gc_box[2]))
+        top = _cf_zone_top_y(gc_box)
+        if top is None:
+            top, zone_text = 0, "CF_Tip zone: left of GC_Tip (no pads detected yet)"
+        else:
+            top = max(0, min(h - 1, int(top)))
+            zone_text = "CF_Tip zone: below lowest pad, left of GC_Tip"
+        bottom = h - 1
+        shade = img.copy()
+        cv2.rectangle(shade, (0, top), (gx2, bottom), (0, 255, 0), -1)
+        cv2.addWeighted(shade, 0.12, img, 0.88, 0, img)
+        cv2.rectangle(img, (0, top), (gx2, bottom), (0, 255, 0), 2)
+        cv2.putText(img, zone_text, (10, min(h - 40, top + 24)), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+        if gc_remembered:
+            cv2.rectangle(img, (gc_box[0], gc_box[1]), (gc_box[2], gc_box[3]), (0, 165, 255), 2)
+            cv2.putText(img, "GC (remembered)", (max(0, gc_box[0] - 60), max(14, gc_box[1] - 8)),
+                        font, 0.5, (0, 165, 255), 2, cv2.LINE_AA)
+    else:
+        cv2.putText(img, "CF_Tip zone: no GC_Tip yet", (10, 24), font, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
+
+    for box in cf_list:
+        is_live = live_cf is not None and box == live_cf
+        color = (0, 255, 0) if is_live else (0, 0, 255)
+        cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), color, 3)
+        cv2.putText(img, "LIVE CF" if is_live else "stub", (box[0], max(14, box[1] - 8)),
+                    font, 0.6, color, 2, cv2.LINE_AA)
+    state = "locked" if (cf_lock_center is not None and not extrude_active) else "selecting (lowest in zone)"
+    cv2.putText(img, f"CF_Tip: {state}", (10, h - 12), font, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+    return img
+
 def open_camera(camera_index=0, model_path="best.pt"):
     global record_camera0, record_camera1
     global video_writers, run_timestamps
@@ -488,8 +607,8 @@ def open_camera(camera_index=0, model_path="best.pt"):
 
         if camera_index == 0:
             # Wire Tip view: detect CF_Tip, GC_Tip, Pad, and VisibleArea
-            cf_found = None
-            gc_found = None
+            cf_list = []
+            gc_list = []
             pad_found = None
             visible_area_found = None
 
@@ -499,19 +618,21 @@ def open_camera(camera_index=0, model_path="best.pt"):
                 x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
 
                 if class_name == "CF_Tip":
-                    cf_found = (x1, y1, x2, y2)
+                    cf_list.append((x1, y1, x2, y2))
                 elif class_name == "GC_Tip":
-                    gc_found = (x1, y1, x2, y2)
+                    gc_list.append((x1, y1, x2, y2))
                 elif class_name == "Pad":
                     pad_found = (x1, y1, x2, y2)
                 elif class_name == "VisibleArea":
                     visible_area_found = (x1, y1, x2, y2)
 
+            cf_found, gc_zone_box, gc_detected = _select_live_tips(cf_list, gc_list, width, height)
+
             if cf_found is not None:
                 last_cf_box = cf_found
                 last_cf_time = _time.time()
-            if gc_found is not None:
-                last_gc_box = gc_found
+            if gc_detected:
+                last_gc_box = gc_zone_box
                 last_gc_time = _time.time()
             if pad_found is not None:
                 last_pad_box = pad_found
@@ -597,6 +718,8 @@ def open_camera(camera_index=0, model_path="best.pt"):
         display_frame = annotated_frame
         if camera_index == 0:
             display_frame = draw_axis_compass(annotated_frame.copy())
+            display_frame = draw_cf_tip_zone(display_frame, gc_zone_box, cf_list, cf_found,
+                                             gc_remembered=not gc_detected)
         elif camera_index == 2:
             display_frame = draw_axis_compass(annotated_frame.copy(), rotate_ccw_90=True)
 
@@ -627,12 +750,14 @@ def center_of_bbox(bbox):
 # and reused across extrude/r_align/x_align/center_on_visible_area (see
 # get_steps_per_pixel).
 _pad_pixel_spacing = None
+_px_per_µm = None  # camera scale derived from the same cached pad spacing
 
 def reset_pad_pixel_spacing():
     """Clear the cached pad pixel-spacing so the next get_steps_per_pixel call
     re-measures it. Called at the start of each pad."""
-    global _pad_pixel_spacing
+    global _pad_pixel_spacing, _px_per_µm
     _pad_pixel_spacing = None
+    _px_per_µm = None
 
 def get_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=None):
     """Steps/pixel for `axis`, reusing a pad pixel-spacing measured once per pad.
@@ -643,7 +768,7 @@ def get_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=None):
     axis: 1 px => returned value motor steps. X and Y share the same steps/µm,
     while 't' uses different microstepping.
     """
-    global _pad_pixel_spacing
+    global _pad_pixel_spacing, _px_per_µm
     if known_µm is None:
         known_µm = get_pad_spacing()
     if _pad_pixel_spacing is None:
@@ -654,6 +779,7 @@ def get_steps_per_pixel(bboxA, bboxB, axis='X', known_µm=None):
             # Avoid division by zero if boxes are nearly the same center
             return 0.0
         _pad_pixel_spacing = dist
+        _px_per_µm = dist / known_µm if known_µm else None
     return µm_to_steps(known_µm, axis=axis) / _pad_pixel_spacing
 
 def compute_angle_between(cf_box, gc_box):
@@ -689,8 +815,37 @@ def analyze_cf_gc_angle():
 # --------------------------------------------------------
 # EXTRUDE: measure distance in µm using get_steps_per_pixel
 # --------------------------------------------------------
+EXTRUDE_CF_WAIT_S = 5.0  # how long extrude waits for a fresh CF_Tip detection before giving up
+
+def _wait_for_fresh_cf(timeout_s):
+    """Wait until CF_Tip has been freshly detected. Returns True if so, False on timeout
+    or emergency stop."""
+    from motor_control import is_emergency_stop_requested
+    deadline = _time.time() + timeout_s
+    while _fresh_cf_box() is None:
+        if is_emergency_stop_requested() or _time.time() >= deadline:
+            return False
+        _time.sleep(0.1)
+    return True
+
 def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µm=400,
             initial_extend=True):
+    """Align CF_Tip with the target pad (see _extrude_impl). While running, the live
+    CF_Tip is selected from the detections (lowest in frame, at/left of the GC_Tip and
+    below the lowest pad); on success its location is locked for the rest of the pad.
+    extrude_failed is set if it gave up without aligning."""
+    global extrude_active, cf_lock_center, gc_lock_center, extrude_failed
+    cf_lock_center = None
+    gc_lock_center = None
+    extrude_failed = False
+    extrude_active = True
+    try:
+        _extrude_impl(target_pad_number, max_iterations, known_µm, tolerance_µm, initial_extend)
+    finally:
+        extrude_active = False
+
+def _extrude_impl(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µm=400,
+                  initial_extend=True):
     """
     Moves the 't' axis to align CF_Tip with a specific pad (default: pad1) horizontally
     within a specified tolerance.
@@ -715,10 +870,19 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     print(f"[Extrude] Using pad spacing for calibration: {known_µm} µm")
     log_report("extrude", "START", f"pad{target_pad_number}: extend 't' until CF_Tip is within ±{tolerance_µm}µm of pad center (calibration {known_µm}µm).")
 
-    global pad_box_dict, last_cf_box
+    global pad_box_dict, last_cf_box, last_gc_box
+    global cf_lock_center, gc_lock_center
 
-    global extrude_done
+    global extrude_done, extrude_failed
     extrude_done = False  # reset at start of function
+    extrude_failed = False
+
+    def _fail(reason):
+        global extrude_done, extrude_failed
+        print(f"[Extrude] FAILED: {reason}")
+        log_report("extrude", "FAILED", f"pad{target_pad_number}: {reason}")
+        extrude_failed = True
+        extrude_done = True
 
     # 1) Optionally extend 't' to bring CF_Tip into camera view.
     #    Skip on repeat calls within the stabilisation loop (initial_extend=False).
@@ -754,26 +918,27 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
     
     # Validate we have what we need
     if target_pad_box is None:
-        print(f"[Extrude] Missing {target_pad_key} => cannot align => abort.")
-        extrude_done = True
+        _fail(f"missing {target_pad_key} — cannot align.")
         return
         
     if cal_box1 is None or cal_box2 is None:
-        print(f"[Extrude] Missing {cal_pad1_key} or {cal_pad2_key} => no calibration => abort.")
-        extrude_done = True
+        _fail(f"missing {cal_pad1_key} or {cal_pad2_key} — no calibration.")
         return
         
-    # Check if CF Tip is missing
-    if last_cf_box is None:
-        print("[Extrude] No CF_Tip detected => let's move X by -300 and re-check...")
-        # move_linear_stage("X", "+", 1200, wait_for_stop=True, max_wait=30.0)
-        # time.sleep(2.0)
-        # move_linear_stage("t", "+", 200, wait_for_stop=True, max_wait=30.0)
-        # time.sleep(2.0)
-        # If we still don't have CF_Tip, abort
-        if last_cf_box is None:
-            print("[Extrude] Still no CF_Tip after moving => abort.")
-            extrude_done = True
+    # Prime the cached camera scale so the live-CF_Tip band filter (see
+    # _select_live_tips) is active before CF_Tip is first used below.
+    get_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
+    time.sleep(0.3)
+
+    # Wait for a freshly detected CF_Tip (last_cf_box is sticky, so an old box doesn't count)
+    if _fresh_cf_box() is None:
+        print(f"[Extrude] No fresh CF_Tip detected => waiting up to {EXTRUDE_CF_WAIT_S:.0f}s...")
+        if not _wait_for_fresh_cf(EXTRUDE_CF_WAIT_S):
+            if is_emergency_stop_requested():
+                print("[Extrude] Emergency stop requested => abort.")
+                extrude_done = True
+            else:
+                _fail(f"no CF_Tip detected within {EXTRUDE_CF_WAIT_S:.0f}s.")
             return
 
     # We'll store the last CF Tip center in px for jam detection
@@ -787,21 +952,28 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
             extrude_done = True
             return
 
-        # 3) Re-check we still have CF_Tip detection
-        if last_cf_box is None:
-            print("[Extrude] Lost CF_Tip detection => abort.")
-            extrude_done = True
-            return
+        # 3) Make sure CF_Tip is freshly detected (the stored box is sticky); give it a few
+        # seconds to reappear before giving up instead of stepping from an old position.
+        if _fresh_cf_box() is None:
+            print("[Extrude] CF_Tip detection stale => waiting for it to reappear...")
+            if not _wait_for_fresh_cf(EXTRUDE_CF_WAIT_S):
+                if is_emergency_stop_requested():
+                    print("[Extrude] Emergency stop requested => abort.")
+                    extrude_done = True
+                else:
+                    _fail(f"lost CF_Tip detection for {EXTRUDE_CF_WAIT_S:.0f}s during attempt {attempt + 1}.")
+                return
+        cf_box = _fresh_cf_box() or last_cf_box
 
         # 4) Calibration - steps per pixel (pad pixel-spacing cached once per pad)
         steps_pp = get_steps_per_pixel(cal_box1, cal_box2, axis='t', known_µm=known_µm)
         if steps_pp <= 0.0:
-            print(f"[Extrude] Invalid calibration (steps_pp={steps_pp}) => skip this iteration.")
-            continue
+            _fail(f"invalid calibration (steps_pp={steps_pp}).")
+            return
 
         # 5) Calculate horizontal distance between pad center and CF_Tip.
         (pad_x, pad_y) = center_of_bbox(target_pad_box)
-        (cf_x, cf_y) = center_of_bbox(last_cf_box)
+        (cf_x, cf_y) = center_of_bbox(cf_box)
 
         # Horizontal distance (positive if CF is right of pad, negative if left)
         delta_x_px = cf_x - pad_x
@@ -821,6 +993,11 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
             print("[Extrude] Waiting 1s for vibrations to settle...")
             log_report("extrude", "DONE", f"pad{target_pad_number}: CF_Tip within ±{tolerance_µm}µm of pad center after {attempt + 1} attempt(s).")
             time.sleep(1.0)
+            _fcf = _fresh_cf_box()
+            if _fcf is not None:
+                cf_lock_center = center_of_bbox(_fcf)
+                gc_lock_center = center_of_bbox(last_gc_box) if last_gc_box is not None else None
+                log_report("extrude", "LOCK", f"live CF_Tip locked at px ({cf_lock_center[0]:.0f}, {cf_lock_center[1]:.0f}); other CF_Tips are treated as stubs.")
             extrude_done = True
             return
 
@@ -861,7 +1038,7 @@ def extrude(target_pad_number=1, max_iterations=20, known_µm=None, tolerance_µ
             print("    Lost CF_Tip detection during movement => skipping jam check.")
 
     print(f"[Extrude] Gave up after {max_iterations} attempts (>±{tolerance_µm}µm?).")"""
-    extrude_done = True
+    _fail(f"gave up after {max_iterations} attempts without reaching ±{tolerance_µm}µm of pad{target_pad_number}.")
 
 # --------------------------------------------------------
 # CENTER ON VISIBLE AREA: bring CF_Tip back within the camera's usable field

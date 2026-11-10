@@ -378,8 +378,8 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
 
     _abort_if_emergency_stop()
     update_speed(3)
-    image_recognition.log_move("pad-loop", f"PAD {pad_num}", "Z", "-", "1220", "lower head to alignment/working height")
-    move_linear_stage("Z", "-", 1220, wait_for_stop=True, max_wait=30.0)
+    image_recognition.log_move("pad-loop", f"PAD {pad_num}", "Z", "-", "1720", "lower head to alignment/working height")
+    move_linear_stage("Z", "-", 1720, wait_for_stop=True, max_wait=30.0)
     # Clear stale YOLO detections so alignment steps see the current camera view
     image_recognition.pad_box_dict.clear()
     image_recognition.last_cf_box = None
@@ -394,6 +394,11 @@ def _align_and_cut_pad(pad_num, skip_origin_return=False):
     extrude(pad_num)
     if not wait_for_extrude_done():
         raise RuntimeError("Emergency stop requested.")
+    _abort_if_emergency_stop()
+    if image_recognition.extrude_failed:
+        raise RuntimeError(f"Extrude failed on pad {pad_num} (CF_Tip not detected, lost, or never reached the "
+                           f"pad) — skipped alignment and the laser cut. Check the wire/camera view, then "
+                           f"retry with Realign/Recut Pads.")
     # Record the target pad's Y-pixel position while it's fully in view,
     # before r_align rotates it; r_align uses this to compute a calibrated
     # Y correction afterward (not a motor-controller readout comparison).
@@ -596,7 +601,7 @@ def run_full_manual_loop():
 # Absolute T-axis positions (µm) bounding the laser cut — the cut is run
 # back-and-forth _LASER_CUT_PASSES times to ensure a clean cut over the full length.
 _LASER_CUT_T_CENTER_DEFAULT = 2615512.500
-_LASER_CUT_HALF_SPAN_UM = 500  # cut runs from center - 500 to center + 500
+_LASER_CUT_HALF_SPAN_UM = 2000  # cut runs from center - 2000 to center + 2000
 
 def get_laser_cut_t_center():
     """Saved laser-cut center on the T axis (µm), set via Settings > Laser Cut Origin."""
